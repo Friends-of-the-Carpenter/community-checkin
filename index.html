@@ -4,11 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Community Check-In | Friends of the Carpenter</title>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/recharts@2.5.0/umd/Recharts.js"></script>
+  <script src="https://unpkg.com/react@17/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.23.10/babel.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #F7FAFA; color: #1D2B2B; min-height: 100vh; }
@@ -21,7 +20,6 @@
 <div id="root"></div>
 <script type="text/babel">
 const { useState, useEffect, useCallback, useRef } = React;
-const { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } = Recharts;
 
 const SUPABASE_URL = "https://bnkdmdcinmbcuueakhug.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJua2RtZGNpbm1iY3V1ZWFraHVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMzQyNTYsImV4cCI6MjA4ODkxMDI1Nn0.UnURxxIweDAYik0UXfZLtdB33q-9DPah2kwUQKL9oVY";
@@ -65,6 +63,64 @@ const emptyForm={name:"",guestNumber:"",memberId:"",type:"Guest",service:"",note
 
 function Logo(){
   return <img src="https://cdn.shopify.com/s/files/1/0582/8719/4214/files/FOC_Logo_white.png?v=1773347276" alt="Friends of the Carpenter" style={{height:85,width:"auto"}}/>;
+}
+
+// Simple CSS bar chart — no external dependencies
+function SimpleBarChart({data, keys, colors, height=180}){
+  if(!data||data.length===0)return <p style={{textAlign:"center",color:"#5A7070",fontSize:13,padding:"1rem 0"}}>No data for this period.</p>;
+  const maxVal=Math.max(1,...data.flatMap(d=>keys.map(k=>d[k]||0)));
+  const barW=Math.max(8,Math.floor(280/data.length)-4);
+  return(
+    <div style={{overflowX:"auto"}}>
+      <div style={{display:"flex",alignItems:"flex-end",gap:4,height,minWidth:data.length*((barW*keys.length)+8),paddingBottom:24,position:"relative"}}>
+        {data.map((d,i)=>(
+          <div key={i} style={{display:"flex",alignItems:"flex-end",gap:2,flexShrink:0}}>
+            {keys.map(k=>{
+              const pct=(d[k]||0)/maxVal*100;
+              return(
+                <div key={k} style={{width:barW,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                  {d[k]>0&&<span style={{fontSize:9,color:"#5A7070"}}>{d[k]}</span>}
+                  <div style={{width:"100%",height:`${pct*(height-32)/100}px`,background:colors[k],borderRadius:"3px 3px 0 0",minHeight:d[k]>0?4:0,transition:"height 0.3s"}}/>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:4,overflowX:"auto",paddingTop:4}}>
+        {data.map((d,i)=><span key={i} style={{fontSize:10,color:"#8AA5A5",flexShrink:0,width:(barW*keys.length)+(keys.length-1)*2,textAlign:"center",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{d.date}</span>)}
+      </div>
+    </div>
+  );
+}
+
+function SimpleLineChart({data, height=180}){
+  if(!data||data.length===0)return <p style={{textAlign:"center",color:"#5A7070",fontSize:13,padding:"1rem 0"}}>No completed volunteer check-outs for this period.</p>;
+  const maxVal=Math.max(1,...data.map(d=>d.hours));
+  const w=500,h=height-30,pad=8;
+  const pts=data.map((d,i)=>{
+    const x=pad+(i/(Math.max(data.length-1,1)))*(w-pad*2);
+    const y=h-(d.hours/maxVal)*(h-pad*2)-pad;
+    return{x,y,d};
+  });
+  const pathD=pts.map((p,i)=>`${i===0?"M":"L"}${p.x},${p.y}`).join(" ");
+  return(
+    <div style={{overflowX:"auto"}}>
+      <svg viewBox={`0 0 ${w} ${height}`} style={{width:"100%",height}}>
+        {[0,0.25,0.5,0.75,1].map(t=>(
+          <line key={t} x1={pad} x2={w-pad} y1={h-(t*(h-pad*2))-pad} y2={h-(t*(h-pad*2))-pad} stroke="#D0E6E5" strokeDasharray="3 3"/>
+        ))}
+        <path d={pathD} fill="none" stroke={CHART_COLORS["Volunteer"]} strokeWidth={2.5} strokeLinejoin="round"/>
+        {pts.map((p,i)=>(
+          <g key={i}>
+            <circle cx={p.x} cy={p.y} r={4} fill={CHART_COLORS["Volunteer"]}/>
+            <text x={p.x} y={p.y-8} textAnchor="middle" fontSize={9} fill="#5A7070">{p.d.hours}h</text>
+            <text x={p.x} y={height-4} textAnchor="middle" fontSize={9} fill="#8AA5A5">{p.d.date}</text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
 }
 
 function PeopleRemover({people,onRemove,onFlag}){
@@ -154,6 +210,8 @@ function AnalyticsTab({records}){
   const volHours=getVolHours(filtered);
   const totals={};CHART_SERVICES.forEach(s=>{totals[s]=filtered.filter(r=>r.service===s).length;});
   const ranges=[{id:"7days",label:"7 days"},{id:"30days",label:"30 days"},{id:"month",label:"This month"},{id:"quarter",label:"This quarter"},{id:"year",label:"This year"},{id:"all",label:"All time"}];
+  const showersLaundryColors={"Showers":CHART_COLORS["Showers"],"Laundry":CHART_COLORS["Laundry"]};
+  const dayCenterColors={"Day Center":CHART_COLORS["Day Center"],"Community Partnership":CHART_COLORS["Community Partnership"]};
   return(
     <div>
       <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap"}}>
@@ -175,49 +233,30 @@ function AnalyticsTab({records}){
           </div>
         ))}
       </div>
+
+      {/* Legend */}
+      <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:16}}>
+        {CHART_SERVICES.map(s=>(
+          <div key={s} style={{display:"flex",alignItems:"center",gap:5}}>
+            <div style={{width:10,height:10,borderRadius:"50%",background:CHART_COLORS[s]}}/>
+            <span style={{fontSize:12,color:"#5A7070"}}>{s}</span>
+          </div>
+        ))}
+      </div>
+
       {chartData.length===0?<p style={{textAlign:"center",color:"#5A7070",padding:"2rem 0",fontSize:14}}>No data for this period.</p>:(
         <>
           <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:16,marginBottom:16}}>
             <p style={{margin:"0 0 14px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Showers & Laundry</p>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={chartData} margin={{top:0,right:0,left:-20,bottom:0}}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#D0E6E5"/>
-                <XAxis dataKey="date" tick={{fontSize:11,fill:"#5A7070"}} tickLine={false}/>
-                <YAxis tick={{fontSize:11,fill:"#5A7070"}} tickLine={false} axisLine={false} allowDecimals={false}/>
-                <Tooltip contentStyle={{borderRadius:8,border:"1px solid #D0E6E5",fontSize:12}}/>
-                <Legend iconType="circle" iconSize={8} wrapperStyle={{fontSize:12}}/>
-                <Bar dataKey="Showers" fill={CHART_COLORS["Showers"]} radius={[4,4,0,0]}/>
-                <Bar dataKey="Laundry" fill={CHART_COLORS["Laundry"]} radius={[4,4,0,0]}/>
-              </BarChart>
-            </ResponsiveContainer>
+            <SimpleBarChart data={chartData} keys={["Showers","Laundry"]} colors={showersLaundryColors}/>
           </div>
           <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:16,marginBottom:16}}>
             <p style={{margin:"0 0 14px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Day Center & Community Partnership</p>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={chartData} margin={{top:0,right:0,left:-20,bottom:0}}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#D0E6E5"/>
-                <XAxis dataKey="date" tick={{fontSize:11,fill:"#5A7070"}} tickLine={false}/>
-                <YAxis tick={{fontSize:11,fill:"#5A7070"}} tickLine={false} axisLine={false} allowDecimals={false}/>
-                <Tooltip contentStyle={{borderRadius:8,border:"1px solid #D0E6E5",fontSize:12}}/>
-                <Legend iconType="circle" iconSize={8} wrapperStyle={{fontSize:12}}/>
-                <Bar dataKey="Day Center" fill={CHART_COLORS["Day Center"]} radius={[4,4,0,0]}/>
-                <Bar dataKey="Community Partnership" fill={CHART_COLORS["Community Partnership"]} radius={[4,4,0,0]}/>
-              </BarChart>
-            </ResponsiveContainer>
+            <SimpleBarChart data={chartData} keys={["Day Center","Community Partnership"]} colors={dayCenterColors}/>
           </div>
           <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:16,marginBottom:16}}>
             <p style={{margin:"0 0 14px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Volunteer hours</p>
-            {volHours.length===0?<p style={{textAlign:"center",color:"#5A7070",fontSize:13,padding:"1rem 0"}}>No completed volunteer check-outs for this period.</p>:(
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={volHours} margin={{top:0,right:0,left:-20,bottom:0}}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#D0E6E5"/>
-                  <XAxis dataKey="date" tick={{fontSize:11,fill:"#5A7070"}} tickLine={false}/>
-                  <YAxis tick={{fontSize:11,fill:"#5A7070"}} tickLine={false} axisLine={false}/>
-                  <Tooltip contentStyle={{borderRadius:8,border:"1px solid #D0E6E5",fontSize:12}} formatter={(v)=>[`${v}h`,"Hours"]}/>
-                  <Line type="monotone" dataKey="hours" stroke={CHART_COLORS["Volunteer"]} strokeWidth={2.5} dot={{r:4,fill:CHART_COLORS["Volunteer"]}}/>
-                </LineChart>
-              </ResponsiveContainer>
-            )}
+            <SimpleLineChart data={volHours}/>
           </div>
         </>
       )}
@@ -646,7 +685,7 @@ function App(){
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+ReactDOM.render(<App/>, document.getElementById("root"));
 </script>
 </body>
 </html>
