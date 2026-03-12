@@ -10,367 +10,340 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f3; color: #1a1a1a; min-height: 100vh; }
-    input, select, textarea, button {
-      font-family: inherit; font-size: 14px; border-radius: 8px;
-      border: 0.5px solid #ccc; padding: 8px 10px; outline: none;
-      background: #fff; color: #1a1a1a;
-    }
+    input, select, textarea, button { font-family: inherit; font-size: 14px; border-radius: 8px; border: 0.5px solid #ccc; padding: 8px 10px; outline: none; background: #fff; color: #1a1a1a; }
     input:focus, select:focus, textarea:focus { border-color: #888; box-shadow: 0 0 0 2px rgba(0,0,0,0.08); }
     button { cursor: pointer; background: transparent; border: 0.5px solid #ccc; padding: 8px 14px; }
     button:hover { background: #f0f0ee; }
     button:active { transform: scale(0.98); }
-    :root {
-      --bg: #fff; --bg2: #f5f5f3; --bg3: #eeeee9;
-      --text: #1a1a1a; --text2: #666; --text3: #999;
-      --border: #ddd; --radius: 8px; --radius-lg: 12px;
-      --success-bg: #eaf3de; --success-text: #3b6d11; --success-border: #c0dd97;
-      --danger-bg: #fcebeb; --danger-text: #a32d2d; --danger-border: #f7c1c1;
-      --warning-bg: #faeeda; --warning-text: #633806; --warning-border: #fac775;
-      --info-bg: #e6f1fb; --info-text: #0c447c; --info-border: #b5d4f4;
-    }
   </style>
 </head>
 <body>
-  <div id="root"></div>
-  <script type="text/babel">
-    const { useState, useEffect, useCallback } = React;
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
 
-    const SUPABASE_URL = "https://bnkdmdcinmbcuueakhug.supabase.co";
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJua2RtZGNpbm1iY3V1ZWFraHVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMzQyNTYsImV4cCI6MjA4ODkxMDI1Nn0.UnURxxIweDAYik0UXfZLtdB33q-9DPah2kwUQKL9oVY";
-    const HEADERS = { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` };
-    const CAPPED_SERVICES = { "Showers": 25, "Laundry": 25 };
-    const ADMIN_PIN = "1234";
+const SUPABASE_URL = "https://bnkdmdcinmbcuueakhug.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJua2RtZGNpbm1iY3V1ZWFraHVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMzQyNTYsImV4cCI6MjA4ODkxMDI1Nn0.UnURxxIweDAYik0UXfZLtdB33q-9DPah2kwUQKL9oVY";
+const HEADERS = { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` };
+const CAPPED_SERVICES = { "Showers": 25, "Laundry": 25 };
+const ADMIN_PIN = "1234";
 
-    function api(path, opts = {}) {
-      return fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: HEADERS, ...opts });
+function api(path, opts={}) { return fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: HEADERS, ...opts }); }
+function initials(name) { return name.trim().split(" ").filter(Boolean).map(w=>w[0].toUpperCase()).slice(0,2).join(""); }
+function fmt(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})+" "+d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+}
+function duration(inT, outT) {
+  if (!outT) return null;
+  const m = Math.round((new Date(outT)-new Date(inT))/60000);
+  return m < 60 ? `${m}m` : `${Math.floor(m/60)}h ${m%60}m`;
+}
+function todayISO() { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString(); }
+const AV_COLORS = [{bg:"#e6f1fb",color:"#0c447c"},{bg:"#e1f5ee",color:"#085041"},{bg:"#eeedfe",color:"#3c3489"},{bg:"#faeeda",color:"#633806"},{bg:"#fbeaf0",color:"#72243e"}];
+function avColor(name) { let h=0; for (let c of name) h=(h*31+c.charCodeAt(0))&0xffff; return AV_COLORS[h%AV_COLORS.length]; }
+
+const emptyForm = {name:"",guestNumber:"",memberId:"",type:"Guest",service:"",notes:""};
+
+function App() {
+  const [view, setView] = useState("checkin");
+  const [form, setForm] = useState(emptyForm);
+  const [records, setRecords] = useState([]);
+  const [services, setServices] = useState([]);
+  const [people, setPeople] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [success, setSuccess] = useState(null);
+  const [search, setSearch] = useState("");
+  const [filterType, setFilterType] = useState("All");
+  const [filterService, setFilterService] = useState("All");
+  const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [adminAuth, setAdminAuth] = useState(false);
+  const [pinInput, setPinInput] = useState("");
+  const [pinError, setPinError] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [newService, setNewService] = useState("");
+  const [dbError, setDbError] = useState(null);
+  const suggestRef = useRef(null);
+
+  const loadData = useCallback(async () => {
+    try {
+      const [rRes, sRes, pRes] = await Promise.all([api("checkin_records?order=check_in.desc"), api("checkin_services?order=name.asc"), api("people?order=name.asc")]);
+      if (!rRes.ok || !sRes.ok || !pRes.ok) throw new Error();
+      const [rData, sData, pData] = await Promise.all([rRes.json(), sRes.json(), pRes.json()]);
+      setRecords(rData); setServices(sData.map(s=>s.name)); setPeople(pData); setDbError(null);
+    } catch(_) { setDbError("Could not connect to database."); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadData(); const t = setInterval(loadData, 15000); return () => clearInterval(t); }, [loadData]);
+  useEffect(() => {
+    function h(e) { if (suggestRef.current && !suggestRef.current.contains(e.target)) setShowSuggestions(false); }
+    document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  function handleNameInput(val) {
+    setForm(f=>({...f,name:val,guestNumber:""})); setErrors(e=>({...e,name:undefined}));
+    if (!val.trim()) { setSuggestions([]); setShowSuggestions(false); return; }
+    const q = val.toLowerCase();
+    const m = people.filter(p=>p.name.toLowerCase().includes(q)||String(p.guest_number).includes(q)).slice(0,6);
+    setSuggestions(m); setShowSuggestions(m.length>0);
+  }
+
+  function handleGuestNumberInput(val) {
+    setForm(f=>({...f,guestNumber:val,name:""})); setErrors(e=>({...e,name:undefined}));
+    if (!val.trim()) { setSuggestions([]); setShowSuggestions(false); return; }
+    const m = people.filter(p=>String(p.guest_number).includes(val.trim())).slice(0,6);
+    setSuggestions(m); setShowSuggestions(m.length>0);
+  }
+
+  function selectPerson(p) { setForm(f=>({...f,name:p.name,guestNumber:String(p.guest_number)})); setSuggestions([]); setShowSuggestions(false); setErrors(e=>({...e,name:undefined})); }
+  function countToday(s) { return records.filter(r=>r.service===s&&r.check_in>=todayISO()).length; }
+
+  function validate() {
+    const e = {};
+    if (!form.name.trim()&&!form.guestNumber.trim()) e.name="Name or guest number is required";
+    if (!form.service) e.service="Please select a service";
+    if (form.service&&CAPPED_SERVICES[form.service]&&countToday(form.service)>=CAPPED_SERVICES[form.service]) e.service=`${form.service} is full for today.`;
+    return e;
+  }
+
+  async function submit() {
+    const e = validate(); if (Object.keys(e).length) { setErrors(e); return; }
+    setSaving(true);
+    let name = form.name.trim(), gNum = form.guestNumber.trim();
+    if (!name && gNum) {
+      const match = people.find(p=>String(p.guest_number)===gNum);
+      if (!match) { setErrors({name:"Guest number not found."}); setSaving(false); return; }
+      name = match.name;
     }
-    function initials(name) {
-      return name.trim().split(" ").filter(Boolean).map(w => w[0].toUpperCase()).slice(0, 2).join("");
-    }
-    function fmt(iso) {
-      if (!iso) return "";
-      const d = new Date(iso);
-      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) + " " +
-        d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-    }
-    function duration(inT, outT) {
-      if (!outT) return null;
-      const m = Math.round((new Date(outT) - new Date(inT)) / 60000);
-      return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
-    }
-    function todayISO() { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString(); }
+    let guestNumber = gNum;
+    const existing = people.find(p=>p.name.toLowerCase()===name.toLowerCase());
+    if (!existing) {
+      try {
+        const res = await api("people",{method:"POST",body:JSON.stringify({name}),headers:{...HEADERS,"Prefer":"return=representation"}});
+        if (!res.ok) throw new Error();
+        const [np] = await res.json(); guestNumber = String(np.guest_number); await loadData();
+      } catch(_) { setErrors({submit:"Failed to register guest."}); setSaving(false); return; }
+    } else { guestNumber = String(existing.guest_number); }
 
-    const AV_COLORS = [
-      { bg: "#e6f1fb", color: "#0c447c" }, { bg: "#e1f5ee", color: "#085041" },
-      { bg: "#eeedfe", color: "#3c3489" }, { bg: "#faeeda", color: "#633806" }, { bg: "#fbeaf0", color: "#72243e" }
-    ];
-    function avColor(name) { let h = 0; for (let c of name) h = (h * 31 + c.charCodeAt(0)) & 0xffff; return AV_COLORS[h % AV_COLORS.length]; }
+    const position = form.service&&CAPPED_SERVICES[form.service] ? countToday(form.service)+1 : null;
+    try {
+      const res = await api("checkin_records",{method:"POST",body:JSON.stringify({name,member_id:form.memberId||null,type:form.type,service:form.service,notes:form.notes||null,queue_position:position,check_in:new Date().toISOString(),check_out:null}),headers:{...HEADERS,"Prefer":"return=representation"}});
+      if (!res.ok) throw new Error();
+      await loadData();
+      setSuccess({name,guestNumber,service:form.service,position,isNew:!existing});
+      setForm(emptyForm); setErrors({});
+      setTimeout(()=>setSuccess(null),6000);
+    } catch(_) { setErrors({submit:"Failed to save. Please try again."}); }
+    setSaving(false);
+  }
 
-    const emptyForm = { name: "", email: "", memberId: "", type: "Guest", service: "", notes: "" };
+  async function checkOut(id) { await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}}); loadData(); }
+  async function deleteRecord(id) { await api(`checkin_records?id=eq.${id}`,{method:"DELETE"}); loadData(); }
 
-    function App() {
-      const [view, setView] = useState("checkin");
-      const [form, setForm] = useState(emptyForm);
-      const [records, setRecords] = useState([]);
-      const [services, setServices] = useState([]);
-      const [success, setSuccess] = useState(null);
-      const [search, setSearch] = useState("");
-      const [filterType, setFilterType] = useState("All");
-      const [filterService, setFilterService] = useState("All");
-      const [errors, setErrors] = useState({});
-      const [loading, setLoading] = useState(true);
-      const [saving, setSaving] = useState(false);
-      const [adminAuth, setAdminAuth] = useState(false);
-      const [pinInput, setPinInput] = useState("");
-      const [pinError, setPinError] = useState(false);
-      const [showAdmin, setShowAdmin] = useState(false);
-      const [newService, setNewService] = useState("");
-      const [dbError, setDbError] = useState(null);
+  function exportCSV() {
+    const hdr = ["Name","Guest #","Type","Member ID","Service","Queue #","Check-in","Check-out","Duration","Notes"];
+    const rows = records.map(r=>{ const p=people.find(x=>x.name===r.name); return [r.name,p?p.guest_number:"",r.type,r.member_id||"",r.service,r.queue_position||"",fmt(r.check_in),r.check_out?fmt(r.check_out):"",duration(r.check_in,r.check_out)||"",(r.notes||"").replace(/,/g," ")]; });
+    const csv=[hdr,...rows].map(r=>r.map(v=>`"${v}"`).join(",")).join("\n");
+    const a=document.createElement("a"); a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv); a.download="checkins.csv"; a.click();
+  }
 
-      const loadData = useCallback(async () => {
-        try {
-          const [rRes, sRes] = await Promise.all([
-            api("checkin_records?order=check_in.desc"),
-            api("checkin_services?order=name.asc")
-          ]);
-          if (!rRes.ok || !sRes.ok) throw new Error();
-          const [rData, sData] = await Promise.all([rRes.json(), sRes.json()]);
-          setRecords(rData);
-          setServices(sData.map(s => s.name));
-          setDbError(null);
-        } catch (_) { setDbError("Could not connect to database. Check your connection."); }
-        setLoading(false);
-      }, []);
+  function tryPin() { if (pinInput===ADMIN_PIN){setAdminAuth(true);setPinError(false);setPinInput("");setShowAdmin(false);}else{setPinError(true);setPinInput("");} }
+  async function addService() { const s=newService.trim(); if(!s||services.includes(s)){setNewService("");return;} await api("checkin_services",{method:"POST",body:JSON.stringify({name:s}),headers:{...HEADERS,"Prefer":"return=minimal"}}); setNewService(""); loadData(); }
+  async function removeService(s) { await api(`checkin_services?name=eq.${encodeURIComponent(s)}`,{method:"DELETE"}); loadData(); }
 
-      useEffect(() => { loadData(); const t = setInterval(loadData, 15000); return () => clearInterval(t); }, [loadData]);
+  const filtered = records.filter(r=>{ const q=search.toLowerCase(); const p=people.find(x=>x.name===r.name); const gn=p?String(p.guest_number):""; const m=!q||r.name.toLowerCase().includes(q)||gn.includes(q)||(r.member_id||"").toLowerCase().includes(q); return m&&(filterType==="All"||r.type===filterType)&&(filterService==="All"||r.service===filterService); });
+  const today=records.filter(r=>r.check_in>=todayISO()).length;
+  const gs=records.filter(r=>r.type==="Guest").length;
+  const vs=records.filter(r=>r.type==="Volunteer").length;
+  const ac=records.filter(r=>!r.check_out).length;
 
-      function countToday(service) {
-        return records.filter(r => r.service === service && r.check_in >= todayISO()).length;
-      }
+  const bg="#fff", bg2="#f5f5f3", border="0.5px solid #ddd", rad=8, radLg=12;
+  const Tab=({id,label})=>(<button onClick={()=>setView(id)} style={{flex:1,padding:"10px 0",border:"none",background:view===id?bg:bg2,borderBottom:view===id?"2px solid #1a1a1a":"2px solid transparent",fontWeight:view===id?500:400,fontSize:14,color:view===id?"#1a1a1a":"#666",borderRadius:0}}>{label}</button>);
 
-      function validate() {
-        const e = {};
-        if (!form.name.trim()) e.name = "Name is required";
-        if (!form.email.trim()) e.email = "Phone or email is required";
-        if (!form.service) e.service = "Please select a service";
-        if (form.service && CAPPED_SERVICES[form.service]) {
-          const used = countToday(form.service);
-          if (used >= CAPPED_SERVICES[form.service]) e.service = `${form.service} is full for today (${CAPPED_SERVICES[form.service]}/${CAPPED_SERVICES[form.service]} spots taken).`;
-        }
-        return e;
-      }
+  return (
+    <div style={{maxWidth:580,margin:"0 auto",padding:"1rem 1rem 3rem"}}>
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:20}}>
+        <div>
+          <h2 style={{fontSize:20,fontWeight:500,marginBottom:2}}>Community Check-In</h2>
+          <p style={{fontSize:13,color:"#666"}}>Friends of the Carpenter</p>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {!loading&&<span style={{width:8,height:8,borderRadius:"50%",background:dbError?"#e24b4a":"#639922",display:"inline-block"}}/>}
+          <button onClick={()=>{setShowAdmin(v=>!v);setPinError(false);}} style={{fontSize:12,padding:"6px 12px"}}>{adminAuth?"Admin":"Staff login"}</button>
+        </div>
+      </div>
 
-      async function submit() {
-        const e = validate();
-        if (Object.keys(e).length) { setErrors(e); return; }
-        setSaving(true);
-        const position = form.service && CAPPED_SERVICES[form.service] ? countToday(form.service) + 1 : null;
-        const payload = { name: form.name, email: form.email, member_id: form.memberId || null, type: form.type, service: form.service, notes: form.notes || null, queue_position: position, check_in: new Date().toISOString(), check_out: null };
-        try {
-          const res = await api("checkin_records", { method: "POST", body: JSON.stringify(payload), headers: { ...HEADERS, "Prefer": "return=representation" } });
-          if (!res.ok) throw new Error();
-          await loadData();
-          setSuccess({ name: form.name, service: form.service, position });
-          setForm(emptyForm); setErrors({});
-          setTimeout(() => setSuccess(null), 5000);
-        } catch (_) { setErrors({ submit: "Failed to save. Please try again." }); }
-        setSaving(false);
-      }
+      {dbError&&<div style={{background:"#fcebeb",border:"0.5px solid #f7c1c1",borderRadius:rad,padding:"10px 14px",marginBottom:16,fontSize:13,color:"#a32d2d"}}>{dbError}</div>}
 
-      async function checkOut(id) {
-        await api(`checkin_records?id=eq.${id}`, { method: "PATCH", body: JSON.stringify({ check_out: new Date().toISOString() }), headers: { ...HEADERS, "Prefer": "return=minimal" } });
-        loadData();
-      }
+      {showAdmin&&!adminAuth&&(
+        <div style={{background:bg2,border,borderRadius:radLg,padding:"16px 18px",marginBottom:20}}>
+          <p style={{fontWeight:500,fontSize:14,marginBottom:10}}>Enter admin PIN</p>
+          <div style={{display:"flex",gap:8}}>
+            <input type="password" placeholder="PIN" value={pinInput} onChange={e=>setPinInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&tryPin()} style={{width:100,borderColor:pinError?"#e24b4a":undefined}}/>
+            <button onClick={tryPin} style={{padding:"0 16px"}}>Login</button>
+          </div>
+          {pinError&&<p style={{marginTop:6,fontSize:12,color:"#a32d2d"}}>Incorrect PIN.</p>}
+        </div>
+      )}
 
-      async function deleteRecord(id) { await api(`checkin_records?id=eq.${id}`, { method: "DELETE" }); loadData(); }
+      {adminAuth&&showAdmin&&(
+        <div style={{background:bg2,border,borderRadius:radLg,padding:"16px 18px",marginBottom:20}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <p style={{fontWeight:500,fontSize:14}}>Admin panel</p>
+            <button onClick={()=>{setAdminAuth(false);setShowAdmin(false);}} style={{fontSize:12,padding:"4px 10px",color:"#a32d2d",borderColor:"#f7c1c1"}}>Log out</button>
+          </div>
+          <p style={{fontSize:13,fontWeight:500,color:"#666",marginBottom:6}}>Service capacity (today)</p>
+          <div style={{display:"flex",gap:8,marginBottom:14}}>
+            {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{ const used=countToday(svc),pct=Math.round(used/cap*100); return (
+              <div key={svc} style={{flex:1,background:bg,border,borderRadius:rad,padding:"10px 12px"}}>
+                <p style={{fontSize:12,fontWeight:500,marginBottom:4}}>{svc}</p>
+                <p style={{fontSize:12,color:used>=cap?"#a32d2d":"#666",marginBottom:6}}>{used}/{cap} spots</p>
+                <div style={{height:4,borderRadius:2,background:"#ddd"}}><div style={{height:4,borderRadius:2,width:`${pct}%`,background:used>=cap?"#e24b4a":used/cap>0.8?"#ef9f27":"#639922",transition:"width 0.3s"}}/></div>
+              </div>
+            );})}
+          </div>
+          <p style={{fontSize:13,fontWeight:500,color:"#666",marginBottom:8}}>Custom service types</p>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
+            {services.map(s=>(<span key={s} style={{display:"flex",alignItems:"center",gap:4,fontSize:12,padding:"4px 10px",background:bg,border,borderRadius:rad}}>{s}{CAPPED_SERVICES[s]?<span style={{fontSize:10,color:"#999"}}> (cap {CAPPED_SERVICES[s]})</span>:null}<button onClick={()=>removeService(s)} style={{background:"none",border:"none",color:"#999",padding:"0 2px",fontSize:13}}>×</button></span>))}
+          </div>
+          <div style={{display:"flex",gap:8,marginBottom:16}}>
+            <input placeholder="Add new service…" value={newService} onChange={e=>setNewService(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addService()} style={{flex:1}}/>
+            <button onClick={addService} style={{padding:"0 14px"}}>Add</button>
+          </div>
+          <button onClick={exportCSV} style={{fontSize:13,padding:"7px 16px",width:"100%"}}>Export all check-ins as CSV ↓</button>
+        </div>
+      )}
 
-      function exportCSV() {
-        const hdr = ["Name","Type","Phone/Email","Member ID","Service","Queue #","Check-in","Check-out","Duration","Notes"];
-        const rows = records.map(r => [r.name, r.type, r.email, r.member_id||"", r.service, r.queue_position||"", fmt(r.check_in), r.check_out ? fmt(r.check_out) : "", duration(r.check_in, r.check_out)||"", (r.notes||"").replace(/,/g," ")]);
-        const csv = [hdr,...rows].map(r => r.map(v => `"${v}"`).join(",")).join("\n");
-        const a = document.createElement("a"); a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv); a.download = "checkins.csv"; a.click();
-      }
+      {!loading&&(
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:10,marginBottom:12}}>
+          {[["Today",today],["Guests",gs],["Volunteers",vs],["Active now",ac]].map(([l,v])=>(<div key={l} style={{background:bg2,borderRadius:rad,padding:"10px 12px"}}><p style={{fontSize:11,color:"#666",marginBottom:3}}>{l}</p><p style={{fontSize:20,fontWeight:500}}>{v}</p></div>))}
+        </div>
+      )}
 
-      function tryPin() {
-        if (pinInput === ADMIN_PIN) { setAdminAuth(true); setPinError(false); setPinInput(""); setShowAdmin(false); }
-        else { setPinError(true); setPinInput(""); }
-      }
-
-      async function addService() {
-        const s = newService.trim();
-        if (!s || services.includes(s)) { setNewService(""); return; }
-        await api("checkin_services", { method: "POST", body: JSON.stringify({ name: s }), headers: { ...HEADERS, "Prefer": "return=minimal" } });
-        setNewService(""); loadData();
-      }
-
-      async function removeService(s) { await api(`checkin_services?name=eq.${encodeURIComponent(s)}`, { method: "DELETE" }); loadData(); }
-
-      const filtered = records.filter(r => {
-        const q = search.toLowerCase();
-        const m = !q || r.name.toLowerCase().includes(q) || r.email.toLowerCase().includes(q) || (r.member_id||"").toLowerCase().includes(q);
-        return m && (filterType === "All" || r.type === filterType) && (filterService === "All" || r.service === filterService);
-      });
-
-      const today = records.filter(r => r.check_in >= todayISO()).length;
-      const guests = records.filter(r => r.type === "Guest").length;
-      const vols = records.filter(r => r.type === "Volunteer").length;
-      const active = records.filter(r => !r.check_out).length;
-
-      const s = (x) => ({ ...x });
-      const card = { background: "#fff", border: "0.5px solid #ddd", borderRadius: 12, padding: "12px 14px", marginBottom: 10 };
-      const statCard = { background: "#f5f5f3", borderRadius: 8, padding: "10px 12px" };
-
-      return (
-        <div style={{ maxWidth: 580, margin: "0 auto", padding: "1rem 1rem 3rem" }}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
-            <div>
-              <h2 style={{ fontSize: 20, fontWeight: 500, marginBottom: 2 }}>Community Check-In</h2>
-              <p style={{ fontSize: 13, color: "#666" }}>Friends of the Carpenter</p>
+      {!loading&&(
+        <div style={{display:"flex",gap:8,marginBottom:20}}>
+          {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{ const used=countToday(svc),full=used>=cap; return (
+            <div key={svc} style={{flex:1,background:full?"#fcebeb":"#eaf3de",border:`0.5px solid ${full?"#f7c1c1":"#c0dd97"}`,borderRadius:rad,padding:"8px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:13,fontWeight:500,color:full?"#a32d2d":"#3b6d11"}}>{svc}</span>
+              <span style={{fontSize:12,color:full?"#a32d2d":"#3b6d11"}}>{full?"Full":`${cap-used} left`}</span>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              {!loading && <span style={{ width: 8, height: 8, borderRadius: "50%", background: dbError ? "#e24b4a" : "#639922", display: "inline-block" }} />}
-              <button onClick={() => { setShowAdmin(v => !v); setPinError(false); }} style={{ fontSize: 12, padding: "6px 12px" }}>
-                {adminAuth ? "Admin" : "Staff login"}
-              </button>
+          );})}
+        </div>
+      )}
+
+      <div style={{display:"flex",borderBottom:"0.5px solid #ddd",marginBottom:20}}>
+        <Tab id="checkin" label="Check in"/>
+        <Tab id="log" label={`Visit log (${records.length})`}/>
+      </div>
+
+      {view==="checkin"&&(
+        <div>
+          {success&&(
+            <div style={{background:"#eaf3de",border:"0.5px solid #c0dd97",borderRadius:rad,padding:"12px 14px",marginBottom:16}}>
+              <p style={{fontSize:14,fontWeight:500,color:"#3b6d11",marginBottom:2}}>{success.isNew?`Welcome, ${success.name}! You've been registered.`:`Welcome back, ${success.name}!`}</p>
+              <p style={{fontSize:13,color:"#3b6d11",marginBottom:success.position?2:0}}>Guest number: <strong>#{success.guestNumber}</strong></p>
+              {success.position&&<p style={{fontSize:13,color:"#3b6d11"}}>Queue position for {success.service}: <strong>#{success.position}</strong></p>}
+            </div>
+          )}
+          {errors.submit&&<div style={{background:"#fcebeb",border:"0.5px solid #f7c1c1",borderRadius:rad,padding:"10px 14px",marginBottom:16,fontSize:13,color:"#a32d2d"}}>{errors.submit}</div>}
+
+          <div style={{marginBottom:14}}>
+            <p style={{fontSize:13,fontWeight:500,color:"#666",marginBottom:8}}>Visitor type</p>
+            <div style={{display:"flex",gap:10}}>
+              {["Guest","Volunteer"].map(t=>(<button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"8px 0",borderRadius:rad,border:form.type===t?"2px solid #1a1a1a":"0.5px solid #ddd",background:form.type===t?bg:"transparent",fontWeight:form.type===t?500:400,fontSize:14,color:"#1a1a1a"}}>{t}</button>))}
             </div>
           </div>
 
-          {dbError && <div style={{ background: "var(--danger-bg)", border: "0.5px solid var(--danger-border)", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "var(--danger-text)" }}>{dbError}</div>}
-
-          {showAdmin && !adminAuth && (
-            <div style={{ background: "#f5f5f3", border: "0.5px solid #ddd", borderRadius: 12, padding: "16px 18px", marginBottom: 20 }}>
-              <p style={{ fontWeight: 500, fontSize: 14, marginBottom: 10 }}>Enter admin PIN</p>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input type="password" placeholder="PIN" value={pinInput} onChange={e => setPinInput(e.target.value)} onKeyDown={e => e.key === "Enter" && tryPin()} style={{ width: 100, borderColor: pinError ? "#e24b4a" : undefined }} />
-                <button onClick={tryPin} style={{ padding: "0 16px" }}>Login</button>
-              </div>
-              {pinError && <p style={{ marginTop: 6, fontSize: 12, color: "#a32d2d" }}>Incorrect PIN.</p>}
+          <div style={{marginBottom:14,position:"relative"}} ref={suggestRef}>
+            <p style={{fontSize:13,color:"#666",marginBottom:6}}>Search by name or guest number</p>
+            <div style={{display:"flex",gap:8}}>
+              <input placeholder="Full name…" value={form.name} onChange={e=>handleNameInput(e.target.value)} style={{flex:1,borderColor:errors.name?"#e24b4a":undefined}}/>
+              <input placeholder="Guest # (e.g. 1001)" value={form.guestNumber} onChange={e=>handleGuestNumberInput(e.target.value)} style={{width:150}}/>
             </div>
-          )}
-
-          {adminAuth && showAdmin && (
-            <div style={{ background: "#f5f5f3", border: "0.5px solid #ddd", borderRadius: 12, padding: "16px 18px", marginBottom: 20 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                <p style={{ fontWeight: 500, fontSize: 14 }}>Admin panel</p>
-                <button onClick={() => { setAdminAuth(false); setShowAdmin(false); }} style={{ fontSize: 12, padding: "4px 10px", color: "#a32d2d", borderColor: "#f7c1c1" }}>Log out</button>
+            {errors.name&&<p style={{marginTop:4,fontSize:12,color:"#a32d2d"}}>{errors.name}</p>}
+            {showSuggestions&&suggestions.length>0&&(
+              <div style={{position:"absolute",top:"100%",left:0,right:0,background:bg,border,borderRadius:rad,zIndex:10,boxShadow:"0 4px 12px rgba(0,0,0,0.08)",marginTop:4}}>
+                {suggestions.map(p=>{ const av=avColor(p.name); return (
+                  <div key={p.id} onClick={()=>selectPerson(p)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",cursor:"pointer",borderBottom:"0.5px solid #eee"}}
+                    onMouseEnter={e=>e.currentTarget.style.background=bg2} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <div style={{width:32,height:32,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:500,fontSize:12,flexShrink:0}}>{initials(p.name)||"?"}</div>
+                    <div><p style={{margin:0,fontSize:14,fontWeight:500}}>{p.name}</p><p style={{margin:0,fontSize:12,color:"#666"}}>Guest #{p.guest_number}</p></div>
+                  </div>
+                );})}
               </div>
-              <p style={{ fontSize: 13, fontWeight: 500, color: "#666", marginBottom: 6 }}>Service capacity (today)</p>
-              <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-                {Object.entries(CAPPED_SERVICES).map(([svc, cap]) => {
-                  const used = countToday(svc); const pct = Math.round((used / cap) * 100);
-                  return (
-                    <div key={svc} style={{ flex: 1, background: "#fff", border: "0.5px solid #ddd", borderRadius: 8, padding: "10px 12px" }}>
-                      <p style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}>{svc}</p>
-                      <p style={{ fontSize: 12, color: used >= cap ? "#a32d2d" : "#666", marginBottom: 6 }}>{used}/{cap} spots</p>
-                      <div style={{ height: 4, borderRadius: 2, background: "#ddd" }}>
-                        <div style={{ height: 4, borderRadius: 2, width: `${pct}%`, background: used >= cap ? "#e24b4a" : used / cap > 0.8 ? "#ef9f27" : "#639922", transition: "width 0.3s" }} />
-                      </div>
+            )}
+          </div>
+
+          <div style={{marginBottom:14}}>
+            <select value={form.service} onChange={ev=>{setForm(f=>({...f,service:ev.target.value}));setErrors(e=>({...e,service:undefined}));}} style={{width:"100%",borderColor:errors.service?"#e24b4a":undefined}}>
+              <option value="">Select service / reason for visit…</option>
+              {services.map(s=>{ const cap=CAPPED_SERVICES[s],used=cap?countToday(s):0,full=cap&&used>=cap; return <option key={s} value={s} disabled={full}>{s}{cap?` (${used}/${cap}${full?" — Full":""})`:""}</option>; })}
+            </select>
+            {errors.service&&<p style={{marginTop:4,fontSize:12,color:"#a32d2d"}}>{errors.service}</p>}
+          </div>
+
+          <div style={{marginBottom:20}}>
+            <textarea placeholder="Notes (optional)" value={form.notes} onChange={ev=>setForm(f=>({...f,notes:ev.target.value}))} rows={3} style={{width:"100%",resize:"vertical"}}/>
+          </div>
+
+          <button onClick={submit} disabled={saving} style={{width:"100%",padding:"11px 0",background:"#1a1a1a",color:"#fff",border:"none",borderRadius:rad,fontSize:15,fontWeight:500,opacity:saving?0.7:1}}>
+            {saving?"Saving…":"Check in"}
+          </button>
+        </div>
+      )}
+
+      {view==="log"&&(
+        <div>
+          {!adminAuth?(
+            <div style={{background:"#faeeda",border:"0.5px solid #fac775",borderRadius:rad,padding:"10px 14px",marginBottom:16,fontSize:13,color:"#633806"}}>Staff login required to view the visit log.</div>
+          ):(
+            <>
+              <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+                <input placeholder="Search by name or guest #…" value={search} onChange={e=>setSearch(e.target.value)} style={{flex:1,minWidth:140}}/>
+                <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{width:110}}><option>All</option><option>Guest</option><option>Volunteer</option></select>
+                <select value={filterService} onChange={e=>setFilterService(e.target.value)} style={{width:150}}><option>All</option>{services.map(s=><option key={s}>{s}</option>)}</select>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <p style={{fontSize:12,color:"#666"}}>{people.length} people in directory</p>
+                <button onClick={loadData} style={{fontSize:12,padding:"5px 12px"}}>Refresh ↻</button>
+              </div>
+              {loading?<p style={{color:"#666",fontSize:14,textAlign:"center",padding:"2rem 0"}}>Loading…</p>
+              :filtered.length===0?<p style={{color:"#666",fontSize:14,textAlign:"center",padding:"2rem 0"}}>No records found.</p>
+              :filtered.map(r=>{ const av=avColor(r.name),dur=duration(r.check_in,r.check_out),person=people.find(p=>p.name===r.name); return (
+                <div key={r.id} style={{background:bg,border,borderRadius:radLg,padding:"12px 14px",marginBottom:10,display:"flex",alignItems:"flex-start",gap:12}}>
+                  <div style={{width:40,height:40,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:500,fontSize:13,flexShrink:0}}>{initials(r.name)||"?"}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:2}}>
+                      <span style={{fontWeight:500,fontSize:14}}>{r.name}</span>
+                      {person&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:rad,background:"#f0f0ee",color:"#666"}}>#{person.guest_number}</span>}
+                      <span style={{fontSize:11,padding:"2px 8px",borderRadius:rad,background:r.type==="Volunteer"?"#e1f5ee":"#eeedfe",color:r.type==="Volunteer"?"#085041":"#3c3489"}}>{r.type}</span>
+                      {r.queue_position&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:rad,background:"#faeeda",color:"#633806"}}>Queue #{r.queue_position}</span>}
+                      {!r.check_out&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:rad,background:"#eaf3de",color:"#3b6d11"}}>Active</span>}
                     </div>
-                  );
-                })}
-              </div>
-              <p style={{ fontSize: 13, fontWeight: 500, color: "#666", marginBottom: 8 }}>Custom service types</p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
-                {services.map(s => (
-                  <span key={s} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, padding: "4px 10px", background: "#fff", border: "0.5px solid #ddd", borderRadius: 8, color: "#1a1a1a" }}>
-                    {s}{CAPPED_SERVICES[s] ? <span style={{ fontSize: 10, color: "#999" }}> (cap {CAPPED_SERVICES[s]})</span> : null}
-                    <button onClick={() => removeService(s)} style={{ background: "none", border: "none", cursor: "pointer", color: "#999", padding: "0 2px", fontSize: 13 }}>×</button>
-                  </span>
-                ))}
-              </div>
-              <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-                <input placeholder="Add new service…" value={newService} onChange={e => setNewService(e.target.value)} onKeyDown={e => e.key === "Enter" && addService()} style={{ flex: 1 }} />
-                <button onClick={addService} style={{ padding: "0 14px" }}>Add</button>
-              </div>
-              <button onClick={exportCSV} style={{ fontSize: 13, padding: "7px 16px", width: "100%" }}>Export all check-ins as CSV ↓</button>
-            </div>
-          )}
-
-          {!loading && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 10, marginBottom: 12 }}>
-              {[["Today", today], ["Guests", guests], ["Volunteers", vols], ["Active now", active]].map(([l, v]) => (
-                <div key={l} style={statCard}>
-                  <p style={{ fontSize: 11, color: "#666", marginBottom: 3 }}>{l}</p>
-                  <p style={{ fontSize: 20, fontWeight: 500 }}>{v}</p>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {!loading && (
-            <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-              {Object.entries(CAPPED_SERVICES).map(([svc, cap]) => {
-                const used = countToday(svc); const full = used >= cap;
-                return (
-                  <div key={svc} style={{ flex: 1, background: full ? "#fcebeb" : "#eaf3de", border: `0.5px solid ${full ? "#f7c1c1" : "#c0dd97"}`, borderRadius: 8, padding: "8px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: 13, fontWeight: 500, color: full ? "#a32d2d" : "#3b6d11" }}>{svc}</span>
-                    <span style={{ fontSize: 12, color: full ? "#a32d2d" : "#3b6d11" }}>{full ? "Full" : `${cap - used} left`}</span>
+                    <p style={{fontSize:12,color:"#666"}}>{r.service}</p>
+                    <p style={{fontSize:12,color:"#999"}}>In: {fmt(r.check_in)}{r.check_out?` · Out: ${fmt(r.check_out)} · ${dur}`:""}</p>
+                    {r.notes&&<p style={{fontSize:12,color:"#666",fontStyle:"italic",marginTop:4}}>{r.notes}</p>}
                   </div>
-                );
-              })}
-            </div>
-          )}
-
-          <div style={{ display: "flex", borderBottom: "0.5px solid #ddd", marginBottom: 20 }}>
-            {[["checkin", "Check in"], ["log", `Visit log (${records.length})`]].map(([id, label]) => (
-              <button key={id} onClick={() => setView(id)} style={{ flex: 1, padding: "10px 0", border: "none", background: view === id ? "#fff" : "transparent", borderBottom: view === id ? "2px solid #1a1a1a" : "2px solid transparent", fontWeight: view === id ? 500 : 400, fontSize: 14, color: view === id ? "#1a1a1a" : "#666", borderRadius: 0 }}>
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {view === "checkin" && (
-            <div>
-              {success && (
-                <div style={{ background: "#eaf3de", border: "0.5px solid #c0dd97", borderRadius: 8, padding: "12px 14px", marginBottom: 16 }}>
-                  <p style={{ fontSize: 14, fontWeight: 500, color: "#3b6d11", marginBottom: success.position ? 2 : 0 }}>Check-in recorded for {success.name}!</p>
-                  {success.position && <p style={{ fontSize: 13, color: "#3b6d11" }}>Queue position for {success.service}: <strong>#{success.position}</strong></p>}
-                </div>
-              )}
-              {errors.submit && <div style={{ background: "#fcebeb", border: "0.5px solid #f7c1c1", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#a32d2d" }}>{errors.submit}</div>}
-              <div style={{ marginBottom: 14 }}>
-                <p style={{ fontSize: 13, fontWeight: 500, color: "#666", marginBottom: 8 }}>Visitor type</p>
-                <div style={{ display: "flex", gap: 10 }}>
-                  {["Guest", "Volunteer"].map(t => (
-                    <button key={t} onClick={() => setForm(f => ({ ...f, type: t }))} style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: form.type === t ? "2px solid #1a1a1a" : "0.5px solid #ddd", background: form.type === t ? "#fff" : "transparent", fontWeight: form.type === t ? 500 : 400, fontSize: 14, color: "#1a1a1a" }}>
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {[["name","Full name"],["email","Phone number or email"],["memberId","Member / ID number (optional)"]].map(([field, ph]) => (
-                <div key={field} style={{ marginBottom: 14 }}>
-                  <input placeholder={ph} value={form[field]} onChange={ev => { setForm(f => ({ ...f, [field]: ev.target.value })); setErrors(e => ({ ...e, [field]: undefined })); }} style={{ width: "100%", borderColor: errors[field] ? "#e24b4a" : undefined }} />
-                  {errors[field] && <p style={{ marginTop: 4, fontSize: 12, color: "#a32d2d" }}>{errors[field]}</p>}
-                </div>
-              ))}
-              <div style={{ marginBottom: 14 }}>
-                <select value={form.service} onChange={ev => { setForm(f => ({ ...f, service: ev.target.value })); setErrors(e => ({ ...e, service: undefined })); }} style={{ width: "100%", borderColor: errors.service ? "#e24b4a" : undefined }}>
-                  <option value="">Select service / reason for visit…</option>
-                  {services.map(s => { const cap = CAPPED_SERVICES[s]; const used = cap ? countToday(s) : 0; const full = cap && used >= cap; return <option key={s} value={s} disabled={full}>{s}{cap ? ` (${used}/${cap}${full ? " — Full" : ""})` : ""}</option>; })}
-                </select>
-                {errors.service && <p style={{ marginTop: 4, fontSize: 12, color: "#a32d2d" }}>{errors.service}</p>}
-              </div>
-              <div style={{ marginBottom: 20 }}>
-                <textarea placeholder="Notes (optional)" value={form.notes} onChange={ev => setForm(f => ({ ...f, notes: ev.target.value }))} rows={3} style={{ width: "100%", resize: "vertical" }} />
-              </div>
-              <button onClick={submit} disabled={saving} style={{ width: "100%", padding: "11px 0", background: "#1a1a1a", color: "#fff", border: "none", borderRadius: 8, fontSize: 15, fontWeight: 500, opacity: saving ? 0.7 : 1 }}>
-                {saving ? "Saving…" : "Check in"}
-              </button>
-            </div>
-          )}
-
-          {view === "log" && (
-            <div>
-              {!adminAuth ? (
-                <div style={{ background: "#faeeda", border: "0.5px solid #fac775", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#633806" }}>
-                  Staff login required to view the visit log. Click "Staff login" above.
-                </div>
-              ) : (
-                <>
-                  <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-                    <input placeholder="Search by name, email, or ID…" value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
-                    <select value={filterType} onChange={e => setFilterType(e.target.value)} style={{ width: 110 }}><option>All</option><option>Guest</option><option>Volunteer</option></select>
-                    <select value={filterService} onChange={e => setFilterService(e.target.value)} style={{ width: 150 }}><option>All</option>{services.map(s => <option key={s}>{s}</option>)}</select>
+                  <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0}}>
+                    {!r.check_out&&<button onClick={()=>checkOut(r.id)} style={{fontSize:12,padding:"4px 10px",color:"#3b6d11",borderColor:"#c0dd97"}}>Check out</button>}
+                    <button onClick={()=>deleteRecord(r.id)} style={{background:"none",border:"none",color:"#999",fontSize:16,padding:"0 4px",alignSelf:"flex-end"}}>×</button>
                   </div>
-                  <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
-                    <button onClick={loadData} style={{ fontSize: 12, padding: "5px 12px" }}>Refresh ↻</button>
-                  </div>
-                  {loading ? <p style={{ color: "#666", fontSize: 14, textAlign: "center", padding: "2rem 0" }}>Loading…</p>
-                  : filtered.length === 0 ? <p style={{ color: "#666", fontSize: 14, textAlign: "center", padding: "2rem 0" }}>No records found.</p>
-                  : filtered.map(r => {
-                    const av = avColor(r.name); const dur = duration(r.check_in, r.check_out);
-                    return (
-                      <div key={r.id} style={{ ...card, display: "flex", alignItems: "flex-start", gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: "50%", background: av.bg, color: av.color, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 500, fontSize: 13, flexShrink: 0 }}>{initials(r.name) || "?"}</div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
-                            <span style={{ fontWeight: 500, fontSize: 14 }}>{r.name}</span>
-                            <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 8, background: r.type === "Volunteer" ? "#e1f5ee" : "#eeedfe", color: r.type === "Volunteer" ? "#085041" : "#3c3489" }}>{r.type}</span>
-                            {r.queue_position && <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 8, background: "#faeeda", color: "#633806" }}>#{r.queue_position}</span>}
-                            {!r.check_out && <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 8, background: "#eaf3de", color: "#3b6d11" }}>Active</span>}
-                          </div>
-                          <p style={{ fontSize: 12, color: "#666" }}>{r.service}</p>
-                          <p style={{ fontSize: 12, color: "#999" }}>In: {fmt(r.check_in)}{r.check_out ? ` · Out: ${fmt(r.check_out)} · ${dur}` : ""}</p>
-                          <p style={{ fontSize: 12, color: "#999" }}>{r.email}{r.member_id ? ` · ID: ${r.member_id}` : ""}</p>
-                          {r.notes && <p style={{ fontSize: 12, color: "#666", fontStyle: "italic", marginTop: 4 }}>{r.notes}</p>}
-                        </div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 }}>
-                          {!r.check_out && <button onClick={() => checkOut(r.id)} style={{ fontSize: 12, padding: "4px 10px", color: "#3b6d11", borderColor: "#c0dd97" }}>Check out</button>}
-                          <button onClick={() => deleteRecord(r.id)} style={{ background: "none", border: "none", color: "#999", fontSize: 16, padding: "0 4px", alignSelf: "flex-end" }}>×</button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </>
-              )}
-            </div>
+                </div>
+              );})}
+            </>
           )}
         </div>
-      );
-    }
+      )}
+    </div>
+  );
+}
 
-    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
-  </script>
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
 </body>
 </html>
