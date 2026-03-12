@@ -624,7 +624,7 @@ function App() {
 
         {!loading && (
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:10,marginBottom:14}}>
-            {[["Today",today],["Guests",gs],["Volunteers",vs],["Active",ac]].map(([l,v]) => (
+            {[["Guests",gs],["Volunteers",vs],["Active",ac]].map(([l,v]) => (
               <div key={l} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:10,padding:"12px 10px",textAlign:"center"}}>
                 <p style={{margin:0,fontSize:22,fontWeight:700,color:"#46b4bf"}}>{v}</p>
                 <p style={{margin:0,fontSize:11,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{l}</p>
