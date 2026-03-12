@@ -10,7 +10,7 @@
   <script src="https://unpkg.com/@babel/standalone@7.23.10/babel.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff; color: #1D2B2B; min-height: 100vh; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #F7FAFA; color: #1D2B2B; min-height: 100vh; }
     input, select, textarea { font-family: inherit; font-size: 14px; border-radius: 8px; border: 1.5px solid #D0E6E5; padding: 10px 12px; outline: none; background: #fff; color: #1D2B2B; width: 100%; }
     input:focus, select:focus, textarea:focus { border-color: #46b4bf; box-shadow: 0 0 0 3px rgba(70,180,191,0.15); }
     button { font-family: inherit; cursor: pointer; }
@@ -563,7 +563,7 @@ function App() {
   const availableServices = services.filter(s => isServiceAvailableToday(s));
 
   return (
-    <div style={{minHeight:"100vh",background:"#F7FAFA",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"}}>
+    <div style={{minHeight:"100vh",background:"#FFF",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"}}>
       <div style={{background:"#46b4bf",padding:"24px 20px 18px",textAlign:"center"}}>
         <div style={{display:"flex",justifyContent:"center",marginBottom:14}}><Logo/></div>
         <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:8}}>
