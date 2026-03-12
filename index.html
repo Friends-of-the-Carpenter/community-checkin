@@ -156,7 +156,7 @@ function AnalyticsTab({records}){
   return(
     <div>
       <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap"}}>
-        {ranges.map(r=><button key={r.id} onClick={()=>setRange(r.id)} style={{...btnGhost,fontSize:12,background:range===r.id?"#46b4bf":"transparent",color:range===r.id:"#fff":"#5A7070",borderColor:range===r.id?"#46b4bf":"#D0E6E5",padding:"6px 12px"}}>{r.label}</button>)}
+        {ranges.map(r=><button key={r.id} onClick={()=>setRange(r.id)} style={{...btnGhost,fontSize:12,background:range===r.id?"#46b4bf":"transparent",color:range===r.id?"#fff":"#5A7070",borderColor:range===r.id?"#46b4bf":"#D0E6E5",padding:"6px 12px"}}>{r.label}</button>)}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10,marginBottom:14}}>
         {["Showers","Laundry","Day Center"].map(s=>(
