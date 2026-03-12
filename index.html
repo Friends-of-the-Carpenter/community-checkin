@@ -204,7 +204,7 @@ function AnalyticsTab({records}){
       const k=getKey(r);if(!map[k])map[k]={date:k,hours:0};
       map[k].hours+=(new Date(r.check_out)-new Date(r.check_in))/3600000;
     });
-    return Object.values(map).sort((a,b)=>new Date(a.date)>new Date(b.date)?1:-1).map(d=>({...d,hours:Math.round(d.hours*60)/60}));
+    return Object.values(map).sort((a,b)=>new Date(a.date)>new Date(b.date)?1:-1);
   }
   function meetsMinDuration(r){
     if(NO_DURATION_SERVICES.includes(r.service))return true;
