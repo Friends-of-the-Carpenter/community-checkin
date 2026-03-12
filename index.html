@@ -7,6 +7,7 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #F7FAFA; color: #1D2B2B; min-height: 100vh; }
@@ -19,91 +20,214 @@
 <div id="root"></div>
 <script type="text/babel">
 const { useState, useEffect, useCallback, useRef } = React;
+const { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } = Recharts;
 
 const SUPABASE_URL = "https://bnkdmdcinmbcuueakhug.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJua2RtZGNpbm1iY3V1ZWFraHVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMzQyNTYsImV4cCI6MjA4ODkxMDI1Nn0.UnURxxIweDAYik0UXfZLtdB33q-9DPah2kwUQKL9oVY";
 const HEADERS = { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` };
 const CAPPED_SERVICES = { "Showers": 25, "Laundry": 25 };
-const ADMIN_PIN = "1234";
-const QUEUE_PIN = "5678";
+const NO_DURATION_SERVICES = ["Showers", "Laundry"];
+const ADMIN_PIN = "9866";
+const QUEUE_PIN = "1234";
+const CHART_SERVICES = ["Showers","Laundry","Day Center","Community Partnership","Volunteer"];
+const CHART_COLORS = { "Showers":"#46b4bf","Laundry":"#2E8A94","Day Center":"#E6A817","Community Partnership":"#7B61C4","Volunteer":"#3A9C6A" };
 
 const C = {
-  teal: "#46b4bf", tealDark: "#2E8A94", tealLight: "#EAF7F8", tealMid: "#C0E8EC",
-  white: "#FFFFFF", bg: "#F7FAFA", text: "#1D2B2B", textMuted: "#5A7070", textLight: "#8AA5A5",
-  border: "#D0E6E5", danger: "#C0392B", dangerBg: "#FCECEA", dangerBorder: "#F0A9A3",
-  warning: "#8A5A00", warningBg: "#FEF7E6", warningBorder: "#F5D48A",
+  teal:"#46b4bf",tealDark:"#2E8A94",tealLight:"#EAF7F8",tealMid:"#C0E8EC",
+  white:"#FFFFFF",bg:"#F7FAFA",text:"#1D2B2B",textMuted:"#5A7070",textLight:"#8AA5A5",
+  border:"#D0E6E5",danger:"#C0392B",dangerBg:"#FCECEA",dangerBorder:"#F0A9A3",
+  warning:"#8A5A00",warningBg:"#FEF7E6",warningBorder:"#F5D48A",
 };
+const inpStyle = {width:"100%",boxSizing:"border-box",padding:"10px 12px",fontSize:14,borderRadius:8,border:"1.5px solid #D0E6E5",background:"#fff",color:"#1D2B2B",fontFamily:"inherit",outline:"none"};
+const btnPrimary = {background:"#46b4bf",color:"#fff",border:"none",borderRadius:8,padding:"11px 20px",fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:"inherit"};
+const btnOutline = {background:"transparent",color:"#46b4bf",border:"1.5px solid #46b4bf",borderRadius:8,padding:"7px 14px",fontSize:13,fontWeight:500,cursor:"pointer",fontFamily:"inherit"};
+const btnGhost = {background:"transparent",color:"#5A7070",border:"1px solid #D0E6E5",borderRadius:8,padding:"6px 12px",fontSize:12,cursor:"pointer",fontFamily:"inherit"};
 
-function api(path, opts={}) { return fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: HEADERS, ...opts }); }
-function initials(name) { return name.trim().split(" ").filter(Boolean).map(w=>w[0].toUpperCase()).slice(0,2).join(""); }
-function fmt(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
+function api(path,opts={}){return fetch(`${SUPABASE_URL}/rest/v1/${path}`,{headers:HEADERS,...opts});}
+function initials(name){return name.trim().split(" ").filter(Boolean).map(w=>w[0].toUpperCase()).slice(0,2).join("");}
+function fmt(iso){
+  if(!iso)return"";
+  const d=new Date(iso);
   return d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})+" "+d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
 }
-function duration(inT, outT) {
-  if (!outT) return null;
-  const m = Math.round((new Date(outT)-new Date(inT))/60000);
-  return m < 60 ? `${m}m` : `${Math.floor(m/60)}h ${m%60}m`;
+function fmtDate(iso){if(!iso)return"";const d=new Date(iso);return d.toLocaleDateString("en-US",{month:"short",day:"numeric"});}
+function fmtMonth(iso){const d=new Date(iso);return d.toLocaleDateString("en-US",{month:"short",year:"numeric"});}
+function duration(inT,outT,service){
+  if(!outT||NO_DURATION_SERVICES.includes(service))return null;
+  const m=Math.round((new Date(outT)-new Date(inT))/60000);
+  return m<60?`${m}m`:`${Math.floor(m/60)}h ${m%60}m`;
 }
-function todayISO() { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString(); }
-const AV_COLORS = [
-  {bg:"#C2E8E6",color:"#1D5C5A"},{bg:"#B8DFE8",color:"#1A4A5C"},
-  {bg:"#C8E6D4",color:"#1A5C35"},{bg:"#E6D4C8",color:"#5C3A1A"},{bg:"#D4C8E6",color:"#3A1A5C"}
-];
-function avColor(name) { let h=0; for (let c of name) h=(h*31+c.charCodeAt(0))&0xffff; return AV_COLORS[h%AV_COLORS.length]; }
+function todayISO(){const d=new Date();d.setHours(0,0,0,0);return d.toISOString();}
+const AV_COLORS=[{bg:"#C2E8E6",color:"#1D5C5A"},{bg:"#B8DFE8",color:"#1A4A5C"},{bg:"#C8E6D4",color:"#1A5C35"},{bg:"#E6D4C8",color:"#5C3A1A"},{bg:"#D4C8E6",color:"#3A1A5C"}];
+function avColor(name){let h=0;for(let c of name)h=(h*31+c.charCodeAt(0))&0xffff;return AV_COLORS[h%AV_COLORS.length];}
+const emptyForm={name:"",guestNumber:"",memberId:"",type:"Guest",service:"",notes:""};
 
-const inpStyle = { width:"100%", boxSizing:"border-box", padding:"10px 12px", fontSize:14, borderRadius:8, border:`1.5px solid #D0E6E5`, background:"#fff", color:"#1D2B2B", fontFamily:"inherit", outline:"none" };
-const btnPrimary = { background:"#46b4bf", color:"#fff", border:"none", borderRadius:8, padding:"11px 20px", fontSize:15, fontWeight:600, cursor:"pointer", fontFamily:"inherit" };
-const btnOutline = { background:"transparent", color:"#46b4bf", border:`1.5px solid #46b4bf`, borderRadius:8, padding:"7px 14px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit" };
-const btnGhost = { background:"transparent", color:"#5A7070", border:`1px solid #D0E6E5`, borderRadius:8, padding:"6px 12px", fontSize:12, cursor:"pointer", fontFamily:"inherit" };
-
-const emptyForm = {name:"", guestNumber:"", memberId:"", type:"Guest", service:"", notes:""};
-
-function Logo() {
-  return (
-    <img
-      src="https://cdn.shopify.com/s/files/1/0582/8719/4214/files/FOC_Logo_white.png?v=1773347276"
-      alt="Friends of the Carpenter"
-      style={{height:60, width:"auto"}}
-    />
-  );
+function Logo(){
+  return <img src="https://cdn.shopify.com/s/files/1/0582/8719/4214/files/FOC_Logo_white.png?v=1773347276" alt="Friends of the Carpenter" style={{height:85,width:"auto"}}/>;
 }
 
-function PeopleRemover({ people, onRemove }) {
-  const [query, setQuery] = React.useState("");
-  const [confirm, setConfirm] = React.useState(null);
-  const matches = query.trim().length > 0
-    ? people.filter(p=>p.name.toLowerCase().includes(query.toLowerCase())||String(p.guest_number).includes(query)).slice(0,5)
-    : [];
-  return (
+function PeopleRemover({people,onRemove,onFlag}){
+  const [query,setQuery]=React.useState("");
+  const [confirm,setConfirm]=React.useState(null);
+  const [flagReason,setFlagReason]=React.useState("");
+  const [flagging,setFlagging]=React.useState(null);
+  const matches=query.trim().length>0?people.filter(p=>p.name.toLowerCase().includes(query.toLowerCase())||String(p.guest_number).includes(query)).slice(0,5):[];
+  return(
     <div>
-      <input placeholder="Search by name or guest #…" value={query} onChange={e=>{setQuery(e.target.value);setConfirm(null);}} style={{...inpStyle,marginBottom:8}}/>
+      <input placeholder="Search by name or guest #…" value={query} onChange={e=>{setQuery(e.target.value);setConfirm(null);setFlagging(null);}} style={{...inpStyle,marginBottom:8}}/>
       {matches.map(p=>(
-        <div key={p.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",background:"#fff",border:`1px solid #D0E6E5`,borderRadius:8,marginBottom:6}}>
-          <div>
-            <span style={{fontSize:13,fontWeight:600,color:"#1D2B2B"}}>{p.name}</span>
-            <span style={{fontSize:12,color:"#5A7070",marginLeft:8}}>#{p.guest_number}</span>
-          </div>
-          {confirm===p.id ? (
-            <div style={{display:"flex",gap:6}}>
-              <button onClick={()=>{onRemove(p);setQuery("");setConfirm(null);}} style={{...btnGhost,color:"#C0392B",borderColor:"#F0A9A3",fontSize:12}}>Confirm</button>
-              <button onClick={()=>setConfirm(null)} style={btnGhost}>Cancel</button>
+        <div key={p.id} style={{background:p.flagged?"#FFF5F5":C.white,border:`1px solid ${p.flagged?C.dangerBorder:C.border}`,borderRadius:8,marginBottom:8,overflow:"hidden"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:13,fontWeight:600,color:C.text}}>{p.name}</span>
+              <span style={{fontSize:12,color:C.textMuted}}>#{p.guest_number}</span>
+              {p.flagged&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:C.dangerBg,color:C.danger,fontWeight:600}}>⚑ Flagged</span>}
             </div>
-          ) : (
-            <button onClick={()=>setConfirm(p.id)} style={{...btnGhost,color:"#C0392B",borderColor:"#F0A9A3"}}>Remove</button>
+            <div style={{display:"flex",gap:6}}>
+              <button onClick={()=>{setFlagging(flagging===p.id?null:p.id);setConfirm(null);setFlagReason(p.flag_reason||"");}} style={{...btnGhost,fontSize:12,color:p.flagged?C.teal:C.danger,borderColor:p.flagged?C.border:C.dangerBorder}}>{p.flagged?"Unflag":"Flag"}</button>
+              {confirm===p.id?(
+                <div style={{display:"flex",gap:6}}>
+                  <button onClick={()=>{onRemove(p);setQuery("");setConfirm(null);}} style={{...btnGhost,color:C.danger,borderColor:C.dangerBorder,fontSize:12}}>Confirm</button>
+                  <button onClick={()=>setConfirm(null)} style={btnGhost}>Cancel</button>
+                </div>
+              ):(
+                <button onClick={()=>{setConfirm(p.id);setFlagging(null);}} style={{...btnGhost,color:C.danger,borderColor:C.dangerBorder}}>Remove</button>
+              )}
+            </div>
+          </div>
+          {flagging===p.id&&(
+            <div style={{padding:"10px 12px",borderTop:`1px solid ${C.border}`,background:C.bg}}>
+              {p.flagged?(
+                <div>
+                  <p style={{margin:"0 0 8px",fontSize:12,color:C.textMuted}}>Current reason: <em>{p.flag_reason||"No reason given"}</em></p>
+                  <button onClick={()=>{onFlag(p,false,"");setFlagging(null);}} style={{...btnOutline,fontSize:12,padding:"6px 14px"}}>Confirm unflag</button>
+                </div>
+              ):(
+                <div>
+                  <input placeholder="Reason for flagging (optional)…" value={flagReason} onChange={e=>setFlagReason(e.target.value)} style={{...inpStyle,marginBottom:8,fontSize:13}}/>
+                  <button onClick={()=>{onFlag(p,true,flagReason);setFlagging(null);setFlagReason("");}} style={{...btnPrimary,fontSize:13,padding:"7px 16px",background:C.danger}}>Confirm flag</button>
+                </div>
+              )}
+            </div>
           )}
+          {p.flagged&&p.flag_reason&&flagging!==p.id&&<div style={{padding:"4px 12px 8px",fontSize:11,color:C.danger}}>Reason: {p.flag_reason}</div>}
         </div>
       ))}
-      {query.trim().length>0&&matches.length===0&&<p style={{fontSize:12,color:"#5A7070"}}>No matches found.</p>}
+      {query.trim().length>0&&matches.length===0&&<p style={{fontSize:12,color:C.textMuted}}>No matches found.</p>}
     </div>
   );
 }
 
-function QueueView({ records, people, onCheckOut, onLogout, loadData }) {
-  const services = Object.keys(CAPPED_SERVICES);
-  return (
-    <div style={{minHeight:"100vh",background:"#F7FAFA",fontFamily:"inherit"}}>
+function AnalyticsTab({records}){
+  const [range,setRange]=React.useState("7days");
+  function getFiltered(){
+    const now=new Date();let cutoff;
+    if(range==="7days"){cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-6);}
+    else if(range==="30days"){cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-29);}
+    else if(range==="month"){cutoff=new Date(now.getFullYear(),now.getMonth(),1);}
+    else if(range==="quarter"){const q=Math.floor(now.getMonth()/3);cutoff=new Date(now.getFullYear(),q*3,1);}
+    else if(range==="year"){cutoff=new Date(now.getFullYear(),0,1);}
+    else{cutoff=new Date(0);}
+    cutoff.setHours(0,0,0,0);
+    return records.filter(r=>new Date(r.check_in)>=cutoff);
+  }
+  function getKey(r){
+    if(range==="year")return fmtMonth(r.check_in);
+    return fmtDate(r.check_in);
+  }
+  function groupBy(recs){
+    const map={};
+    recs.forEach(r=>{const k=getKey(r);if(!map[k])map[k]={date:k};CHART_SERVICES.forEach(s=>{if(!map[k][s])map[k][s]=0;});map[k][r.service]=(map[k][r.service]||0)+1;});
+    return Object.values(map).sort((a,b)=>new Date(a.date)>new Date(b.date)?1:-1);
+  }
+  function getVolHours(recs){
+    const map={};
+    recs.filter(r=>r.service==="Volunteer"&&r.check_out).forEach(r=>{
+      const k=getKey(r);if(!map[k])map[k]={date:k,hours:0};
+      map[k].hours+=(new Date(r.check_out)-new Date(r.check_in))/3600000;
+    });
+    return Object.values(map).sort((a,b)=>new Date(a.date)>new Date(b.date)?1:-1).map(d=>({...d,hours:Math.round(d.hours*10)/10}));
+  }
+  const filtered=getFiltered();
+  const chartData=groupBy(filtered);
+  const volHours=getVolHours(filtered);
+  const totals={};CHART_SERVICES.forEach(s=>{totals[s]=filtered.filter(r=>r.service===s).length;});
+  const ranges=[{id:"7days",label:"7 days"},{id:"30days",label:"30 days"},{id:"month",label:"This month"},{id:"quarter",label:"This quarter"},{id:"year",label:"This year"},{id:"all",label:"All time"}];
+  return(
+    <div>
+      <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap"}}>
+        {ranges.map(r=><button key={r.id} onClick={()=>setRange(r.id)} style={{...btnGhost,fontSize:12,background:range===r.id?"#46b4bf":"transparent",color:range===r.id:"#fff":"#5A7070",borderColor:range===r.id?"#46b4bf":"#D0E6E5",padding:"6px 12px"}}>{r.label}</button>)}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10,marginBottom:14}}>
+        {["Showers","Laundry","Day Center"].map(s=>(
+          <div key={s} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:10,padding:"12px 10px",textAlign:"center"}}>
+            <p style={{margin:0,fontSize:22,fontWeight:700,color:CHART_COLORS[s]}}>{totals[s]||0}</p>
+            <p style={{margin:0,fontSize:11,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{s}</p>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10,marginBottom:24}}>
+        {["Community Partnership","Volunteer"].map(s=>(
+          <div key={s} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:10,padding:"12px 10px",textAlign:"center"}}>
+            <p style={{margin:0,fontSize:22,fontWeight:700,color:CHART_COLORS[s]}}>{totals[s]||0}</p>
+            <p style={{margin:0,fontSize:11,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{s}</p>
+          </div>
+        ))}
+      </div>
+      {chartData.length===0?<p style={{textAlign:"center",color:"#5A7070",padding:"2rem 0",fontSize:14}}>No data for this period.</p>:(
+        <>
+          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:16,marginBottom:16}}>
+            <p style={{margin:"0 0 14px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Showers & Laundry</p>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={chartData} margin={{top:0,right:0,left:-20,bottom:0}}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#D0E6E5"/>
+                <XAxis dataKey="date" tick={{fontSize:11,fill:"#5A7070"}} tickLine={false}/>
+                <YAxis tick={{fontSize:11,fill:"#5A7070"}} tickLine={false} axisLine={false} allowDecimals={false}/>
+                <Tooltip contentStyle={{borderRadius:8,border:"1px solid #D0E6E5",fontSize:12}}/>
+                <Legend iconType="circle" iconSize={8} wrapperStyle={{fontSize:12}}/>
+                <Bar dataKey="Showers" fill={CHART_COLORS["Showers"]} radius={[4,4,0,0]}/>
+                <Bar dataKey="Laundry" fill={CHART_COLORS["Laundry"]} radius={[4,4,0,0]}/>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:16,marginBottom:16}}>
+            <p style={{margin:"0 0 14px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Day Center & Community Partnership</p>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={chartData} margin={{top:0,right:0,left:-20,bottom:0}}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#D0E6E5"/>
+                <XAxis dataKey="date" tick={{fontSize:11,fill:"#5A7070"}} tickLine={false}/>
+                <YAxis tick={{fontSize:11,fill:"#5A7070"}} tickLine={false} axisLine={false} allowDecimals={false}/>
+                <Tooltip contentStyle={{borderRadius:8,border:"1px solid #D0E6E5",fontSize:12}}/>
+                <Legend iconType="circle" iconSize={8} wrapperStyle={{fontSize:12}}/>
+                <Bar dataKey="Day Center" fill={CHART_COLORS["Day Center"]} radius={[4,4,0,0]}/>
+                <Bar dataKey="Community Partnership" fill={CHART_COLORS["Community Partnership"]} radius={[4,4,0,0]}/>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:16,marginBottom:16}}>
+            <p style={{margin:"0 0 14px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Volunteer hours</p>
+            {volHours.length===0?<p style={{textAlign:"center",color:"#5A7070",fontSize:13,padding:"1rem 0"}}>No completed volunteer check-outs for this period.</p>:(
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={volHours} margin={{top:0,right:0,left:-20,bottom:0}}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#D0E6E5"/>
+                  <XAxis dataKey="date" tick={{fontSize:11,fill:"#5A7070"}} tickLine={false}/>
+                  <YAxis tick={{fontSize:11,fill:"#5A7070"}} tickLine={false} axisLine={false}/>
+                  <Tooltip contentStyle={{borderRadius:8,border:"1px solid #D0E6E5",fontSize:12}} formatter={(v)=>[`${v}h`,"Hours"]}/>
+                  <Line type="monotone" dataKey="hours" stroke={CHART_COLORS["Volunteer"]} strokeWidth={2.5} dot={{r:4,fill:CHART_COLORS["Volunteer"]}}/>
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function QueueView({records,people,onCheckOut,onLogout,loadData}){
+  const services=Object.keys(CAPPED_SERVICES);
+  return(
+    <div style={{minHeight:"100vh",background:"#F7FAFA"}}>
       <div style={{background:"#46b4bf",padding:"24px 20px 18px",textAlign:"center"}}>
         <div style={{display:"flex",justifyContent:"center",marginBottom:14}}><Logo/></div>
         <div style={{display:"flex",justifyContent:"center",gap:8}}>
@@ -112,24 +236,22 @@ function QueueView({ records, people, onCheckOut, onLogout, loadData }) {
         </div>
       </div>
       <div style={{maxWidth:600,margin:"0 auto",padding:"24px 16px"}}>
-        <h2 style={{margin:"0 0 4px",fontSize:20,fontWeight:700,color:"#1D2B2B"}}>Queue View</h2>
+        <h2 style={{margin:"0 0 4px",fontSize:20,fontWeight:700}}>Queue View</h2>
         <p style={{margin:"0 0 24px",fontSize:13,color:"#5A7070"}}>Showers & Laundry — today</p>
-        {services.map(svc => {
-          const cap = CAPPED_SERVICES[svc];
-          const queue = records.filter(r=>r.service===svc&&r.check_in>=todayISO()).sort((a,b)=>(a.queue_position||0)-(b.queue_position||0));
-          const active = queue.filter(r=>!r.check_out);
-          const done = queue.filter(r=>r.check_out);
-          const used = queue.length, pct = Math.round((used/cap)*100);
-          return (
-            <div key={svc} style={{background:"#fff",border:`1.5px solid #D0E6E5`,borderRadius:12,padding:20,marginBottom:20}}>
+        {services.map(svc=>{
+          const cap=CAPPED_SERVICES[svc];
+          const queue=records.filter(r=>r.service===svc&&r.check_in>=todayISO()).sort((a,b)=>(a.queue_position||0)-(b.queue_position||0));
+          const active=queue.filter(r=>!r.check_out),done=queue.filter(r=>r.check_out),used=queue.length,pct=Math.round(used/cap*100);
+          return(
+            <div key={svc} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:20,marginBottom:20}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                <h3 style={{margin:0,fontSize:17,fontWeight:700,color:"#1D2B2B"}}>{svc}</h3>
+                <h3 style={{margin:0,fontSize:17,fontWeight:700}}>{svc}</h3>
                 <span style={{fontSize:13,fontWeight:600,color:used>=cap?"#C0392B":"#46b4bf",background:used>=cap?"#FCECEA":"#EAF7F8",padding:"3px 10px",borderRadius:20}}>{used>=cap?"Full":`${cap-used} spots left`}</span>
               </div>
               <div style={{height:8,borderRadius:4,background:"#EAF7F8",marginBottom:14}}>
                 <div style={{height:8,borderRadius:4,width:`${pct}%`,background:used>=cap?"#C0392B":used/cap>0.8?"#E6A817":"#46b4bf",transition:"width 0.3s"}}/>
               </div>
-              <div style={{display:"flex",gap:20,marginBottom:16,paddingBottom:14,borderBottom:`1px solid #D0E6E5`}}>
+              <div style={{display:"flex",gap:20,marginBottom:16,paddingBottom:14,borderBottom:"1px solid #D0E6E5"}}>
                 {[["Total",used],["Active",active.length],["Done",done.length]].map(([l,v])=>(
                   <div key={l} style={{textAlign:"center"}}>
                     <p style={{margin:0,fontSize:22,fontWeight:700,color:"#46b4bf"}}>{v}</p>
@@ -138,42 +260,36 @@ function QueueView({ records, people, onCheckOut, onLogout, loadData }) {
                 ))}
               </div>
               {active.length===0&&<p style={{fontSize:13,color:"#5A7070",textAlign:"center",padding:"12px 0"}}>No active visitors in queue.</p>}
-              {active.map(r=>{
-                const person=people.find(p=>p.name===r.name), av=avColor(r.name);
-                return (
-                  <div key={r.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",background:"#EAF7F8",borderRadius:8,marginBottom:8,border:`1px solid #C0E8EC`}}>
-                    <div style={{width:36,height:36,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,flexShrink:0}}>{initials(r.name)||"?"}</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:"flex",alignItems:"center",gap:6}}>
-                        <span style={{fontWeight:600,fontSize:14,color:"#1D2B2B"}}>{r.name}</span>
-                        {person&&<span style={{fontSize:11,color:"#5A7070"}}>#{person.guest_number}</span>}
-                      </div>
-                      <p style={{margin:0,fontSize:11,color:"#5A7070"}}>Queue #{r.queue_position} · In: {fmt(r.check_in)}</p>
+              {active.map(r=>{const person=people.find(p=>p.name===r.name),av=avColor(r.name);return(
+                <div key={r.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",background:"#EAF7F8",borderRadius:8,marginBottom:8,border:"1px solid #C0E8EC"}}>
+                  <div style={{width:36,height:36,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,flexShrink:0}}>{initials(r.name)||"?"}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontWeight:600,fontSize:14}}>{r.name}</span>
+                      {person&&<span style={{fontSize:11,color:"#5A7070"}}>#{person.guest_number}</span>}
                     </div>
-                    <button onClick={()=>onCheckOut(r.id)} style={{...btnOutline,fontSize:12,padding:"5px 12px",flexShrink:0}}>Check out</button>
+                    <p style={{margin:0,fontSize:11,color:"#5A7070"}}>Queue #{r.queue_position} · In: {fmt(r.check_in)}</p>
                   </div>
-                );
-              })}
+                  <button onClick={()=>onCheckOut(r.id)} style={{...btnOutline,fontSize:12,padding:"5px 12px",flexShrink:0}}>Check out</button>
+                </div>
+              );})}
               {done.length>0&&(
                 <details style={{marginTop:8}}>
                   <summary style={{fontSize:12,color:"#5A7070",cursor:"pointer",userSelect:"none"}}>Show completed ({done.length})</summary>
                   <div style={{marginTop:8}}>
-                    {done.map(r=>{
-                      const person=people.find(p=>p.name===r.name), av=avColor(r.name);
-                      return (
-                        <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:8,marginBottom:6,opacity:0.65}}>
-                          <div style={{width:30,height:30,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:11,flexShrink:0}}>{initials(r.name)||"?"}</div>
-                          <div style={{flex:1}}>
-                            <div style={{display:"flex",alignItems:"center",gap:6}}>
-                              <span style={{fontSize:13,color:"#1D2B2B"}}>{r.name}</span>
-                              {person&&<span style={{fontSize:11,color:"#5A7070"}}>#{person.guest_number}</span>}
-                            </div>
-                            <p style={{margin:0,fontSize:11,color:"#5A7070"}}>Queue #{r.queue_position} · {duration(r.check_in,r.check_out)}</p>
+                    {done.map(r=>{const person=people.find(p=>p.name===r.name),av=avColor(r.name);return(
+                      <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:8,marginBottom:6,opacity:0.65}}>
+                        <div style={{width:30,height:30,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:11,flexShrink:0}}>{initials(r.name)||"?"}</div>
+                        <div style={{flex:1}}>
+                          <div style={{display:"flex",alignItems:"center",gap:6}}>
+                            <span style={{fontSize:13}}>{r.name}</span>
+                            {person&&<span style={{fontSize:11,color:"#5A7070"}}>#{person.guest_number}</span>}
                           </div>
-                          <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:"#46b4bf",fontWeight:500}}>Done</span>
+                          <p style={{margin:0,fontSize:11,color:"#5A7070"}}>Queue #{r.queue_position}</p>
                         </div>
-                      );
-                    })}
+                        <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:"#46b4bf",fontWeight:500}}>Done</span>
+                      </div>
+                    );})}
                   </div>
                 </details>
               )}
@@ -185,60 +301,65 @@ function QueueView({ records, people, onCheckOut, onLogout, loadData }) {
   );
 }
 
-function App() {
-  const [view, setView] = useState("checkin");
-  const [form, setForm] = useState(emptyForm);
-  const [records, setRecords] = useState([]);
-  const [services, setServices] = useState([]);
-  const [people, setPeople] = useState([]);
-  const [suggestions, setSuggestions] = useState([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [success, setSuccess] = useState(null);
-  const [search, setSearch] = useState("");
-  const [filterType, setFilterType] = useState("All");
-  const [filterService, setFilterService] = useState("All");
-  const [errors, setErrors] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [adminAuth, setAdminAuth] = useState(false);
-  const [queueAuth, setQueueAuth] = useState(false);
-  const [pinInput, setPinInput] = useState("");
-  const [pinError, setPinError] = useState(false);
-  const [showPinModal, setShowPinModal] = useState(null);
-  const [newService, setNewService] = useState("");
-  const [dbError, setDbError] = useState(null);
-  const suggestRef = useRef(null);
+function App(){
+  const [view,setView]=useState("checkin");
+  const [form,setForm]=useState(emptyForm);
+  const [records,setRecords]=useState([]);
+  const [services,setServices]=useState([]);
+  const [people,setPeople]=useState([]);
+  const [suggestions,setSuggestions]=useState([]);
+  const [showSuggestions,setShowSuggestions]=useState(false);
+  const [success,setSuccess]=useState(null);
+  const [flagAlert,setFlagAlert]=useState(null);
+  const [search,setSearch]=useState("");
+  const [filterType,setFilterType]=useState("All");
+  const [filterService,setFilterService]=useState("All");
+  const [errors,setErrors]=useState({});
+  const [loading,setLoading]=useState(true);
+  const [saving,setSaving]=useState(false);
+  const [adminAuth,setAdminAuth]=useState(false);
+  const [queueAuth,setQueueAuth]=useState(false);
+  const [pinInput,setPinInput]=useState("");
+  const [pinError,setPinError]=useState(false);
+  const [showPinModal,setShowPinModal]=useState(null);
+  const [newService,setNewService]=useState("");
+  const [dbError,setDbError]=useState(null);
+  const suggestRef=useRef(null);
 
-  const loadData = useCallback(async () => {
-    try {
-      const [rRes,sRes,pRes] = await Promise.all([api("checkin_records?order=check_in.desc"),api("checkin_services?order=name.asc"),api("people?order=name.asc")]);
-      if (!rRes.ok||!sRes.ok||!pRes.ok) throw new Error();
-      const [rData,sData,pData] = await Promise.all([rRes.json(),sRes.json(),pRes.json()]);
-      setRecords(rData); setServices(sData.map(s=>s.name)); setPeople(pData); setDbError(null);
-    } catch(_) { setDbError("Could not connect to database."); }
+  const loadData=useCallback(async()=>{
+    try{
+      const [rRes,sRes,pRes]=await Promise.all([api("checkin_records?order=check_in.desc"),api("checkin_services?order=name.asc"),api("people?order=name.asc")]);
+      if(!rRes.ok||!sRes.ok||!pRes.ok)throw new Error();
+      const [rData,sData,pData]=await Promise.all([rRes.json(),sRes.json(),pRes.json()]);
+      setRecords(rData);setServices(sData.map(s=>s.name));setPeople(pData);setDbError(null);
+    }catch(_){setDbError("Could not connect to database.");}
     setLoading(false);
-  }, []);
-
-  useEffect(()=>{ loadData(); const t=setInterval(loadData,15000); return()=>clearInterval(t); },[loadData]);
-  useEffect(()=>{
-    function h(e){if(suggestRef.current&&!suggestRef.current.contains(e.target))setShowSuggestions(false);}
-    document.addEventListener("mousedown",h); return()=>document.removeEventListener("mousedown",h);
   },[]);
 
-  function handleNameInput(val) {
-    setForm(f=>({...f,name:val,guestNumber:""})); setErrors(e=>({...e,name:undefined}));
+  useEffect(()=>{loadData();const t=setInterval(loadData,15000);return()=>clearInterval(t);},[loadData]);
+  useEffect(()=>{
+    function h(e){if(suggestRef.current&&!suggestRef.current.contains(e.target))setShowSuggestions(false);}
+    document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
+  },[]);
+
+  function handleNameInput(val){
+    setForm(f=>({...f,name:val,guestNumber:""}));setErrors(e=>({...e,name:undefined}));setFlagAlert(null);
     if(!val.trim()){setSuggestions([]);setShowSuggestions(false);return;}
     const q=val.toLowerCase();
     const m=people.filter(p=>p.name.toLowerCase().includes(q)||String(p.guest_number).includes(q)).slice(0,6);
-    setSuggestions(m); setShowSuggestions(m.length>0);
+    setSuggestions(m);setShowSuggestions(m.length>0);
   }
-  function handleGuestNumberInput(val) {
-    setForm(f=>({...f,guestNumber:val,name:""})); setErrors(e=>({...e,name:undefined}));
+  function handleGuestNumberInput(val){
+    setForm(f=>({...f,guestNumber:val,name:""}));setErrors(e=>({...e,name:undefined}));setFlagAlert(null);
     if(!val.trim()){setSuggestions([]);setShowSuggestions(false);return;}
     const m=people.filter(p=>String(p.guest_number).includes(val.trim())).slice(0,6);
-    setSuggestions(m); setShowSuggestions(m.length>0);
+    setSuggestions(m);setShowSuggestions(m.length>0);
   }
-  function selectPerson(p){setForm(f=>({...f,name:p.name,guestNumber:String(p.guest_number)}));setSuggestions([]);setShowSuggestions(false);setErrors(e=>({...e,name:undefined}));}
+  function selectPerson(p){
+    setForm(f=>({...f,name:p.name,guestNumber:String(p.guest_number)}));
+    setSuggestions([]);setShowSuggestions(false);setErrors(e=>({...e,name:undefined}));
+    if(p.flagged)setFlagAlert(p);else setFlagAlert(null);
+  }
   function countToday(s){return records.filter(r=>r.service===s&&r.check_in>=todayISO()).length;}
 
   function validate(){
@@ -250,12 +371,14 @@ function App() {
   }
 
   async function submit(){
-    const e=validate(); if(Object.keys(e).length){setErrors(e);return;}
-    setSaving(true);
+    const e=validate();if(Object.keys(e).length){setErrors(e);return;}
     let name=form.name.trim(),gNum=form.guestNumber.trim();
-    if(!name&&gNum){const match=people.find(p=>String(p.guest_number)===gNum);if(!match){setErrors({name:"Guest number not found."});setSaving(false);return;}name=match.name;}
+    if(!name&&gNum){const match=people.find(p=>String(p.guest_number)===gNum);if(!match){setErrors({name:"Guest number not found."});return;}name=match.name;}
+    const person=people.find(p=>p.name.toLowerCase()===name.toLowerCase());
+    if(person?.flagged){setFlagAlert(person);return;}
+    setSaving(true);
     let guestNumber=gNum;
-    const existing=people.find(p=>p.name.toLowerCase()===name.toLowerCase());
+    const existing=person;
     if(!existing){
       try{
         const res=await api("people",{method:"POST",body:JSON.stringify({name}),headers:{...HEADERS,"Prefer":"return=representation"}});
@@ -269,7 +392,7 @@ function App() {
       if(!res.ok)throw new Error();
       await loadData();
       setSuccess({name,guestNumber,service:form.service,position,isNew:!existing});
-      setForm(emptyForm);setErrors({});
+      setForm(emptyForm);setErrors({});setFlagAlert(null);
       setTimeout(()=>setSuccess(null),6000);
     }catch(_){setErrors({submit:"Failed to save. Please try again."});}
     setSaving(false);
@@ -277,10 +400,11 @@ function App() {
 
   async function checkOut(id){await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}
   async function deleteRecord(id){await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});loadData();}
+  async function flagPerson(p,flagged,reason){await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({flagged,flag_reason:reason||null}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}
 
   function exportCSV(){
     const hdr=["Name","Guest #","Type","Member ID","Service","Queue #","Check-in","Check-out","Duration","Notes"];
-    const rows=records.map(r=>{const p=people.find(x=>x.name===r.name);return[r.name,p?p.guest_number:"",r.type,r.member_id||"",r.service,r.queue_position||"",fmt(r.check_in),r.check_out?fmt(r.check_out):"",duration(r.check_in,r.check_out)||"",(r.notes||"").replace(/,/g," ")];});
+    const rows=records.map(r=>{const p=people.find(x=>x.name===r.name);const dur=duration(r.check_in,r.check_out,r.service);return[r.name,p?p.guest_number:"",r.type,r.member_id||"",r.service,r.queue_position||"",fmt(r.check_in),r.check_out?fmt(r.check_out):"",dur||"",(r.notes||"").replace(/,/g," ")];});
     const csv=[hdr,...rows].map(r=>r.map(v=>`"${v}"`).join(",")).join("\n");
     const a=document.createElement("a");a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);a.download="checkins.csv";a.click();
   }
@@ -304,9 +428,15 @@ function App() {
   const vs=records.filter(r=>r.type==="Volunteer").length;
   const ac=records.filter(r=>!r.check_out).length;
 
-  if(queueAuth) return <QueueView records={records} people={people} onCheckOut={checkOut} onLogout={()=>setQueueAuth(false)} loadData={loadData}/>;
+  if(queueAuth)return <QueueView records={records} people={people} onCheckOut={checkOut} onLogout={()=>setQueueAuth(false)} loadData={loadData}/>;
 
-  return (
+  const Tab=({id,label})=>(
+    <button onClick={()=>setView(id)} style={{flex:1,padding:"10px 0",border:"none",background:"transparent",borderBottom:view===id?"3px solid #46b4bf":"3px solid transparent",fontWeight:view===id?700:400,fontSize:13,cursor:"pointer",color:view===id?"#46b4bf":"#5A7070",fontFamily:"inherit",marginBottom:-2}}>
+      {label}
+    </button>
+  );
+
+  return(
     <div style={{minHeight:"100vh",background:"#F7FAFA",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"}}>
       <div style={{background:"#46b4bf",padding:"24px 20px 18px",textAlign:"center"}}>
         <div style={{display:"flex",justifyContent:"center",marginBottom:14}}><Logo/></div>
@@ -317,12 +447,12 @@ function App() {
         </div>
       </div>
 
-      <div style={{maxWidth:580,margin:"0 auto",padding:"24px 16px 3rem"}}>
+      <div style={{maxWidth:600,margin:"0 auto",padding:"24px 16px 3rem"}}>
         {dbError&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:13,color:"#C0392B"}}>{dbError}</div>}
 
         {showPinModal&&(
-          <div style={{background:"#fff",border:`1.5px solid #D0E6E5`,borderRadius:12,padding:20,marginBottom:20,boxShadow:"0 2px 12px rgba(70,180,191,0.1)"}}>
-            <p style={{margin:"0 0 12px",fontWeight:700,fontSize:15,color:"#1D2B2B"}}>{showPinModal==="admin"?"Staff login":"Queue view login"}</p>
+          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:20,marginBottom:20}}>
+            <p style={{margin:"0 0 12px",fontWeight:700,fontSize:15}}>{showPinModal==="admin"?"Staff login":"Queue view login"}</p>
             <div style={{display:"flex",gap:8}}>
               <input type="password" placeholder="Enter PIN" value={pinInput} onChange={e=>setPinInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&tryPin()} style={{...inpStyle,width:130,borderColor:pinError?"#C0392B":"#D0E6E5"}}/>
               <button onClick={tryPin} style={{...btnPrimary,padding:"10px 20px",fontSize:14}}>Login</button>
@@ -333,29 +463,29 @@ function App() {
         )}
 
         {adminAuth&&(
-          <div style={{background:"#fff",border:`1.5px solid #D0E6E5`,borderRadius:12,padding:20,marginBottom:20}}>
+          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:20,marginBottom:20}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-              <p style={{margin:0,fontWeight:700,fontSize:15,color:"#1D2B2B"}}>Admin panel</p>
+              <p style={{margin:0,fontWeight:700,fontSize:15}}>Admin panel</p>
               <button onClick={()=>setAdminAuth(false)} style={{...btnGhost,color:"#C0392B",borderColor:"#F0A9A3"}}>Log out</button>
             </div>
             <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service capacity today</p>
             <div style={{display:"flex",gap:10,marginBottom:18}}>
               {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{const used=countToday(svc),pct=Math.round(used/cap*100);return(
-                <div key={svc} style={{flex:1,background:"#EAF7F8",border:`1px solid #C0E8EC`,borderRadius:8,padding:"10px 14px"}}>
+                <div key={svc} style={{flex:1,background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:8,padding:"10px 14px"}}>
                   <p style={{margin:"0 0 2px",fontSize:12,fontWeight:600,color:"#2E8A94"}}>{svc}</p>
                   <p style={{margin:"0 0 8px",fontSize:13,color:used>=cap?"#C0392B":"#5A7070"}}>{used}/{cap} spots used</p>
                   <div style={{height:6,borderRadius:3,background:"#C0E8EC"}}><div style={{height:6,borderRadius:3,width:`${pct}%`,background:used>=cap?"#C0392B":used/cap>0.8?"#E6A817":"#46b4bf",transition:"width 0.3s"}}/></div>
                 </div>
               );})}
             </div>
-            <div style={{borderTop:`1px solid #D0E6E5`,paddingTop:16,marginBottom:16}}>
-              <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Remove registered person</p>
-              <PeopleRemover people={people} onRemove={async(p)=>{await api(`people?id=eq.${p.id}`,{method:"DELETE"});loadData();}}/>
+            <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
+              <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Manage people</p>
+              <PeopleRemover people={people} onRemove={async(p)=>{await api(`people?id=eq.${p.id}`,{method:"DELETE"});loadData();}} onFlag={flagPerson}/>
             </div>
-            <div style={{borderTop:`1px solid #D0E6E5`,paddingTop:16,marginBottom:16}}>
+            <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
               <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service types</p>
               <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
-                {services.map(s=>(<span key={s} style={{display:"flex",alignItems:"center",gap:4,fontSize:12,padding:"4px 12px",background:"#EAF7F8",border:`1px solid #C0E8EC`,borderRadius:20,color:"#2E8A94",fontWeight:500}}>{s}{CAPPED_SERVICES[s]?<span style={{fontSize:10,opacity:0.7}}> · {CAPPED_SERVICES[s]}</span>:null}<button onClick={()=>removeService(s)} style={{background:"none",border:"none",cursor:"pointer",color:"#2E8A94",padding:"0 2px",fontSize:14,lineHeight:1,opacity:0.6}}>×</button></span>))}
+                {services.map(s=>(<span key={s} style={{display:"flex",alignItems:"center",gap:4,fontSize:12,padding:"4px 12px",background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:20,color:"#2E8A94",fontWeight:500}}>{s}{CAPPED_SERVICES[s]?<span style={{fontSize:10,opacity:0.7}}> · {CAPPED_SERVICES[s]}</span>:null}<button onClick={()=>removeService(s)} style={{background:"none",border:"none",cursor:"pointer",color:"#2E8A94",padding:"0 2px",fontSize:14,lineHeight:1,opacity:0.6}}>×</button></span>))}
               </div>
               <div style={{display:"flex",gap:8}}>
                 <input placeholder="Add new service…" value={newService} onChange={e=>setNewService(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addService()} style={{...inpStyle,flex:1}}/>
@@ -369,7 +499,7 @@ function App() {
         {!loading&&(
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:10,marginBottom:14}}>
             {[["Today",today],["Guests",gs],["Volunteers",vs],["Active",ac]].map(([l,v])=>(
-              <div key={l} style={{background:"#fff",border:`1.5px solid #D0E6E5`,borderRadius:10,padding:"12px 10px",textAlign:"center"}}>
+              <div key={l} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:10,padding:"12px 10px",textAlign:"center"}}>
                 <p style={{margin:0,fontSize:22,fontWeight:700,color:"#46b4bf"}}>{v}</p>
                 <p style={{margin:0,fontSize:11,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{l}</p>
               </div>
@@ -388,18 +518,24 @@ function App() {
           </div>
         )}
 
-        <div style={{display:"flex",borderBottom:`2px solid #C0E8EC`,marginBottom:24}}>
-          {[["checkin","Check in"],["log",`Visit log (${records.length})`]].map(([id,label])=>(
-            <button key={id} onClick={()=>setView(id)} style={{flex:1,padding:"10px 0",border:"none",background:"transparent",borderBottom:view===id?`3px solid #46b4bf`:"3px solid transparent",fontWeight:view===id?700:400,fontSize:14,cursor:"pointer",color:view===id?"#46b4bf":"#5A7070",fontFamily:"inherit",marginBottom:-2}}>
-              {label}
-            </button>
-          ))}
+        <div style={{display:"flex",borderBottom:"2px solid #C0E8EC",marginBottom:24}}>
+          <Tab id="checkin" label="Check in"/>
+          <Tab id="log" label={`Visit log (${records.length})`}/>
+          {adminAuth&&<Tab id="analytics" label="Analytics"/>}
         </div>
 
         {view==="checkin"&&(
           <div>
-            {success&&(
-              <div style={{background:"#EAF7F8",border:`1.5px solid #C0E8EC`,borderRadius:10,padding:"14px 16px",marginBottom:20}}>
+            {flagAlert&&(
+              <div style={{background:"#FFF0F0",border:`2px solid #C0392B`,borderRadius:10,padding:"14px 16px",marginBottom:20}}>
+                <p style={{margin:"0 0 4px",fontSize:15,fontWeight:700,color:"#C0392B"}}>⚑ This person is not allowed on the premises</p>
+                <p style={{margin:"0 0 2px",fontSize:13,color:"#C0392B"}}><strong>{flagAlert.name}</strong> — Guest #{flagAlert.guest_number}</p>
+                {flagAlert.flag_reason&&<p style={{margin:0,fontSize:12,color:"#C0392B"}}>Reason: {flagAlert.flag_reason}</p>}
+                <p style={{margin:"8px 0 0",fontSize:12,color:"#5A7070"}}>Please contact a staff member. Check-in has been blocked.</p>
+              </div>
+            )}
+            {success&&!flagAlert&&(
+              <div style={{background:"#EAF7F8",border:"1.5px solid #C0E8EC",borderRadius:10,padding:"14px 16px",marginBottom:20}}>
                 <p style={{margin:"0 0 4px",fontSize:15,fontWeight:700,color:"#2E8A94"}}>{success.isNew?`Welcome, ${success.name}! You've been registered.`:`Welcome back, ${success.name}!`}</p>
                 <p style={{margin:"0 0 2px",fontSize:13,color:"#46b4bf"}}>Guest number: <strong>#{success.guestNumber}</strong></p>
                 {success.position&&<p style={{margin:0,fontSize:13,color:"#46b4bf"}}>Queue position for {success.service}: <strong>#{success.position}</strong></p>}
@@ -410,7 +546,7 @@ function App() {
             <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Visitor type</p>
             <div style={{display:"flex",gap:10,marginBottom:18}}>
               {["Guest","Volunteer"].map(t=>(
-                <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"10px 0",borderRadius:8,border:form.type===t?`2px solid #46b4bf`:`1.5px solid #D0E6E5`,background:form.type===t?"#EAF7F8":"#fff",fontWeight:form.type===t?700:400,fontSize:14,cursor:"pointer",color:form.type===t?"#2E8A94":"#5A7070",fontFamily:"inherit"}}>
+                <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"10px 0",borderRadius:8,border:form.type===t?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:form.type===t?"#EAF7F8":"#fff",fontWeight:form.type===t?700:400,fontSize:14,cursor:"pointer",color:form.type===t?"#2E8A94":"#5A7070",fontFamily:"inherit"}}>
                   {t}
                 </button>
               ))}
@@ -424,11 +560,12 @@ function App() {
               </div>
               {errors.name&&<p style={{margin:"0 0 8px",fontSize:12,color:"#C0392B"}}>{errors.name}</p>}
               {showSuggestions&&suggestions.length>0&&(
-                <div style={{position:"absolute",top:"calc(100% - 4px)",left:0,right:0,background:"#fff",border:`1.5px solid #D0E6E5`,borderRadius:10,zIndex:10,boxShadow:"0 6px 20px rgba(70,180,191,0.15)",overflow:"hidden"}}>
+                <div style={{position:"absolute",top:"calc(100% - 4px)",left:0,right:0,background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:10,zIndex:10,boxShadow:"0 6px 20px rgba(70,180,191,0.15)",overflow:"hidden"}}>
                   {suggestions.map(p=>{const av=avColor(p.name);return(
-                    <div key={p.id} onClick={()=>selectPerson(p)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",cursor:"pointer",borderBottom:`1px solid #D0E6E5`}} onMouseEnter={e=>e.currentTarget.style.background="#EAF7F8"} onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
+                    <div key={p.id} onClick={()=>selectPerson(p)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",cursor:"pointer",borderBottom:"1px solid #D0E6E5",background:p.flagged?"#FFF5F5":"#fff"}} onMouseEnter={e=>e.currentTarget.style.background=p.flagged?"#FFE8E8":"#EAF7F8"} onMouseLeave={e=>e.currentTarget.style.background=p.flagged?"#FFF5F5":"#fff"}>
                       <div style={{width:34,height:34,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:12,flexShrink:0}}>{initials(p.name)||"?"}</div>
-                      <div><p style={{margin:0,fontSize:14,fontWeight:600,color:"#1D2B2B"}}>{p.name}</p><p style={{margin:0,fontSize:12,color:"#5A7070"}}>Guest #{p.guest_number}</p></div>
+                      <div style={{flex:1}}><p style={{margin:0,fontSize:14,fontWeight:600}}>{p.name}</p><p style={{margin:0,fontSize:12,color:"#5A7070"}}>Guest #{p.guest_number}</p></div>
+                      {p.flagged&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600,flexShrink:0}}>⚑ Flagged</span>}
                     </div>
                   );})}
                 </div>
@@ -447,7 +584,7 @@ function App() {
               <textarea placeholder="Notes (optional)" value={form.notes} onChange={ev=>setForm(f=>({...f,notes:ev.target.value}))} rows={3} style={{...inpStyle,resize:"vertical"}}/>
             </div>
 
-            <button onClick={submit} disabled={saving} style={{...btnPrimary,width:"100%",padding:13,fontSize:16,opacity:saving?0.7:1}}>
+            <button onClick={submit} disabled={saving||!!flagAlert} style={{...btnPrimary,width:"100%",padding:13,fontSize:16,opacity:(saving||!!flagAlert)?0.5:1,cursor:flagAlert?"not-allowed":"pointer"}}>
               {saving?"Saving…":"Check in"}
             </button>
           </div>
@@ -472,37 +609,43 @@ function App() {
                 </div>
                 {loading?<p style={{color:"#5A7070",fontSize:14,textAlign:"center",padding:"2rem 0"}}>Loading…</p>
                 :filtered.length===0?<p style={{color:"#5A7070",fontSize:14,textAlign:"center",padding:"2rem 0"}}>No records found.</p>
-                :filtered.map(r=>{const av=avColor(r.name),dur=duration(r.check_in,r.check_out),person=people.find(p=>p.name===r.name);return(
-                  <div key={r.id} style={{background:"#fff",border:`1.5px solid #D0E6E5`,borderRadius:12,padding:"12px 14px",marginBottom:10,display:"flex",alignItems:"flex-start",gap:12}}>
-                    <div style={{width:42,height:42,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:14,flexShrink:0}}>{initials(r.name)||"?"}</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:2}}>
-                        <span style={{fontWeight:700,fontSize:14,color:"#1D2B2B"}}>{r.name}</span>
-                        {person&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:"#2E8A94",fontWeight:500}}>#{person.guest_number}</span>}
-                        <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:r.type==="Volunteer"?"#EAF7F8":"#EEEEFB",color:r.type==="Volunteer"?"#2E8A94":"#3A3A8C",fontWeight:500}}>{r.type}</span>
-                        {r.queue_position&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FEF7E6",color:"#8A5A00",fontWeight:500}}>Queue #{r.queue_position}</span>}
-                        {!r.check_out&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:"#46b4bf",fontWeight:500}}>Active</span>}
+                :filtered.map(r=>{
+                  const av=avColor(r.name),dur=duration(r.check_in,r.check_out,r.service),person=people.find(p=>p.name===r.name),isFlagged=person?.flagged;
+                  return(
+                    <div key={r.id} style={{background:isFlagged?"#FFF5F5":"#fff",border:`1.5px solid ${isFlagged?"#F0A9A3":"#D0E6E5"}`,borderRadius:12,padding:"12px 14px",marginBottom:10,display:"flex",alignItems:"flex-start",gap:12}}>
+                      <div style={{width:42,height:42,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:14,flexShrink:0}}>{initials(r.name)||"?"}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:2}}>
+                          <span style={{fontWeight:700,fontSize:14}}>{r.name}</span>
+                          {person&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:"#2E8A94",fontWeight:500}}>#{person.guest_number}</span>}
+                          {isFlagged&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600}}>⚑ Flagged</span>}
+                          <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:r.type==="Volunteer"?"#EAF7F8":"#EEEEFB",color:r.type==="Volunteer"?"#2E8A94":"#3A3A8C",fontWeight:500}}>{r.type}</span>
+                          {r.queue_position&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FEF7E6",color:"#8A5A00",fontWeight:500}}>Queue #{r.queue_position}</span>}
+                          {!r.check_out&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:"#46b4bf",fontWeight:500}}>Active</span>}
+                        </div>
+                        <p style={{margin:"2px 0",fontSize:12,color:"#5A7070",fontWeight:500}}>{r.service}</p>
+                        <p style={{margin:0,fontSize:11,color:"#8AA5A5"}}>In: {fmt(r.check_in)}{r.check_out?` · Out: ${fmt(r.check_out)}${dur?` · ${dur}`:""}`:""}</p>
+                        {r.notes&&<p style={{margin:"4px 0 0",fontSize:12,color:"#5A7070",fontStyle:"italic"}}>{r.notes}</p>}
                       </div>
-                      <p style={{margin:"2px 0",fontSize:12,color:"#5A7070",fontWeight:500}}>{r.service}</p>
-                      <p style={{margin:0,fontSize:11,color:"#8AA5A5"}}>In: {fmt(r.check_in)}{r.check_out?` · Out: ${fmt(r.check_out)} · ${dur}`:""}</p>
-                      {r.notes&&<p style={{margin:"4px 0 0",fontSize:12,color:"#5A7070",fontStyle:"italic"}}>{r.notes}</p>}
+                      <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0}}>
+                        {!r.check_out&&<button onClick={()=>checkOut(r.id)} style={{...btnOutline,fontSize:12,padding:"5px 10px"}}>Check out</button>}
+                        <button onClick={()=>deleteRecord(r.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#8AA5A5",fontSize:18,padding:"0 4px",lineHeight:1,alignSelf:"flex-end"}}>×</button>
+                      </div>
                     </div>
-                    <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0}}>
-                      {!r.check_out&&<button onClick={()=>checkOut(r.id)} style={{...btnOutline,fontSize:12,padding:"5px 10px"}}>Check out</button>}
-                      <button onClick={()=>deleteRecord(r.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#8AA5A5",fontSize:18,padding:"0 4px",lineHeight:1,alignSelf:"flex-end"}}>×</button>
-                    </div>
-                  </div>
-                );})}
+                  );
+                })}
               </>
             )}
           </div>
         )}
+
+        {view==="analytics"&&adminAuth&&<AnalyticsTab records={records}/>}
       </div>
     </div>
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 </body>
 </html>
