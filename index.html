@@ -25,6 +25,7 @@ const SUPABASE_URL = "https://bnkdmdcinmbcuueakhug.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJua2RtZGNpbm1iY3V1ZWFraHVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMzQyNTYsImV4cCI6MjA4ODkxMDI1Nn0.UnURxxIweDAYik0UXfZLtdB33q-9DPah2kwUQKL9oVY";
 const HEADERS = { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` };
 const CAPPED_SERVICES = { "Showers": 25, "Laundry": 25 };
+const CAPPED_SERVICES_DAYS = { "Showers": [2,3,4], "Laundry": [2,3,4] }; // 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu
 const NO_DURATION_SERVICES = ["Showers", "Laundry"];
 const ADMIN_PIN = "1234";
 const QUEUE_PIN = "5678";
