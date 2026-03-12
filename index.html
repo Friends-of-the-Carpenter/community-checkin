@@ -494,7 +494,7 @@ function App(){
         <div style={{display:"flex",justifyContent:"center",marginBottom:14}}><Logo/></div>
         <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:8}}>
           {!loading&&<span style={{width:8,height:8,borderRadius:"50%",background:dbError?"#F5A623":"rgba(255,255,255,0.6)",display:"inline-block"}}/>}
-          <button onClick={()=>{setShowPinModal(showPinModal==="queue"?null:"queue");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:12}}>Showers &amp; Laundry</button>
+          <button onClick={()=>{setShowPinModal(showPinModal==="queue"?null:"queue");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:12}}>Showers & Laundry</button>
           <button onClick={()=>{setShowPinModal(showPinModal==="admin"?null:"admin");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:12}}>{adminAuth?"Admin":"Admin"}</button>
         </div>
       </div>
@@ -504,7 +504,7 @@ function App(){
 
         {showPinModal&&(
           <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:20,marginBottom:20}}>
-            <p style={{margin:"0 0 12px",fontWeight:700,fontSize:15}}>{showPinModal==="admin"?"Admin Login":"Showers &amp; Laundry Login"}</p>
+            <p style={{margin:"0 0 12px",fontWeight:700,fontSize:15}}>{showPinModal==="admin"?"Admin Login":"Showers & Laundry Login"}</p>
             <div style={{display:"flex",gap:8}}>
               <input type="password" placeholder="Enter PIN" value={pinInput} onChange={e=>setPinInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&tryPin()} style={{...inpStyle,width:130,borderColor:pinError?"#C0392B":"#D0E6E5"}}/>
               <button onClick={tryPin} style={{...btnPrimary,padding:"10px 20px",fontSize:14}}>Login</button>
