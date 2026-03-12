@@ -29,7 +29,7 @@ const NO_DURATION_SERVICES = ["Showers", "Laundry"];
 const ADMIN_PIN = "1234";
 const QUEUE_PIN = "5678";
 const CHART_SERVICES = ["Showers","Laundry","Day Center","Community Partnership","Volunteer"];
-const MIN_DURATION_MINUTES = 1;
+const MIN_DURATION_MINUTES = 5;
 const CHART_COLORS = { "Showers":"#46b4bf","Laundry":"#2E8A94","Day Center":"#E6A817","Community Partnership":"#7B61C4","Volunteer":"#3A9C6A" };
 
 const C = {
@@ -115,7 +115,7 @@ function SimpleLineChart({data, height=180}){
         {pts.map((p,i)=>(
           <g key={i}>
             <circle cx={p.x} cy={p.y} r={4} fill={CHART_COLORS["Volunteer"]}/>
-            <text x={p.x} y={p.y-8} textAnchor="middle" fontSize={9} fill="#5A7070">{p.d.hours}h</text>
+            <text x={p.x} y={p.y-8} textAnchor="middle" fontSize={9} fill="#5A7070">{Math.floor(p.d.hours)}h {Math.round((p.d.hours%1)*60)}m</text>
             <text x={p.x} y={height-4} textAnchor="middle" fontSize={9} fill="#8AA5A5">{p.d.date}</text>
           </g>
         ))}
@@ -204,9 +204,15 @@ function AnalyticsTab({records}){
       const k=getKey(r);if(!map[k])map[k]={date:k,hours:0};
       map[k].hours+=(new Date(r.check_out)-new Date(r.check_in))/3600000;
     });
-    return Object.values(map).sort((a,b)=>new Date(a.date)>new Date(b.date)?1:-1).map(d=>({...d,hours:Math.round(d.hours*10)/10}));
+    return Object.values(map).sort((a,b)=>new Date(a.date)>new Date(b.date)?1:-1).map(d=>({...d,hours:Math.round(d.hours*60)/60}));
   }
-  const filtered=getFiltered();
+  function meetsMinDuration(r){
+    if(NO_DURATION_SERVICES.includes(r.service))return true;
+    if(!r.check_out)return false;
+    const mins=(new Date(r.check_out)-new Date(r.check_in))/60000;
+    return mins>=MIN_DURATION_MINUTES;
+  }
+  const filtered=getFiltered().filter(meetsMinDuration);
   const chartData=groupBy(filtered);
   const volHours=getVolHours(filtered);
   const totals={};CHART_SERVICES.forEach(s=>{totals[s]=filtered.filter(r=>r.service===s).length;});
