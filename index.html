@@ -699,7 +699,7 @@ function App() {
             </div>
 
             <div style={{marginBottom:14,marginTop:10}}>
-              <select value={form.service} onChange={ev=>{setForm(f=>({...f,service:ev.target.value}));setErrors(e=>({...e,service:undefined}));}} style={{...inpStyle,borderColor:errors.service?"#C0392B":"#D0E6E5"}}>
+              <select value={form.service} onChange={ev=>{setForm(f=>({...f,service:ev.target.value}));setErrors(e=>({...e,service:undefined}));}} style={{...inpStyle,height:42,borderColor:errors.service?"#C0392B":"#D0E6E5"}}>
                 <option value="">Select service / reason for visit…</option>
                 {availableServices.map(s => { const cap=CAPPED_SERVICES[s], used=cap?countToday(s):0, full=cap&&used>=cap; return <option key={s} value={s} disabled={full}>{s}{cap?` (${used}/${cap}${full?" — Full":""})`:""}</option>; })}
               </select>
