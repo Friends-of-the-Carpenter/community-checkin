@@ -27,8 +27,8 @@ const HEADERS = { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "A
 const CAPPED_SERVICES = { "Showers": 25, "Laundry": 25 };
 const CAPPED_SERVICES_DAYS = { "Showers": [2,3,4], "Laundry": [2,3,4] }; // 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu
 const NO_DURATION_SERVICES = ["Showers", "Laundry"];
-const ADMIN_PIN = "1234";
-const QUEUE_PIN = "5678";
+const ADMIN_PIN = "9866";
+const QUEUE_PIN = "7777";
 const CHART_SERVICES = ["Showers","Laundry","Day Center","Community Partnership","Volunteer"];
 const MIN_DURATION_MINUTES = 1;
 const CHART_COLORS = { "Showers":"#46b4bf","Laundry":"#2E8A94","Day Center":"#E6A817","Community Partnership":"#7B61C4","Volunteer":"#3A9C6A" };
@@ -58,13 +58,17 @@ function duration(inT,outT,service){
   const m=Math.round((new Date(outT)-new Date(inT))/60000);
   return m<60?`${m}m`:`${Math.floor(m/60)}h ${m%60}m`;
 }
-function todayISO(){const d=new Date();d.setHours(0,0,0,0);return d.toISOString();}
+function isServiceAvailableToday(s){
+  const days=CAPPED_SERVICES_DAYS[s];
+  if(!days)return true;
+  return days.includes(new Date().getDay());
+}const d=new Date();d.setHours(0,0,0,0);return d.toISOString();}
 const AV_COLORS=[{bg:"#C2E8E6",color:"#1D5C5A"},{bg:"#B8DFE8",color:"#1A4A5C"},{bg:"#C8E6D4",color:"#1A5C35"},{bg:"#E6D4C8",color:"#5C3A1A"},{bg:"#D4C8E6",color:"#3A1A5C"}];
 function avColor(name){let h=0;for(let c of name)h=(h*31+c.charCodeAt(0))&0xffff;return AV_COLORS[h%AV_COLORS.length];}
 const emptyForm={name:"",guestNumber:"",memberId:"",type:"Guest",service:"",notes:""};
 
 function Logo(){
-  return <img src="https://cdn.shopify.com/s/files/1/0582/8719/4214/files/FOC_Logo_white.png?v=1773347276" alt="Friends of the Carpenter" style={{height:125,width:"auto"}}/>;
+  return <img src="https://cdn.shopify.com/s/files/1/0582/8719/4214/files/FOC_Logo_white.png?v=1773347276" alt="Friends of the Carpenter" style={{height:85,width:"auto"}}/>;
 }
 
 // Simple CSS bar chart — no external dependencies
@@ -284,7 +288,7 @@ function QueueView({records,people,onCheckOut,onLogout,loadData}){
         </div>
       </div>
       <div style={{maxWidth:600,margin:"0 auto",padding:"24px 16px"}}>
-        <h2 style={{margin:"0 0 4px",fontSize:20,fontWeight:700}}>Dignity Services</h2>
+        <h2 style={{margin:"0 0 4px",fontSize:20,fontWeight:700}}>Queue View</h2>
         <p style={{margin:"0 0 24px",fontSize:13,color:"#5A7070"}}>Showers & Laundry — today</p>
         {services.map(svc=>{
           const cap=CAPPED_SERVICES[svc];
@@ -490,7 +494,7 @@ function App(){
         <div style={{display:"flex",justifyContent:"center",marginBottom:14}}><Logo/></div>
         <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:8}}>
           {!loading&&<span style={{width:8,height:8,borderRadius:"50%",background:dbError?"#F5A623":"rgba(255,255,255,0.6)",display:"inline-block"}}/>}
-          <button onClick={()=>{setShowPinModal(showPinModal==="queue"?null:"queue");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:12}}>Dignity Services</button>
+          <button onClick={()=>{setShowPinModal(showPinModal==="queue"?null:"queue");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:12}}>Showers &amp; Laundry</button>
           <button onClick={()=>{setShowPinModal(showPinModal==="admin"?null:"admin");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:12}}>{adminAuth?"Admin":"Admin"}</button>
         </div>
       </div>
@@ -500,7 +504,7 @@ function App(){
 
         {showPinModal&&(
           <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:20,marginBottom:20}}>
-            <p style={{margin:"0 0 12px",fontWeight:700,fontSize:15}}>{showPinModal==="admin"?"Staff login":"Queue view login"}</p>
+            <p style={{margin:"0 0 12px",fontWeight:700,fontSize:15}}>{showPinModal==="admin"?"Admin":"Showers &amp; Laundry"}</p>
             <div style={{display:"flex",gap:8}}>
               <input type="password" placeholder="Enter PIN" value={pinInput} onChange={e=>setPinInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&tryPin()} style={{...inpStyle,width:130,borderColor:pinError?"#C0392B":"#D0E6E5"}}/>
               <button onClick={tryPin} style={{...btnPrimary,padding:"10px 20px",fontSize:14}}>Login</button>
@@ -623,7 +627,7 @@ function App(){
             <div style={{marginBottom:14,marginTop:10}}>
               <select value={form.service} onChange={ev=>{setForm(f=>({...f,service:ev.target.value}));setErrors(e=>({...e,service:undefined}));}} style={{...inpStyle,borderColor:errors.service?"#C0392B":"#D0E6E5"}}>
                 <option value="">Select service / reason for visit…</option>
-                {services.map(s=>{const cap=CAPPED_SERVICES[s],used=cap?countToday(s):0,full=cap&&used>=cap;return<option key={s} value={s} disabled={full}>{s}{cap?` (${used}/${cap}${full?" — Full":""})`:""}</option>;})}
+                {services.filter(s=>isServiceAvailableToday(s)).map(s=>{const cap=CAPPED_SERVICES[s],used=cap?countToday(s):0,full=cap&&used>=cap;return<option key={s} value={s} disabled={full}>{s}{cap?` (${used}/${cap}${full?" — Full":""})`:""}</option>;})}
               </select>
               {errors.service&&<p style={{margin:"4px 0 0",fontSize:12,color:"#C0392B"}}>{errors.service}</p>}
             </div>
