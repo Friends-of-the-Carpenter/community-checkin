@@ -1027,7 +1027,7 @@ function App() {
         )}
 
         {!loading&&(
-          <div style={{display:"flex",gap:14,marginBottom:24}}>
+          <div style={{display:"flex",gap:14,marginBottom:15}}>
             {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{const used=countToday(svc),full=used>=cap;return(
               <div key={svc} style={{flex:1,background:full?"#FCECEA":"#EAF7F8",border:`1.5px solid ${full?"#F0A9A3":"#C0E8EC"}`,borderRadius:12,padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <span style={{fontSize:15,fontWeight:600,color:full?"#C0392B":"#2E8A94"}}>{svc}</span>
