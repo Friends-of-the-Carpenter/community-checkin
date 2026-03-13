@@ -8,7 +8,7 @@
   <script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7.23.10/babel.min.js"></script>
-  <script src="https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #F7FAFA; color: #1D2B2B; min-height: 100vh; }
@@ -109,9 +109,20 @@ function Logo() {
 
 function QRCodeDisplay({ guestNumber }) {
   const [qrUrl, setQrUrl] = useState(null);
+  const [err, setErr] = useState(false);
+  const canvasRef = useRef(null);
+
   useEffect(() => {
-    generateQRDataURL(guestNumber).then(setQrUrl).catch(()=>setQrUrl(null));
+    setQrUrl(null); setErr(false);
+    if (typeof QRCode === "undefined") { setErr(true); return; }
+    const canvas = document.createElement("canvas");
+    QRCode.toCanvas(canvas, `${QR_PREFIX}${guestNumber}`, { width:180, margin:2 }, (error) => {
+      if (error) { setErr(true); return; }
+      setQrUrl(canvas.toDataURL("image/png"));
+    });
   }, [guestNumber]);
+
+  if (err) return <p style={{fontSize:12,color:C.danger}}>Could not generate QR code — check that the qrcode library loaded.</p>;
   if (!qrUrl) return <p style={{fontSize:12,color:"#5A7070"}}>Generating QR…</p>;
   return (
     <div style={{textAlign:"center"}}>
