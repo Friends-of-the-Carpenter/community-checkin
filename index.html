@@ -962,7 +962,7 @@ function App() {
               </div>
             )}
             {errors.submit&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:13,color:"#C0392B"}}>{errors.submit}</div>}
-            <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Visitor type</p>
+            <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",textAlign:"center",letterSpacing:"0.05em"}}>Visitor type</p>
             <div style={{display:"flex",gap:10,marginBottom:18}}>
               {["Guest","Volunteer"].map(t=>(
                 <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"10px 0",borderRadius:8,border:form.type===t?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:form.type===t?"#EAF7F8":"#fff",fontWeight:form.type===t?700:400,fontSize:14,cursor:"pointer",color:form.type===t?"#2E8A94":"#5A7070",fontFamily:"inherit"}}>{t}</button>
