@@ -839,6 +839,7 @@ function App() {
       }catch(_){setErrors({submit:"Failed to register guest."});setSaving(false);return;}
     }else{guestNumber=String(existing.guest_number);}
     const now=new Date().toISOString();
+    const position=form.service&&CAPPED_SERVICES[form.service]?nextAvailablePosition(form.service,records):null;
     const toInsert=[{name,member_id:form.memberId||null,type:form.type,service:form.service,notes:form.notes||null,queue_position:position,check_in:now,check_out:null}];
     const addOns=[];
     if(form.service==="Day Center"){
@@ -910,7 +911,7 @@ function App() {
     </button>
   );
 
-  const availableServices=services.filter(s=>isServiceAvailableToday(s));
+  const availableServices = services.filter(s => isServiceAvailableToday(s) && !CAPPED_SERVICES[s]);
 
   return (
     <div style={{minHeight:"100vh",background:"#F7FAFA",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"}}>
