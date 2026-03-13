@@ -968,7 +968,7 @@ function App() {
                 <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"10px 0",borderRadius:8,border:form.type===t?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:form.type===t?"#EAF7F8":"#fff",fontWeight:form.type===t?700:400,fontSize:14,cursor:"pointer",color:form.type===t?"#2E8A94":"#5A7070",fontFamily:"inherit"}}>{t}</button>
               ))}
             </div>
-            <p style={{margin:"0 0 6px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>If this is your first time OR returning enter your name and press check in</p>
+            <p style={{margin:"0 0 6px",fontSize:12,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>If this is your first time OR returning enter your name and press check in</p>
             <div style={{marginBottom:4,position:"relative"}} ref={suggestRef}>
               <div style={{display:"flex",gap:8,marginBottom:4}}>
                 <input placeholder="Enter your full name…" value={form.name} onChange={e=>handleNameInput(e.target.value)} style={{...inpStyle,flex:1,borderColor:errors.name?"#C0392B":"#D0E6E5"}}/>
