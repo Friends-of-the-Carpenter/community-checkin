@@ -673,9 +673,8 @@ function QueueView({records,people,onMarkComplete,onCancel,onLogout,loadData}) {
       <div style={{background:"#46b4bf",padding:"28px 24px 22px",textAlign:"center"}}>
         <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Logo/></div>
         <LiveClock/>
-        <div style={{display:"flex",justifyContent:"center",gap:10,marginTop:14}}>
-          <button onClick={loadData} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)"}}>Refresh ↻</button>
-          <button onClick={onLogout} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)"}}>Log out</button>
+        <div style={{display:"flex",justifyContent:"center",marginTop:14}}>
+          <button onClick={onLogout} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)"}}>← Back</button>
         </div>
       </div>
       <div style={{maxWidth:900,margin:"0 auto",padding:"28px 24px"}}>
