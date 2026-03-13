@@ -88,7 +88,7 @@ function avColor(name) { let h=0; for(let c of name)h=(h*31+c.charCodeAt(0))&0xf
 const emptyForm = {name:"",guestNumber:"",memberId:"",type:"Guest",service:"",notes:"",addShowers:false,addLaundry:false};
 
 function Logo() {
-  return <img src="https://cdn.shopify.com/s/files/1/0582/8719/4214/files/FOC_Logo_white.png?v=1773347276" alt="Friends of the Carpenter" style={{height:85,width:"auto"}}/>;
+  return <img src="https://cdn.shopify.com/s/files/1/0582/8719/4214/files/FOC_Logo_white.png?v=1773347276" alt="Friends of the Carpenter" style={{height:105,width:"auto"}}/>;
 }
 
 function QRCodeDisplay({ guestNumber }) {
@@ -148,7 +148,7 @@ function SimpleBarChart({data,keys,colors,height=180}) {
               const pct=(d[k]||0)/maxVal*100;
               return (
                 <div key={k} style={{width:barW,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                  {d[k]>0&&<span style={{fontSize:9,color:"#5A7070"}}>{d[k]}</span>}
+                  {d[k]>0&&<span style={{fontSize:12,color:"#5A7070"}}>{d[k]}</span>}
                   <div style={{width:"100%",height:`${pct*(height-32)/100}px`,background:colors[k],borderRadius:"3px 3px 0 0",minHeight:d[k]>0?4:0}}/>
                 </div>
               );
@@ -157,7 +157,7 @@ function SimpleBarChart({data,keys,colors,height=180}) {
         ))}
       </div>
       <div style={{display:"flex",gap:4,overflowX:"auto",paddingTop:4}}>
-        {data.map((d,i)=><span key={i} style={{fontSize:10,color:"#8AA5A5",flexShrink:0,width:(barW*keys.length)+(keys.length-1)*2,textAlign:"center",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{d.date}</span>)}
+        {data.map((d,i)=><span key={i} style={{fontSize:12,color:"#8AA5A5",flexShrink:0,width:(barW*keys.length)+(keys.length-1)*2,textAlign:"center",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{d.date}</span>)}
       </div>
     </div>
   );
@@ -178,8 +178,8 @@ function SimpleLineChart({data,height=180}) {
         {pts.map((p,i)=>(
           <g key={i}>
             <circle cx={p.x} cy={p.y} r={4} fill={CHART_COLORS["Volunteer"]}/>
-            <text x={p.x} y={p.y-8} textAnchor="middle" fontSize={9} fill="#5A7070">{fmtH(p.d.hours)}</text>
-            <text x={p.x} y={height-4} textAnchor="middle" fontSize={9} fill="#8AA5A5">{p.d.date}</text>
+            <text x={p.x} y={p.y-8} textAnchor="middle" fontSize={12} fill="#5A7070">{fmtH(p.d.hours)}</text>
+            <text x={p.x} y={height-4} textAnchor="middle" fontSize={12} fill="#8AA5A5">{p.d.date}</text>
           </g>
         ))}
       </svg>
