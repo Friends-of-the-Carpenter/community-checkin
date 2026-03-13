@@ -839,12 +839,6 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
             })}
           </div>
         </div>
-
-        <div style={{borderTop:"2px solid #C0E8EC",paddingTop:28,marginBottom:24}}>
-          <h2 style={{margin:"0 0 6px",fontSize:22,fontWeight:700}}>Check in</h2>
-          <p style={{margin:"0 0 20px",fontSize:15,color:"#5A7070"}}>Select your service and enter your name to check in</p>
-        </div>
-
         {flagAlert&&(
           <div style={{background:"#FFF0F0",border:`2px solid #C0392B`,borderRadius:12,padding:"18px 20px",marginBottom:24}}>
             <p style={{margin:"0 0 6px",fontSize:18,fontWeight:700,color:"#C0392B"}}>⚑ This person is not allowed on the premises</p>
@@ -889,7 +883,7 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
         </div>
 
         <div style={{marginBottom:18,marginTop:14}}>
-          <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Select service</p>
+          <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Reason for Visit</p>
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:12}}>
             {availableServices.map(s=>{
               const cap=CAPPED_SERVICES[s],used=cap?countToday(s):0,full=cap&&used>=cap;
