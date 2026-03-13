@@ -29,7 +29,6 @@ const SUPABASE_URL = "https://bnkdmdcinmbcuueakhug.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJua2RtZGNpbm1iY3V1ZWFraHVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMzQyNTYsImV4cCI6MjA4ODkxMDI1Nn0.UnURxxIweDAYik0UXfZLtdB33q-9DPah2kwUQKL9oVY";
 const HEADERS = { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` };
 const CAPPED_SERVICES = { "Showers": 25, "Laundry": 25 };
-const CAPPED_SERVICES_DAYS = { "Showers": [2,3,4], "Laundry": [2,3,4] };
 const NO_DURATION_SERVICES = ["Showers", "Laundry"];
 const MIN_DURATION_MINUTES = 1;
 const ADMIN_PIN = "9866";
@@ -844,12 +843,6 @@ function App() {
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
               <p style={{margin:"0 0 12px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Showers & Laundry queue</p>
               <ShowerLaundryPanel records={records} people={people} onMarkComplete={markComplete}/>
-            </div>
-
-            {/* Modify check-out times */}
-            <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
-              <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Modify check-out times</p>
-              <CheckoutTimeEditor records={records} people={people} onUpdate={loadData}/>
             </div>
 
             {/* Manage people */}
