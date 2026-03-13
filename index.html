@@ -160,8 +160,7 @@ function makeQRMatrix(text) {
   return matrix;
 }
 
-function QRCanvas({ text, size=180 }) {
-  const canvasRef = useRef(null);
+function QRCanvas({ text, size=180, canvasRef }) {
   useEffect(()=>{
     try {
       const matrix = makeQRMatrix(text);
@@ -181,7 +180,7 @@ function QRCanvas({ text, size=180 }) {
       }
     } catch(e) { console.error("QR error", e); }
   }, [text, size]);
-  return <canvas ref={canvasRef} width={size} height={size} style={{borderRadius:8,border:"1.5px solid #D0E6E5"}}/>;
+    return <canvas ref={canvasRef} width={size} height={size} style={{borderRadius:8,border:"1.5px solid #D0E6E5"}}/>;
 }
 const SCANNER_TIMEOUT_MS = 100; // max ms between keystrokes to count as scanner input
 
