@@ -85,7 +85,7 @@ function localInputToIso(val) {
 
 const AV_COLORS=[{bg:"#C2E8E6",color:"#1D5C5A"},{bg:"#B8DFE8",color:"#1A4A5C"},{bg:"#C8E6D4",color:"#1A5C35"},{bg:"#E6D4C8",color:"#5C3A1A"},{bg:"#D4C8E6",color:"#3A1A5C"}];
 function avColor(name) { let h=0; for(let c of name)h=(h*31+c.charCodeAt(0))&0xffff; return AV_COLORS[h%AV_COLORS.length]; }
-const emptyForm = {name:"",guestNumber:"",memberId:"",type:"Guest",service:"",notes:""};
+const emptyForm = {name:"",guestNumber:"",memberId:"",type:"Guest",service:"",notes:"",addShowers:false,addLaundry:false};
 
 function Logo() {
   return <img src="https://cdn.shopify.com/s/files/1/0582/8719/4214/files/FOC_Logo_white.png?v=1773347276" alt="Friends of the Carpenter" style={{height:85,width:"auto"}}/>;
@@ -776,14 +776,28 @@ function App() {
         const[np]=await res.json();guestNumber=String(np.guest_number);await loadData();
       }catch(_){setErrors({submit:"Failed to register guest."});setSaving(false);return;}
     }else{guestNumber=String(existing.guest_number);}
+    const now=new Date().toISOString();
     const position=form.service&&CAPPED_SERVICES[form.service]?countToday(form.service)+1:null;
+    // Build list of records to insert: primary service + any add-ons
+    const toInsert=[{name,member_id:form.memberId||null,type:form.type,service:form.service,notes:form.notes||null,queue_position:position,check_in:now,check_out:null}];
+    const addOns=[];
+    if(form.service==="Day Center"){
+      if(form.addShowers&&countToday("Showers")<CAPPED_SERVICES["Showers"]){
+        toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Showers",notes:form.notes||null,queue_position:countToday("Showers")+1,check_in:now,check_out:null});
+        addOns.push({service:"Showers",position:countToday("Showers")+1});
+      }
+      if(form.addLaundry&&countToday("Laundry")<CAPPED_SERVICES["Laundry"]){
+        toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Laundry",notes:form.notes||null,queue_position:countToday("Laundry")+1,check_in:now,check_out:null});
+        addOns.push({service:"Laundry",position:countToday("Laundry")+1});
+      }
+    }
     try{
-      const res=await api("checkin_records",{method:"POST",body:JSON.stringify({name,member_id:form.memberId||null,type:form.type,service:form.service,notes:form.notes||null,queue_position:position,check_in:new Date().toISOString(),check_out:null}),headers:{...HEADERS,"Prefer":"return=representation"}});
+      const res=await api("checkin_records",{method:"POST",body:JSON.stringify(toInsert.length===1?toInsert[0]:toInsert),headers:{...HEADERS,"Prefer":"return=representation"}});
       if(!res.ok) throw new Error();
       await loadData();
-      setSuccess({name,guestNumber,service:form.service,position,isNew:!existing});
+      setSuccess({name,guestNumber,service:form.service,position,isNew:!existing,addOns});
       setForm(emptyForm);setErrors({});setFlagAlert(null);
-      setTimeout(()=>setSuccess(null),6000);
+      setTimeout(()=>setSuccess(null),7000);
     }catch(_){setErrors({submit:"Failed to save. Please try again."});}
     setSaving(false);
   }
@@ -940,8 +954,11 @@ function App() {
             {!scanResult&&success&&!flagAlert&&(
               <div style={{background:"#EAF7F8",border:"1.5px solid #C0E8EC",borderRadius:10,padding:"14px 16px",marginBottom:20}}>
                 <p style={{margin:"0 0 4px",fontSize:15,fontWeight:700,color:"#2E8A94"}}>{success.isNew?`Welcome, ${success.name}! You've been registered.`:`Welcome back, ${success.name}!`}</p>
-                <p style={{margin:"0 0 2px",fontSize:13,color:"#46b4bf"}}>Guest number: <strong>#{success.guestNumber}</strong></p>
-                {success.position&&<p style={{margin:0,fontSize:13,color:"#46b4bf"}}>Queue position for {success.service}: <strong>#{success.position}</strong></p>}
+                <p style={{margin:"0 0 4px",fontSize:13,color:"#46b4bf"}}>Guest number: <strong>#{success.guestNumber}</strong></p>
+                {success.position&&<p style={{margin:"0 0 2px",fontSize:13,color:"#46b4bf"}}>{success.service}: queue <strong>#{success.position}</strong></p>}
+                {success.addOns&&success.addOns.map(a=>(
+                  <p key={a.service} style={{margin:"0 0 2px",fontSize:13,color:"#46b4bf"}}>{a.service}: queue <strong>#{a.position}</strong></p>
+                ))}
               </div>
             )}
             {errors.submit&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:13,color:"#C0392B"}}>{errors.submit}</div>}
@@ -975,12 +992,38 @@ function App() {
               )}
             </div>
             <div style={{marginBottom:14,marginTop:10}}>
-              <select value={form.service} onChange={ev=>{setForm(f=>({...f,service:ev.target.value}));setErrors(e=>({...e,service:undefined}));}} style={{...inpStyle,height:42,borderColor:errors.service?"#C0392B":"#D0E6E5"}}>
+              <select value={form.service} onChange={ev=>{setForm(f=>({...f,service:ev.target.value,addShowers:false,addLaundry:false}));setErrors(e=>({...e,service:undefined}));}} style={{...inpStyle,height:42,borderColor:errors.service?"#C0392B":"#D0E6E5"}}>
                 <option value="">Select service / reason for visit…</option>
                 {availableServices.map(s=>{const cap=CAPPED_SERVICES[s],used=cap?countToday(s):0,full=cap&&used>=cap;return<option key={s} value={s} disabled={full}>{s}{cap?` (${used}/${cap}${full?" — Full":""})`:""}</option>;})}
               </select>
               {errors.service&&<p style={{margin:"4px 0 0",fontSize:12,color:"#C0392B"}}>{errors.service}</p>}
             </div>
+            {form.service==="Day Center"&&(()=>{
+              const showersAvail=isServiceAvailableToday("Showers")&&countToday("Showers")<(CAPPED_SERVICES["Showers"]||Infinity);
+              const laundryAvail=isServiceAvailableToday("Laundry")&&countToday("Laundry")<(CAPPED_SERVICES["Laundry"]||Infinity);
+              if(!showersAvail&&!laundryAvail) return null;
+              return (
+                <div style={{background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:8,padding:"12px 14px",marginBottom:14}}>
+                  <p style={{margin:"0 0 10px",fontSize:12,fontWeight:600,color:"#2E8A94",textTransform:"uppercase",letterSpacing:"0.05em"}}>Also add to queue for:</p>
+                  <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+                    {showersAvail&&(
+                      <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:14,color:C.text}}>
+                        <input type="checkbox" checked={form.addShowers} onChange={e=>setForm(f=>({...f,addShowers:e.target.checked}))} style={{width:16,height:16,accentColor:"#46b4bf",cursor:"pointer"}}/>
+                        <span>Showers</span>
+                        <span style={{fontSize:12,color:C.textMuted}}>({CAPPED_SERVICES["Showers"]-countToday("Showers")} spots left)</span>
+                      </label>
+                    )}
+                    {laundryAvail&&(
+                      <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:14,color:C.text}}>
+                        <input type="checkbox" checked={form.addLaundry} onChange={e=>setForm(f=>({...f,addLaundry:e.target.checked}))} style={{width:16,height:16,accentColor:"#46b4bf",cursor:"pointer"}}/>
+                        <span>Laundry</span>
+                        <span style={{fontSize:12,color:C.textMuted}}>({CAPPED_SERVICES["Laundry"]-countToday("Laundry")} spots left)</span>
+                      </label>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
             <div style={{marginBottom:22}}>
               <textarea placeholder="Notes (optional)" value={form.notes} onChange={ev=>setForm(f=>({...f,notes:ev.target.value}))} rows={3} style={{...inpStyle,resize:"vertical"}}/>
             </div>
