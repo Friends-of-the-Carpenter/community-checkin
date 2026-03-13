@@ -818,11 +818,24 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
       <div style={{maxWidth:900,margin:"0 auto",padding:"28px 24px 4rem"}}>
         {dbError&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:10,padding:"12px 16px",marginBottom:20,fontSize:15,color:"#C0392B"}}>{dbError}</div>}
 
-        {/* Showers & Laundry queue — always visible */}
+        {/* Showers & Laundry availability — simple public view */}
         <div style={{marginBottom:32}}>
           <h2 style={{margin:"0 0 6px",fontSize:22,fontWeight:700}}>Showers & Laundry</h2>
-          <p style={{margin:"0 0 18px",fontSize:15,color:"#5A7070"}}>Today's queue</p>
-          <ShowerLaundryPanel records={records} people={people} onMarkComplete={markComplete} onCancel={cancelRecord}/>
+          <p style={{margin:"0 0 18px",fontSize:15,color:"#5A7070"}}>Today's availability</p>
+          <div style={{display:"flex",gap:14}}>
+            {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{
+              const used=records.filter(r=>r.service===svc&&r.check_in>=todayISO()).length;
+              const full=used>=cap;
+              const avail=cap-used;
+              return (
+                <div key={svc} style={{flex:1,background:full?"#FCECEA":"#EAF7F8",border:`1.5px solid ${full?"#F0A9A3":"#C0E8EC"}`,borderRadius:14,padding:"22px 20px",textAlign:"center"}}>
+                  <p style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:full?"#C0392B":"#2E8A94"}}>{svc}</p>
+                  <p style={{margin:0,fontSize:full?20:32,fontWeight:700,color:full?"#C0392B":"#46b4bf"}}>{full?"Full":avail}</p>
+                  {!full&&<p style={{margin:"4px 0 0",fontSize:14,color:"#5A7070"}}>spots available</p>}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         <div style={{borderTop:"2px solid #C0E8EC",paddingTop:28,marginBottom:24}}>
