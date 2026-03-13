@@ -29,7 +29,7 @@ const SUPABASE_URL = "https://bnkdmdcinmbcuueakhug.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJua2RtZGNpbm1iY3V1ZWFraHVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMzQyNTYsImV4cCI6MjA4ODkxMDI1Nn0.UnURxxIweDAYik0UXfZLtdB33q-9DPah2kwUQKL9oVY";
 const HEADERS = { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` };
 const CAPPED_SERVICES = { "Showers": 25, "Laundry": 25 };
-const CAPPED_SERVICES_DAYS = { "Showers": [2,3,4,5], "Laundry": [2,3,4,5] };
+const CAPPED_SERVICES_DAYS = { "Showers": [2,3,4], "Laundry": [2,3,4] };
 const NO_DURATION_SERVICES = ["Showers", "Laundry"];
 const MIN_DURATION_MINUTES = 1;
 const ADMIN_PIN = "9866";
@@ -113,10 +113,10 @@ function LiveClock() {
     return () => clearInterval(t);
   }, []);
   const date = now.toLocaleDateString("en-US", { weekday:"long", month:"long", day:"numeric", year:"numeric" });
-  const time = now.toLocaleTimeString("en-US", { hour:"numeric", minute:"2-digit", second:"2-digit" });
+  const time = now.toLocaleTimeString("en-US", { hour:"numeric", minute:"2-digit" });
   return (
     <div style={{marginTop:10,marginBottom:2}}>
-      <p style={{margin:0,fontSize:13,color:"rgba(255,255,255,0.9)",fontWeight:500}}>{date}</p>
+      <p style={{margin:0,fontSize:15,color:"rgba(255,255,255,0.9)",fontWeight:500}}>{date}</p>
       <p style={{margin:"2px 0 0",fontSize:20,color:"#fff",fontWeight:700,letterSpacing:"0.02em"}}>{time}</p>
     </div>
   );
