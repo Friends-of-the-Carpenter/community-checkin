@@ -83,10 +83,34 @@ function localInputToIso(val) {
   if (!val) return null;
   return new Date(val).toISOString();
 }
+// Returns "Shower #", "Laundry #", or "Queue #" depending on service
+function queueLabel(service, position) {
+  if (!position) return null;
+  if (service === "Showers") return `Shower #${position}`;
+  if (service === "Laundry") return `Laundry #${position}`;
+  return `Queue #${position}`;
+}
 
 const AV_COLORS=[{bg:"#C2E8E6",color:"#1D5C5A"},{bg:"#B8DFE8",color:"#1A4A5C"},{bg:"#C8E6D4",color:"#1A5C35"},{bg:"#E6D4C8",color:"#5C3A1A"},{bg:"#D4C8E6",color:"#3A1A5C"}];
 function avColor(name) { let h=0; for(let c of name)h=(h*31+c.charCodeAt(0))&0xffff; return AV_COLORS[h%AV_COLORS.length]; }
 const emptyForm = {name:"",guestNumber:"",memberId:"",type:"Guest",service:"",notes:"",addShowers:false,addLaundry:false};
+
+// Live clock component
+function LiveClock() {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const date = now.toLocaleDateString("en-US", { weekday:"long", month:"long", day:"numeric", year:"numeric" });
+  const time = now.toLocaleTimeString("en-US", { hour:"numeric", minute:"2-digit", second:"2-digit" });
+  return (
+    <div style={{marginTop:10,marginBottom:2}}>
+      <p style={{margin:0,fontSize:13,color:"rgba(255,255,255,0.9)",fontWeight:500}}>{date}</p>
+      <p style={{margin:"2px 0 0",fontSize:20,color:"#fff",fontWeight:700,letterSpacing:"0.02em"}}>{time}</p>
+    </div>
+  );
+}
 
 function Logo() {
   return <img src="https://cdn.shopify.com/s/files/1/0582/8719/4214/files/FOC_Logo_white.png?v=1773347276" alt="Friends of the Carpenter" style={{height:105,width:"auto"}}/>;
@@ -188,7 +212,6 @@ function SimpleLineChart({data,height=180}) {
   );
 }
 
-// ── Shower/Laundry Queue Panel (used in both QueueView and Admin) ─────────────
 function ShowerLaundryPanel({ records, people, onMarkComplete, onCancel }) {
   const services = Object.keys(CAPPED_SERVICES);
   return (
@@ -202,6 +225,7 @@ function ShowerLaundryPanel({ records, people, onMarkComplete, onCancel }) {
         const done = queue.filter(r => r.check_out);
         const used = queue.length;
         const pct = Math.round(used / cap * 100);
+        const numLabel = svc === "Showers" ? "Shower" : "Laundry";
         return (
           <div key={svc} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:20,marginBottom:16}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
@@ -233,7 +257,7 @@ function ShowerLaundryPanel({ records, people, onMarkComplete, onCancel }) {
                       <span style={{fontWeight:600,fontSize:14}}>{r.name}</span>
                       {person&&<span style={{fontSize:11,color:"#5A7070"}}>#{person.guest_number}</span>}
                     </div>
-                    <p style={{margin:0,fontSize:11,color:"#5A7070"}}>Queue #{r.queue_position} · In: {fmt(r.check_in)}</p>
+                    <p style={{margin:0,fontSize:11,color:"#5A7070"}}>{numLabel} #{r.queue_position} · In: {fmt(r.check_in)}</p>
                   </div>
                   <button onClick={()=>onMarkComplete(r.id)} style={{...btnSuccess,flexShrink:0}}>✓ Done</button>
                   <button onClick={()=>onCancel(r.id)} style={{...btnGhost,fontSize:12,color:C.danger,borderColor:C.dangerBorder,flexShrink:0}}>Cancel</button>
@@ -255,7 +279,7 @@ function ShowerLaundryPanel({ records, people, onMarkComplete, onCancel }) {
                             <span style={{fontSize:13}}>{r.name}</span>
                             {person&&<span style={{fontSize:11,color:"#5A7070"}}>#{person.guest_number}</span>}
                           </div>
-                          <p style={{margin:0,fontSize:11,color:"#5A7070"}}>Queue #{r.queue_position}</p>
+                          <p style={{margin:0,fontSize:11,color:"#5A7070"}}>{numLabel} #{r.queue_position}</p>
                         </div>
                         <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:C.successBg,color:C.success,fontWeight:600}}>✓ Done</span>
                       </div>
@@ -450,6 +474,7 @@ function LogRecord({r, av, dur, person, isFlagged, onCheckOut, onDelete, onUpdat
   }
 
   const isShowerLaundry = NO_DURATION_SERVICES.includes(r.service);
+  const numLabel = r.service === "Showers" ? "Shower" : r.service === "Laundry" ? "Laundry" : "Queue";
 
   const timeRow = (
     <p style={{margin:0,fontSize:11,color:"#8AA5A5",display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
@@ -475,7 +500,7 @@ function LogRecord({r, av, dur, person, isFlagged, onCheckOut, onDelete, onUpdat
             {person&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:"#2E8A94",fontWeight:500}}>#{person.guest_number}</span>}
             {isFlagged&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600}}>⚑ Flagged</span>}
             <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:r.type==="Volunteer"?"#EAF7F8":"#EEEEFB",color:r.type==="Volunteer"?"#2E8A94":"#3A3A8C",fontWeight:500}}>{r.type}</span>
-            {r.queue_position&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FEF7E6",color:"#8A5A00",fontWeight:500}}>Queue #{r.queue_position}</span>}
+            {r.queue_position&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FEF7E6",color:"#8A5A00",fontWeight:500}}>{numLabel} #{r.queue_position}</span>}
             {!r.check_out&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:"#46b4bf",fontWeight:500}}>Active</span>}
           </div>
           <p style={{margin:"2px 0",fontSize:12,color:"#5A7070",fontWeight:500}}>{r.service}</p>
@@ -484,11 +509,9 @@ function LogRecord({r, av, dur, person, isFlagged, onCheckOut, onDelete, onUpdat
           {r.notes&&<p style={{margin:"4px 0 0",fontSize:12,color:"#5A7070",fontStyle:"italic"}}>{r.notes}</p>}
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0,alignItems:"flex-end"}}>
-          {/* For showers/laundry: show "Mark Complete" if not done, nothing if done */}
           {isShowerLaundry && !r.check_out && (
             <button onClick={()=>onCheckOut(r.id)} style={{...btnSuccess,fontSize:12,padding:"5px 12px"}}>✓ Done</button>
           )}
-          {/* For other services: show "Check out" if still active */}
           {!isShowerLaundry && !r.check_out && (
             <button onClick={()=>onCheckOut(r.id)} style={{...btnOutline,fontSize:12,padding:"5px 10px"}}>Check out</button>
           )}
@@ -583,13 +606,13 @@ function AnalyticsTab({records}) {
   );
 }
 
-// Queue view (Showers & Laundry login)
-function QueueView({records,people,onMarkComplete,onLogout,loadData}) {
+function QueueView({records,people,onMarkComplete,onCancel,onLogout,loadData}) {
   return (
     <div style={{minHeight:"100vh",background:"#F7FAFA"}}>
       <div style={{background:"#46b4bf",padding:"24px 20px 18px",textAlign:"center"}}>
-        <div style={{display:"flex",justifyContent:"center",marginBottom:14}}><Logo/></div>
-        <div style={{display:"flex",justifyContent:"center",gap:8}}>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:10}}><Logo/></div>
+        <LiveClock/>
+        <div style={{display:"flex",justifyContent:"center",gap:8,marginTop:12}}>
           <button onClick={loadData} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)"}}>Refresh ↻</button>
           <button onClick={onLogout} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)"}}>Log out</button>
         </div>
@@ -597,7 +620,7 @@ function QueueView({records,people,onMarkComplete,onLogout,loadData}) {
       <div style={{maxWidth:600,margin:"0 auto",padding:"24px 16px"}}>
         <h2 style={{margin:"0 0 4px",fontSize:20,fontWeight:700}}>Showers & Laundry</h2>
         <p style={{margin:"0 0 20px",fontSize:13,color:"#5A7070"}}>Today's queue — tap "✓ Done" when complete</p>
-        <ShowerLaundryPanel records={records} people={people} onMarkComplete={onMarkComplete}/>
+        <ShowerLaundryPanel records={records} people={people} onMarkComplete={onMarkComplete} onCancel={onCancel}/>
       </div>
     </div>
   );
@@ -751,12 +774,10 @@ function App() {
     setSaving(false);
   }
 
-  // Mark complete for showers/laundry (sets check_out timestamp)
   async function markComplete(id){
     await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
     loadData();
   }
-  // Generic check out (for non shower/laundry)
   async function checkOut(id){
     await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
     loadData();
@@ -765,6 +786,7 @@ function App() {
     await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});
     loadData();
   }
+  async function deleteRecord(id){await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});loadData();}
   async function flagPerson(p,flagged,reason){await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({flagged,flag_reason:reason||null}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}
   function exportCSV(){
     const hdr=["Name","Guest #","Type","Member ID","Service","Queue #","Check-in","Check-out","Duration","Notes"];
@@ -790,7 +812,7 @@ function App() {
   const gs=records.filter(r=>r.type==="Guest").length;
   const vs=records.filter(r=>r.type==="Volunteer").length;
 
-  if(queueAuth) return <QueueView records={records} people={people} onMarkComplete={markComplete} onLogout={()=>setQueueAuth(false)} loadData={loadData}/>;
+  if(queueAuth) return <QueueView records={records} people={people} onMarkComplete={markComplete} onCancel={cancelRecord} onLogout={()=>setQueueAuth(false)} loadData={loadData}/>;
 
   const Tab=({id,label})=>(
     <button onClick={()=>setView(id)} style={{flex:1,padding:"10px 0",border:"none",background:"transparent",borderBottom:view===id?"3px solid #46b4bf":"3px solid transparent",fontWeight:view===id?700:400,fontSize:13,cursor:"pointer",color:view===id?"#46b4bf":"#5A7070",fontFamily:"inherit",marginBottom:-2}}>
@@ -803,8 +825,9 @@ function App() {
   return (
     <div style={{minHeight:"100vh",background:"#F7FAFA",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"}}>
       <div style={{background:"#46b4bf",padding:"24px 20px 18px",textAlign:"center"}}>
-        <div style={{display:"flex",justifyContent:"center",marginBottom:14}}><Logo/></div>
-        <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:8}}>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:10}}><Logo/></div>
+        <LiveClock/>
+        <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:8,marginTop:14}}>
           <button onClick={()=>{setShowPinModal(showPinModal==="queue"?null:"queue");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:12}}>Showers & Laundry</button>
           <button onClick={()=>{setShowPinModal(showPinModal==="admin"?null:"admin");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:12}}>Admin</button>
         </div>
@@ -832,7 +855,6 @@ function App() {
               <button onClick={()=>setAdminAuth(false)} style={{...btnGhost,color:"#C0392B",borderColor:"#F0A9A3"}}>Log out</button>
             </div>
 
-            {/* Service capacity */}
             <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service capacity today</p>
             <div style={{display:"flex",gap:10,marginBottom:18}}>
               {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{const used=countToday(svc),pct=Math.round(used/cap*100);return(
@@ -844,19 +866,21 @@ function App() {
               );})}
             </div>
 
-            {/* Showers & Laundry queue in Admin */}
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
               <p style={{margin:"0 0 12px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Showers & Laundry queue</p>
               <ShowerLaundryPanel records={records} people={people} onMarkComplete={markComplete} onCancel={cancelRecord}/>
             </div>
 
-            {/* Manage people */}
+            <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
+              <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Modify check-out times</p>
+              <CheckoutTimeEditor records={records} people={people} onUpdate={loadData}/>
+            </div>
+
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
               <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Manage people</p>
               <PeopleRemover people={people} onRemove={async(p)=>{await api(`people?id=eq.${p.id}`,{method:"DELETE"});loadData();}} onFlag={flagPerson}/>
             </div>
 
-            {/* Service types */}
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
               <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service types</p>
               <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
@@ -917,7 +941,9 @@ function App() {
                 <p style={{margin:"0 0 4px",fontSize:13,color:"#46b4bf"}}>Guest number: <strong>#{success.guestNumber}</strong></p>
                 {success.position&&<p style={{margin:"0 0 2px",fontSize:13,color:"#46b4bf"}}>{success.service}: queue <strong>#{success.position}</strong></p>}
                 {success.addOns&&success.addOns.map(a=>(
-                  <p key={a.service} style={{margin:"0 0 2px",fontSize:13,color:"#46b4bf"}}>{a.service}: queue <strong>#{a.position}</strong></p>
+                  <p key={a.service} style={{margin:"0 0 2px",fontSize:13,color:"#46b4bf"}}>
+                    {a.service==="Showers"?"Shower":a.service==="Laundry"?"Laundry":"Queue"} #<strong>{a.position}</strong>
+                  </p>
                 ))}
               </div>
             )}
