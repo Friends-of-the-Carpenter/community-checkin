@@ -1249,29 +1249,21 @@ function AdminApp() {
 
         {view==="log"&&(
           <div>
-            {!adminAuth?(
-              <div style={{background:"#FEF7E6",border:"1px solid #F5D48A",borderRadius:10,padding:"14px 18px",marginBottom:20,fontSize:15,color:"#8A5A00"}}>
-                Admin login required to view the visit log. Click "Admin" above.
-              </div>
-            ):(
-              <>
-                <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
-                  <input placeholder="Search by name…" value={search} onChange={e=>setSearch(e.target.value)} style={{...inpStyle,flex:1,minWidth:160}}/>
-                  <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{...inpStyle,width:130}}><option>All</option><option>Guest</option><option>Volunteer</option></select>
-                  <select value={filterService} onChange={e=>setFilterService(e.target.value)} style={{...inpStyle,width:170}}><option>All</option>{services.map(s=><option key={s}>{s}</option>)}</select>
-                </div>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-                  <p style={{margin:0,fontSize:14,color:"#5A7070"}}>{people.length} people in directory</p>
-                  <button onClick={loadData} style={{...btnGhost,fontSize:14}}>Refresh ↻</button>
-                </div>
-                {loading?<p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>Loading…</p>
-                :filtered.length===0?<p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>No records found.</p>
-                :filtered.map(r=>{
-                  const av=avColor(r.name),dur=duration(r.check_in,r.check_out,r.service),person=people.find(p=>p.name===r.name),isFlagged=person?.flagged;
-                  return <LogRecord key={r.id} r={r} av={av} dur={dur} person={person} isFlagged={isFlagged} onCheckOut={checkOut} onDelete={deleteRecord} onUpdate={loadData}/>;
-                })}
-              </>
-            )}
+            <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+              <input placeholder="Search by name…" value={search} onChange={e=>setSearch(e.target.value)} style={{...inpStyle,flex:1,minWidth:160}}/>
+              <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{...inpStyle,width:130}}><option>All</option><option>Guest</option><option>Volunteer</option></select>
+              <select value={filterService} onChange={e=>setFilterService(e.target.value)} style={{...inpStyle,width:170}}><option>All</option>{services.map(s=><option key={s}>{s}</option>)}</select>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <p style={{margin:0,fontSize:14,color:"#5A7070"}}>{people.length} people in directory</p>
+            <button onClick={loadData} style={{...btnGhost,fontSize:14}}>Refresh ↻</button>
+          </div>
+          {loading?<p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>Loading…</p>
+          :filtered.length===0?<p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>No records found.</p>
+          :filtered.map(r=>{
+            const av=avColor(r.name),dur=duration(r.check_in,r.check_out,r.service),person=people.find(p=>p.name===r.name),isFlagged=person?.flagged;
+            return <LogRecord key={r.id} r={r} av={av} dur={dur} person={person} isFlagged={isFlagged} onCheckOut={checkOut} onDelete={deleteRecord} onUpdate={loadData}/>;
+            })}
           </div>
         )}
         {view==="analytics"&&adminAuth&&<AnalyticsTab records={records}/>}
