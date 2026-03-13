@@ -43,11 +43,13 @@ const C = {
   teal:"#46b4bf",tealDark:"#2E8A94",tealLight:"#EAF7F8",tealMid:"#C0E8EC",
   white:"#FFFFFF",bg:"#F7FAFA",text:"#1D2B2B",textMuted:"#5A7070",textLight:"#8AA5A5",
   border:"#D0E6E5",danger:"#C0392B",dangerBg:"#FCECEA",dangerBorder:"#F0A9A3",
+  success:"#3A9C6A",successBg:"#EAF7EE",successBorder:"#B0DFC0",
 };
 const inpStyle = {width:"100%",boxSizing:"border-box",padding:"10px 12px",fontSize:14,borderRadius:8,border:"1.5px solid #D0E6E5",background:"#fff",color:"#1D2B2B",fontFamily:"inherit",outline:"none"};
 const btnPrimary = {background:"#46b4bf",color:"#fff",border:"none",borderRadius:8,padding:"11px 20px",fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:"inherit"};
 const btnOutline = {background:"transparent",color:"#46b4bf",border:"1.5px solid #46b4bf",borderRadius:8,padding:"7px 14px",fontSize:13,fontWeight:500,cursor:"pointer",fontFamily:"inherit"};
 const btnGhost = {background:"transparent",color:"#5A7070",border:"1px solid #D0E6E5",borderRadius:8,padding:"6px 12px",fontSize:12,cursor:"pointer",fontFamily:"inherit"};
+const btnSuccess = {background:"#3A9C6A",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"};
 
 function api(path, opts={}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: HEADERS, ...opts });
@@ -71,14 +73,12 @@ function duration(inT,outT,service) {
   const m=Math.round((new Date(outT)-new Date(inT))/60000);
   return m<60?`${m}m`:`${Math.floor(m/60)}h ${m%60}m`;
 }
-// Convert ISO to local datetime-local input value
 function isoToLocalInput(iso) {
   if (!iso) return "";
   const d = new Date(iso);
   const pad = n => String(n).padStart(2,"0");
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
-// Convert datetime-local input value to ISO
 function localInputToIso(val) {
   if (!val) return null;
   return new Date(val).toISOString();
@@ -188,7 +188,88 @@ function SimpleLineChart({data,height=180}) {
   );
 }
 
-// ── NEW: Checkout Time Editor ─────────────────────────────────────────────────
+// ── Shower/Laundry Queue Panel (used in both QueueView and Admin) ─────────────
+function ShowerLaundryPanel({ records, people, onMarkComplete }) {
+  const services = Object.keys(CAPPED_SERVICES);
+  return (
+    <>
+      {services.map(svc => {
+        const cap = CAPPED_SERVICES[svc];
+        const queue = records
+          .filter(r => r.service === svc && r.check_in >= todayISO())
+          .sort((a,b) => (a.queue_position||0) - (b.queue_position||0));
+        const active = queue.filter(r => !r.check_out);
+        const done = queue.filter(r => r.check_out);
+        const used = queue.length;
+        const pct = Math.round(used / cap * 100);
+        return (
+          <div key={svc} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:20,marginBottom:16}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+              <h3 style={{margin:0,fontSize:16,fontWeight:700}}>{svc}</h3>
+              <span style={{fontSize:13,fontWeight:600,color:used>=cap?"#C0392B":"#46b4bf",background:used>=cap?"#FCECEA":"#EAF7F8",padding:"3px 10px",borderRadius:20}}>
+                {used>=cap?"Full":`${cap-used} spots left`}
+              </span>
+            </div>
+            <div style={{height:8,borderRadius:4,background:"#EAF7F8",marginBottom:12}}>
+              <div style={{height:8,borderRadius:4,width:`${pct}%`,background:used>=cap?"#C0392B":used/cap>0.8?"#E6A817":"#46b4bf",transition:"width 0.3s"}}/>
+            </div>
+            <div style={{display:"flex",gap:20,marginBottom:14,paddingBottom:12,borderBottom:"1px solid #D0E6E5"}}>
+              {[["Total",used],["Waiting",active.length],["Done",done.length]].map(([l,v])=>(
+                <div key={l} style={{textAlign:"center"}}>
+                  <p style={{margin:0,fontSize:20,fontWeight:700,color:"#46b4bf"}}>{v}</p>
+                  <p style={{margin:0,fontSize:11,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{l}</p>
+                </div>
+              ))}
+            </div>
+            {active.length===0 && <p style={{fontSize:13,color:"#5A7070",textAlign:"center",padding:"10px 0"}}>No one waiting.</p>}
+            {active.map(r => {
+              const person = people.find(p => p.name === r.name);
+              const av = avColor(r.name);
+              return (
+                <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:"#EAF7F8",borderRadius:8,marginBottom:8,border:"1px solid #C0E8EC"}}>
+                  <div style={{width:36,height:36,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,flexShrink:0}}>{initials(r.name)||"?"}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontWeight:600,fontSize:14}}>{r.name}</span>
+                      {person&&<span style={{fontSize:11,color:"#5A7070"}}>#{person.guest_number}</span>}
+                    </div>
+                    <p style={{margin:0,fontSize:11,color:"#5A7070"}}>Queue #{r.queue_position} · In: {fmt(r.check_in)}</p>
+                  </div>
+                  <button onClick={()=>onMarkComplete(r.id)} style={{...btnSuccess,flexShrink:0}}>✓ Done</button>
+                </div>
+              );
+            })}
+            {done.length > 0 && (
+              <details style={{marginTop:8}}>
+                <summary style={{fontSize:12,color:"#5A7070",cursor:"pointer",userSelect:"none"}}>Show completed ({done.length})</summary>
+                <div style={{marginTop:8}}>
+                  {done.map(r => {
+                    const person = people.find(p => p.name === r.name);
+                    const av = avColor(r.name);
+                    return (
+                      <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:8,marginBottom:6,opacity:0.65}}>
+                        <div style={{width:30,height:30,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:11,flexShrink:0}}>{initials(r.name)||"?"}</div>
+                        <div style={{flex:1}}>
+                          <div style={{display:"flex",alignItems:"center",gap:6}}>
+                            <span style={{fontSize:13}}>{r.name}</span>
+                            {person&&<span style={{fontSize:11,color:"#5A7070"}}>#{person.guest_number}</span>}
+                          </div>
+                          <p style={{margin:0,fontSize:11,color:"#5A7070"}}>Queue #{r.queue_position}</p>
+                        </div>
+                        <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:C.successBg,color:C.success,fontWeight:600}}>✓ Done</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </details>
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 function CheckoutTimeEditor({ records, people, onUpdate }) {
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState(null);
@@ -213,126 +294,71 @@ function CheckoutTimeEditor({ records, people, onUpdate }) {
     }
     setSaving(true);
     try {
-      const res = await api(`checkin_records?id=eq.${r.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ check_out: newOut }),
-        headers: { ...HEADERS, "Prefer": "return=minimal" }
-      });
+      const res = await api(`checkin_records?id=eq.${r.id}`, { method:"PATCH", body:JSON.stringify({check_out:newOut}), headers:{...HEADERS,"Prefer":"return=minimal"} });
       if (!res.ok) throw new Error();
       setSaveMsg({ id: r.id, type: "ok", text: "Saved!" });
-      setEditingId(null);
-      onUpdate();
+      setEditingId(null); onUpdate();
       setTimeout(() => setSaveMsg(null), 2500);
-    } catch (_) {
-      setSaveMsg({ id: r.id, type: "error", text: "Failed to save. Try again." });
-    }
+    } catch (_) { setSaveMsg({ id: r.id, type: "error", text: "Failed to save. Try again." }); }
     setSaving(false);
   }
 
   async function clearCheckout(r) {
     setSaving(true);
     try {
-      const res = await api(`checkin_records?id=eq.${r.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ check_out: null }),
-        headers: { ...HEADERS, "Prefer": "return=minimal" }
-      });
+      const res = await api(`checkin_records?id=eq.${r.id}`, { method:"PATCH", body:JSON.stringify({check_out:null}), headers:{...HEADERS,"Prefer":"return=minimal"} });
       if (!res.ok) throw new Error();
       setSaveMsg({ id: r.id, type: "ok", text: "Check-out cleared." });
-      setEditingId(null);
-      onUpdate();
+      setEditingId(null); onUpdate();
       setTimeout(() => setSaveMsg(null), 2500);
-    } catch (_) {
-      setSaveMsg({ id: r.id, type: "error", text: "Failed to clear. Try again." });
-    }
+    } catch (_) { setSaveMsg({ id: r.id, type: "error", text: "Failed to clear. Try again." }); }
     setSaving(false);
   }
 
   return (
     <div>
-      <input
-        placeholder="Search by name or guest #…"
-        value={search}
-        onChange={e => { setSearch(e.target.value); setEditingId(null); setSaveMsg(null); }}
-        style={{ ...inpStyle, marginBottom: 8 }}
-      />
-      {q.length > 0 && matched.length === 0 && (
-        <p style={{ fontSize: 12, color: C.textMuted }}>No records found.</p>
-      )}
-      {matched.map(r => {
-        const person = people.find(p => p.name === r.name);
-        const av = avColor(r.name);
-        const isEditing = editingId === r.id;
-        const msg = saveMsg?.id === r.id ? saveMsg : null;
+      <input placeholder="Search by name or guest #…" value={search} onChange={e=>{setSearch(e.target.value);setEditingId(null);setSaveMsg(null);}} style={{...inpStyle,marginBottom:8}}/>
+      {q.length>0&&matched.length===0&&<p style={{fontSize:12,color:C.textMuted}}>No records found.</p>}
+      {matched.map(r=>{
+        const person=people.find(p=>p.name===r.name);
+        const av=avColor(r.name);
+        const isEditing=editingId===r.id;
+        const msg=saveMsg?.id===r.id?saveMsg:null;
         return (
-          <div key={r.id} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 8, overflow: "hidden" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px" }}>
-              <div style={{ width: 34, height: 34, borderRadius: "50%", background: av.bg, color: av.color, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 12, flexShrink: 0 }}>{initials(r.name) || "?"}</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontWeight: 600, fontSize: 13 }}>{r.name}</span>
-                  {person && <span style={{ fontSize: 11, color: C.textMuted }}>#{person.guest_number}</span>}
-                  <span style={{ fontSize: 11, padding: "1px 7px", borderRadius: 20, background: C.tealLight, color: C.tealDark }}>{r.service}</span>
-                  {!r.check_out && <span style={{ fontSize: 11, padding: "1px 7px", borderRadius: 20, background: "#EAF7F8", color: "#46b4bf", fontWeight: 500 }}>Active</span>}
+          <div key={r.id} style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:8,overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px"}}>
+              <div style={{width:34,height:34,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:12,flexShrink:0}}>{initials(r.name)||"?"}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontWeight:600,fontSize:13}}>{r.name}</span>
+                  {person&&<span style={{fontSize:11,color:C.textMuted}}>#{person.guest_number}</span>}
+                  <span style={{fontSize:11,padding:"1px 7px",borderRadius:20,background:C.tealLight,color:C.tealDark}}>{r.service}</span>
+                  {!r.check_out&&<span style={{fontSize:11,padding:"1px 7px",borderRadius:20,background:"#EAF7F8",color:"#46b4bf",fontWeight:500}}>Active</span>}
                 </div>
-                <p style={{ margin: "2px 0 0", fontSize: 11, color: C.textLight }}>
-                  In: {fmt(r.check_in)}
-                  {r.check_out ? ` · Out: ${fmt(r.check_out)}` : " · No check-out yet"}
-                </p>
+                <p style={{margin:"2px 0 0",fontSize:11,color:C.textLight}}>In: {fmt(r.check_in)}{r.check_out?` · Out: ${fmt(r.check_out)}`:" · No check-out yet"}</p>
               </div>
-              <button
-                onClick={() => { setEditingId(isEditing ? null : r.id); setEditVal(isoToLocalInput(r.check_out)); setSaveMsg(null); }}
-                style={{ ...btnGhost, fontSize: 12, color: C.teal, borderColor: C.tealMid, flexShrink: 0 }}
-              >
-                {isEditing ? "Cancel" : r.check_out ? "Edit time" : "Set time"}
+              <button onClick={()=>{setEditingId(isEditing?null:r.id);setEditVal(isoToLocalInput(r.check_out));setSaveMsg(null);}} style={{...btnGhost,fontSize:12,color:C.teal,borderColor:C.tealMid,flexShrink:0}}>
+                {isEditing?"Cancel":r.check_out?"Edit time":"Set time"}
               </button>
             </div>
-            {isEditing && (
-              <div style={{ padding: "10px 12px", borderTop: `1px solid ${C.border}`, background: C.bg }}>
-                <p style={{ margin: "0 0 6px", fontSize: 12, color: C.textMuted }}>
-                  Set check-out time <span style={{ color: C.textLight }}>(check-in: {fmt(r.check_in)})</span>
-                </p>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  <input
-                    type="datetime-local"
-                    value={editVal}
-                    onChange={e => setEditVal(e.target.value)}
-                    style={{ ...inpStyle, width: "auto", flex: 1, minWidth: 200 }}
-                  />
-                  <button
-                    onClick={() => save(r)}
-                    disabled={saving || !editVal}
-                    style={{ ...btnPrimary, padding: "9px 18px", fontSize: 13, opacity: saving || !editVal ? 0.5 : 1 }}
-                  >
-                    {saving ? "Saving…" : "Save"}
-                  </button>
-                  {r.check_out && (
-                    <button
-                      onClick={() => clearCheckout(r)}
-                      disabled={saving}
-                      style={{ ...btnGhost, fontSize: 12, color: C.danger, borderColor: C.dangerBorder }}
-                    >
-                      Clear
-                    </button>
-                  )}
+            {isEditing&&(
+              <div style={{padding:"10px 12px",borderTop:`1px solid ${C.border}`,background:C.bg}}>
+                <p style={{margin:"0 0 6px",fontSize:12,color:C.textMuted}}>Set check-out time <span style={{color:C.textLight}}>(check-in: {fmt(r.check_in)})</span></p>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                  <input type="datetime-local" value={editVal} onChange={e=>setEditVal(e.target.value)} style={{...inpStyle,width:"auto",flex:1,minWidth:200}}/>
+                  <button onClick={()=>save(r)} disabled={saving||!editVal} style={{...btnPrimary,padding:"9px 18px",fontSize:13,opacity:saving||!editVal?0.5:1}}>{saving?"Saving…":"Save"}</button>
+                  {r.check_out&&<button onClick={()=>clearCheckout(r)} disabled={saving} style={{...btnGhost,fontSize:12,color:C.danger,borderColor:C.dangerBorder}}>Clear</button>}
                 </div>
-                {msg && (
-                  <p style={{ margin: "6px 0 0", fontSize: 12, color: msg.type === "ok" ? C.tealDark : C.danger }}>
-                    {msg.type === "ok" ? "✓ " : "⚠ "}{msg.text}
-                  </p>
-                )}
+                {msg&&<p style={{margin:"6px 0 0",fontSize:12,color:msg.type==="ok"?C.tealDark:C.danger}}>{msg.type==="ok"?"✓ ":"⚠ "}{msg.text}</p>}
               </div>
             )}
           </div>
         );
       })}
-      {q.length === 0 && (
-        <p style={{ fontSize: 12, color: C.textLight, textAlign: "center", padding: "8px 0" }}>Search for a visitor to edit their check-out time.</p>
-      )}
+      {q.length===0&&<p style={{fontSize:12,color:C.textLight,textAlign:"center",padding:"8px 0"}}>Search for a visitor to edit their check-out time.</p>}
     </div>
   );
 }
-// ─────────────────────────────────────────────────────────────────────────────
 
 function PeopleRemover({people,onRemove,onFlag}) {
   const [query,setQuery]=React.useState("");
@@ -390,70 +416,51 @@ function PeopleRemover({people,onRemove,onFlag}) {
 }
 
 function LogRecord({r, av, dur, person, isFlagged, onCheckOut, onDelete, onUpdate}) {
-  const [editing, setEditing] = useState(null); // null | "check_in" | "check_out"
+  const [editing, setEditing] = useState(null);
   const [editVal, setEditVal] = useState("");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
 
-  function startEdit(field) {
-    setEditing(field);
-    setEditVal(isoToLocalInput(r[field]));
-    setMsg(null);
-  }
+  function startEdit(field) { setEditing(field); setEditVal(isoToLocalInput(r[field])); setMsg(null); }
 
   async function save() {
     const newVal = localInputToIso(editVal);
-    const inTime = editing === "check_in" ? newVal : r.check_in;
-    const outTime = editing === "check_out" ? newVal : r.check_out;
-    if (outTime && new Date(outTime) <= new Date(inTime)) {
-      setMsg({ type: "error", text: "Check-out must be after check-in." });
-      return;
-    }
+    const inTime = editing==="check_in"?newVal:r.check_in;
+    const outTime = editing==="check_out"?newVal:r.check_out;
+    if (outTime && new Date(outTime) <= new Date(inTime)) { setMsg({type:"error",text:"Check-out must be after check-in."}); return; }
     setSaving(true);
     try {
-      const res = await api(`checkin_records?id=eq.${r.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ [editing]: newVal }),
-        headers: { ...HEADERS, "Prefer": "return=minimal" }
-      });
+      const res = await api(`checkin_records?id=eq.${r.id}`, {method:"PATCH",body:JSON.stringify({[editing]:newVal}),headers:{...HEADERS,"Prefer":"return=minimal"}});
       if (!res.ok) throw new Error();
-      setMsg({ type: "ok", text: "Saved!" });
-      setEditing(null);
-      onUpdate();
-      setTimeout(() => setMsg(null), 2000);
-    } catch (_) {
-      setMsg({ type: "error", text: "Failed to save." });
-    }
+      setMsg({type:"ok",text:"Saved!"}); setEditing(null); onUpdate();
+      setTimeout(()=>setMsg(null),2000);
+    } catch(_) { setMsg({type:"error",text:"Failed to save."}); }
     setSaving(false);
   }
 
   async function clearOut() {
     setSaving(true);
     try {
-      const res = await api(`checkin_records?id=eq.${r.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ check_out: null }),
-        headers: { ...HEADERS, "Prefer": "return=minimal" }
-      });
+      const res = await api(`checkin_records?id=eq.${r.id}`, {method:"PATCH",body:JSON.stringify({check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
       if (!res.ok) throw new Error();
-      setEditing(null);
-      onUpdate();
-    } catch (_) {
-      setMsg({ type: "error", text: "Failed to clear." });
-    }
+      setEditing(null); onUpdate();
+    } catch(_) { setMsg({type:"error",text:"Failed to clear."}); }
     setSaving(false);
   }
+
+  const isShowerLaundry = NO_DURATION_SERVICES.includes(r.service);
 
   const timeRow = (
     <p style={{margin:0,fontSize:11,color:"#8AA5A5",display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
       <span>In:</span>
       <button onClick={()=>startEdit("check_in")} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:11,color:"#46b4bf",textDecoration:"underline dotted",fontFamily:"inherit"}}>{fmt(r.check_in)}</button>
-      {r.check_out && <>
+      {!isShowerLaundry && r.check_out && <>
         <span>· Out:</span>
         <button onClick={()=>startEdit("check_out")} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:11,color:"#46b4bf",textDecoration:"underline dotted",fontFamily:"inherit"}}>{fmt(r.check_out)}</button>
-        {dur && <span>· {dur}</span>}
+        {dur&&<span>· {dur}</span>}
       </>}
-      {!r.check_out && <button onClick={()=>startEdit("check_out")} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:11,color:"#46b4bf",textDecoration:"underline dotted",fontFamily:"inherit"}}>+ set check-out</button>}
+      {!isShowerLaundry && !r.check_out && <button onClick={()=>startEdit("check_out")} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:11,color:"#46b4bf",textDecoration:"underline dotted",fontFamily:"inherit"}}>+ set check-out</button>}
+      {isShowerLaundry && r.check_out && <span style={{marginLeft:4,fontSize:11,padding:"1px 8px",borderRadius:20,background:C.successBg,color:C.success,fontWeight:600}}>✓ Completed</span>}
     </p>
   );
 
@@ -475,16 +482,21 @@ function LogRecord({r, av, dur, person, isFlagged, onCheckOut, onDelete, onUpdat
           {msg&&<p style={{margin:"4px 0 0",fontSize:11,color:msg.type==="ok"?C.tealDark:C.danger}}>{msg.type==="ok"?"✓ ":"⚠ "}{msg.text}</p>}
           {r.notes&&<p style={{margin:"4px 0 0",fontSize:12,color:"#5A7070",fontStyle:"italic"}}>{r.notes}</p>}
         </div>
-        <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0}}>
-          {!r.check_out&&<button onClick={()=>onCheckOut(r.id)} style={{...btnOutline,fontSize:12,padding:"5px 10px"}}>Check out</button>}
-          <button onClick={()=>onDelete(r.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#8AA5A5",fontSize:18,padding:"0 4px",lineHeight:1,alignSelf:"flex-end"}}>×</button>
+        <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0,alignItems:"flex-end"}}>
+          {/* For showers/laundry: show "Mark Complete" if not done, nothing if done */}
+          {isShowerLaundry && !r.check_out && (
+            <button onClick={()=>onCheckOut(r.id)} style={{...btnSuccess,fontSize:12,padding:"5px 12px"}}>✓ Done</button>
+          )}
+          {/* For other services: show "Check out" if still active */}
+          {!isShowerLaundry && !r.check_out && (
+            <button onClick={()=>onCheckOut(r.id)} style={{...btnOutline,fontSize:12,padding:"5px 10px"}}>Check out</button>
+          )}
+          <button onClick={()=>onDelete(r.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#8AA5A5",fontSize:18,padding:"0 4px",lineHeight:1}}>×</button>
         </div>
       </div>
-      {editing && (
+      {editing&&(
         <div style={{padding:"10px 14px",borderTop:`1px solid ${C.border}`,background:C.bg}}>
-          <p style={{margin:"0 0 6px",fontSize:12,color:C.textMuted}}>
-            Edit {editing==="check_in"?"check-in":"check-out"} time
-          </p>
+          <p style={{margin:"0 0 6px",fontSize:12,color:C.textMuted}}>Edit {editing==="check_in"?"check-in":"check-out"} time</p>
           <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
             <input type="datetime-local" value={editVal} onChange={e=>setEditVal(e.target.value)} style={{...inpStyle,width:"auto",flex:1,minWidth:200}}/>
             <button onClick={save} disabled={saving||!editVal} style={{...btnPrimary,padding:"9px 16px",fontSize:13,opacity:saving||!editVal?0.5:1}}>{saving?"Saving…":"Save"}</button>
@@ -570,8 +582,8 @@ function AnalyticsTab({records}) {
   );
 }
 
-function QueueView({records,people,onCheckOut,onLogout,loadData}) {
-  const services=Object.keys(CAPPED_SERVICES);
+// Queue view (Showers & Laundry login)
+function QueueView({records,people,onMarkComplete,onLogout,loadData}) {
   return (
     <div style={{minHeight:"100vh",background:"#F7FAFA"}}>
       <div style={{background:"#46b4bf",padding:"24px 20px 18px",textAlign:"center"}}>
@@ -583,65 +595,8 @@ function QueueView({records,people,onCheckOut,onLogout,loadData}) {
       </div>
       <div style={{maxWidth:600,margin:"0 auto",padding:"24px 16px"}}>
         <h2 style={{margin:"0 0 4px",fontSize:20,fontWeight:700}}>Showers & Laundry</h2>
-        <p style={{margin:"0 0 24px",fontSize:13,color:"#5A7070"}}>Showers & Laundry — today</p>
-        {services.map(svc=>{
-          const cap=CAPPED_SERVICES[svc];
-          const queue=records.filter(r=>r.service===svc&&r.check_in>=todayISO()).sort((a,b)=>(a.queue_position||0)-(b.queue_position||0));
-          const active=queue.filter(r=>!r.check_out),done=queue.filter(r=>r.check_out),used=queue.length,pct=Math.round(used/cap*100);
-          return (
-            <div key={svc} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:20,marginBottom:20}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                <h3 style={{margin:0,fontSize:17,fontWeight:700}}>{svc}</h3>
-                <span style={{fontSize:13,fontWeight:600,color:used>=cap?"#C0392B":"#46b4bf",background:used>=cap?"#FCECEA":"#EAF7F8",padding:"3px 10px",borderRadius:20}}>{used>=cap?"Full":`${cap-used} spots left`}</span>
-              </div>
-              <div style={{height:8,borderRadius:4,background:"#EAF7F8",marginBottom:14}}>
-                <div style={{height:8,borderRadius:4,width:`${pct}%`,background:used>=cap?"#C0392B":used/cap>0.8?"#E6A817":"#46b4bf",transition:"width 0.3s"}}/>
-              </div>
-              <div style={{display:"flex",gap:20,marginBottom:16,paddingBottom:14,borderBottom:"1px solid #D0E6E5"}}>
-                {[["Total",used],["Active",active.length],["Done",done.length]].map(([l,v])=>(
-                  <div key={l} style={{textAlign:"center"}}>
-                    <p style={{margin:0,fontSize:22,fontWeight:700,color:"#46b4bf"}}>{v}</p>
-                    <p style={{margin:0,fontSize:11,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{l}</p>
-                  </div>
-                ))}
-              </div>
-              {active.length===0&&<p style={{fontSize:13,color:"#5A7070",textAlign:"center",padding:"12px 0"}}>No active visitors in queue.</p>}
-              {active.map(r=>{const person=people.find(p=>p.name===r.name),av=avColor(r.name);return(
-                <div key={r.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",background:"#EAF7F8",borderRadius:8,marginBottom:8,border:"1px solid #C0E8EC"}}>
-                  <div style={{width:36,height:36,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,flexShrink:0}}>{initials(r.name)||"?"}</div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <span style={{fontWeight:600,fontSize:14}}>{r.name}</span>
-                      {person&&<span style={{fontSize:11,color:"#5A7070"}}>#{person.guest_number}</span>}
-                    </div>
-                    <p style={{margin:0,fontSize:11,color:"#5A7070"}}>Queue #{r.queue_position} · In: {fmt(r.check_in)}</p>
-                  </div>
-                  <button onClick={()=>onCheckOut(r.id)} style={{...btnOutline,fontSize:12,padding:"5px 12px",flexShrink:0}}>Check out</button>
-                </div>
-              );})}
-              {done.length>0&&(
-                <details style={{marginTop:8}}>
-                  <summary style={{fontSize:12,color:"#5A7070",cursor:"pointer",userSelect:"none"}}>Show completed ({done.length})</summary>
-                  <div style={{marginTop:8}}>
-                    {done.map(r=>{const person=people.find(p=>p.name===r.name),av=avColor(r.name);return(
-                      <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:8,marginBottom:6,opacity:0.65}}>
-                        <div style={{width:30,height:30,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:11,flexShrink:0}}>{initials(r.name)||"?"}</div>
-                        <div style={{flex:1}}>
-                          <div style={{display:"flex",alignItems:"center",gap:6}}>
-                            <span style={{fontSize:13}}>{r.name}</span>
-                            {person&&<span style={{fontSize:11,color:"#5A7070"}}>#{person.guest_number}</span>}
-                          </div>
-                          <p style={{margin:0,fontSize:11,color:"#5A7070"}}>Queue #{r.queue_position}</p>
-                        </div>
-                        <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:"#46b4bf",fontWeight:500}}>Done</span>
-                      </div>
-                    );})}
-                  </div>
-                </details>
-              )}
-            </div>
-          );
-        })}
+        <p style={{margin:"0 0 20px",fontSize:13,color:"#5A7070"}}>Today's queue — tap "✓ Done" when complete</p>
+        <ShowerLaundryPanel records={records} people={people} onMarkComplete={onMarkComplete}/>
       </div>
     </div>
   );
@@ -719,8 +674,7 @@ function App() {
       const tag=document.activeElement?.tagName;
       if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT") return;
       if(e.key==="Enter"){
-        const code=scanBuffer.current.trim();
-        scanBuffer.current="";
+        const code=scanBuffer.current.trim(); scanBuffer.current="";
         if(scanTimer.current) clearTimeout(scanTimer.current);
         if(code.length>3) handleScan(code);
         return;
@@ -740,12 +694,6 @@ function App() {
     if(!val.trim()){setSuggestions([]);setShowSuggestions(false);return;}
     const q=val.toLowerCase();
     const m=people.filter(p=>p.name.toLowerCase().includes(q)||String(p.guest_number).includes(q)).slice(0,6);
-    setSuggestions(m);setShowSuggestions(m.length>0);
-  }
-  function handleGuestNumberInput(val){
-    setForm(f=>({...f,guestNumber:val,name:""}));setErrors(e=>({...e,name:undefined}));setFlagAlert(null);
-    if(!val.trim()){setSuggestions([]);setShowSuggestions(false);return;}
-    const m=people.filter(p=>String(p.guest_number).includes(val.trim())).slice(0,6);
     setSuggestions(m);setShowSuggestions(m.length>0);
   }
   function selectPerson(p){
@@ -779,7 +727,6 @@ function App() {
     }else{guestNumber=String(existing.guest_number);}
     const now=new Date().toISOString();
     const position=form.service&&CAPPED_SERVICES[form.service]?countToday(form.service)+1:null;
-    // Build list of records to insert: primary service + any add-ons
     const toInsert=[{name,member_id:form.memberId||null,type:form.type,service:form.service,notes:form.notes||null,queue_position:position,check_in:now,check_out:null}];
     const addOns=[];
     if(form.service==="Day Center"){
@@ -802,7 +749,17 @@ function App() {
     }catch(_){setErrors({submit:"Failed to save. Please try again."});}
     setSaving(false);
   }
-  async function checkOut(id){await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}
+
+  // Mark complete for showers/laundry (sets check_out timestamp)
+  async function markComplete(id){
+    await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+    loadData();
+  }
+  // Generic check out (for non shower/laundry)
+  async function checkOut(id){
+    await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+    loadData();
+  }
   async function deleteRecord(id){await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});loadData();}
   async function flagPerson(p,flagged,reason){await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({flagged,flag_reason:reason||null}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}
   function exportCSV(){
@@ -828,9 +785,8 @@ function App() {
   const today=records.filter(r=>r.check_in>=todayISO()).length;
   const gs=records.filter(r=>r.type==="Guest").length;
   const vs=records.filter(r=>r.type==="Volunteer").length;
-  const ac=records.filter(r=>!r.check_out).length;
 
-  if(queueAuth) return <QueueView records={records} people={people} onCheckOut={checkOut} onLogout={()=>setQueueAuth(false)} loadData={loadData}/>;
+  if(queueAuth) return <QueueView records={records} people={people} onMarkComplete={markComplete} onLogout={()=>setQueueAuth(false)} loadData={loadData}/>;
 
   const Tab=({id,label})=>(
     <button onClick={()=>setView(id)} style={{flex:1,padding:"10px 0",border:"none",background:"transparent",borderBottom:view===id?"3px solid #46b4bf":"3px solid transparent",fontWeight:view===id?700:400,fontSize:13,cursor:"pointer",color:view===id?"#46b4bf":"#5A7070",fontFamily:"inherit",marginBottom:-2}}>
@@ -845,9 +801,8 @@ function App() {
       <div style={{background:"#46b4bf",padding:"24px 20px 18px",textAlign:"center"}}>
         <div style={{display:"flex",justifyContent:"center",marginBottom:14}}><Logo/></div>
         <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:8}}>
-          {!loading&&<span style={{width:8,height:8,borderRadius:"50%",background:dbError?"#F5A623":"rgba(255,255,255,0.6)",display:"none"}}/>}
           <button onClick={()=>{setShowPinModal(showPinModal==="queue"?null:"queue");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:12}}>Showers & Laundry</button>
-          <button onClick={()=>{setShowPinModal(showPinModal==="admin"?null:"admin");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:12}}>{adminAuth?"Admin":"Admin"}</button>
+          <button onClick={()=>{setShowPinModal(showPinModal==="admin"?null:"admin");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:12}}>Admin</button>
         </div>
       </div>
 
@@ -885,7 +840,13 @@ function App() {
               );})}
             </div>
 
-            {/* Modify check-out times — NEW SECTION */}
+            {/* Showers & Laundry queue in Admin */}
+            <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
+              <p style={{margin:"0 0 12px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Showers & Laundry queue</p>
+              <ShowerLaundryPanel records={records} people={people} onMarkComplete={markComplete}/>
+            </div>
+
+            {/* Modify check-out times */}
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
               <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Modify check-out times</p>
               <CheckoutTimeEditor records={records} people={people} onUpdate={loadData}/>
@@ -969,7 +930,7 @@ function App() {
                 <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"10px 0",borderRadius:8,border:form.type===t?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:form.type===t?"#EAF7F8":"#fff",fontWeight:form.type===t?700:400,fontSize:14,cursor:"pointer",color:form.type===t?"#2E8A94":"#5A7070",fontFamily:"inherit"}}>{t}</button>
               ))}
             </div>
-            <p style={{margin:"0 0 6px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Name Search- If visiting for first time enter name and press check in</p>
+            <p style={{margin:"0 0 6px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Name Search — if visiting for first time enter name and press check in</p>
             <div style={{marginBottom:4,position:"relative"}} ref={suggestRef}>
               <div style={{display:"flex",gap:8,marginBottom:4}}>
                 <input placeholder="Enter your full name…" value={form.name} onChange={e=>handleNameInput(e.target.value)} style={{...inpStyle,flex:1,borderColor:errors.name?"#C0392B":"#D0E6E5"}}/>
