@@ -819,6 +819,7 @@ function App() {
     const e={};
     if(!form.name.trim()&&!form.guestNumber.trim())e.name="Name or guest number is required";
     if(!form.service)e.service="Please select a service";
+    if(form.service&&CAPPED_SERVICES[form.service]&&countToday(form.service)>=CAPPED_SERVICES[form.service])e.service=`${form.service} is full for today.`;
     return e;
   }
   async function submit(){
@@ -838,7 +839,6 @@ function App() {
       }catch(_){setErrors({submit:"Failed to register guest."});setSaving(false);return;}
     }else{guestNumber=String(existing.guest_number);}
     const now=new Date().toISOString();
-    const position=form.service&&CAPPED_SERVICES[form.service]?nextAvailablePosition(form.service,records):null;
     const toInsert=[{name,member_id:form.memberId||null,type:form.type,service:form.service,notes:form.notes||null,queue_position:position,check_in:now,check_out:null}];
     const addOns=[];
     if(form.service==="Day Center"){
