@@ -1109,7 +1109,7 @@ function AdminApp() {
         <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Logo/></div>
         <LiveClock/>
       </div>
-      <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",padding:"40px 24px",maxWidth:400,margin:"0 auto",width:"100%"}}>
+      <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px",maxWidth:400,margin:"0 auto",width:"100%"}}>
         <p style={{fontSize:20,fontWeight:700,color:C.text,marginBottom:20}}>{pendingPin==="admin"?"Admin Login":"Showers & Laundry Login"}</p>
         <input type="password" placeholder="Enter PIN" value={pinInput} onChange={e=>setPinInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")tryPin();}} style={{...inpStyle,marginBottom:12,fontSize:20,textAlign:"center",letterSpacing:"0.2em"}} autoFocus/>
         {pinError&&<p style={{margin:"0 0 12px",fontSize:14,color:C.danger}}>Incorrect PIN. Please try again.</p>}
