@@ -42,6 +42,9 @@ const SCANNER_TIMEOUT_MS = 100;
 const CHART_SERVICES = ["Showers","Laundry","Day Center","Community Partnership","Volunteer"];
 const CHART_COLORS = { "Showers":"#46b4bf","Laundry":"#2E8A94","Day Center":"#E6A817","Community Partnership":"#7B61C4","Volunteer":"#3A9C6A" };
 
+// Detect mode from URL
+const IS_ADMIN_MODE = new URLSearchParams(window.location.search).get("mode") === "admin";
+
 const C = {
   teal:"#46b4bf",tealDark:"#2E8A94",tealLight:"#EAF7F8",tealMid:"#C0E8EC",
   white:"#FFFFFF",bg:"#F7FAFA",text:"#1D2B2B",textMuted:"#5A7070",textLight:"#8AA5A5",
@@ -108,10 +111,11 @@ function LiveClock() {
   const [now, setNow] = useState(new Date());
   useEffect(() => { const t=setInterval(()=>setNow(new Date()),1000); return()=>clearInterval(t); }, []);
   const date = now.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});
-  const time = now.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+  const time = now.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",second:"2-digit"});
   return (
     <div style={{marginTop:12,marginBottom:4}}>
-      <p style={{margin:0,fontSize:20,color:"rgba(255,255,255,0.9)",fontWeight:800}}>{date} | {time}</p>
+      <p style={{margin:0,fontSize:15,color:"rgba(255,255,255,0.9)",fontWeight:500}}>{date}</p>
+      <p style={{margin:"4px 0 0",fontSize:26,color:"#fff",fontWeight:700,letterSpacing:"0.02em"}}>{time}</p>
     </div>
   );
 }
@@ -235,7 +239,7 @@ function ManualAddToQueue({ svc, people, records, numLabel, onAdd }) {
     setQuery(val); setSelected(null); setErr(null);
     if (!val.trim()) { setSuggestions([]); setShowSug(false); return; }
     const q = val.toLowerCase();
-    const m = people.filter(p => p.name.toLowerCase().includes(q) || String(p.guest_number).includes(q)).slice(0, 6);
+    const m = people.filter(p => p.name.toLowerCase().includes(q) || String(p.guest_number).includes(q)).slice(0,6);
     setSuggestions(m); setShowSug(m.length > 0);
   }
 
@@ -245,21 +249,16 @@ function ManualAddToQueue({ svc, people, records, numLabel, onAdd }) {
 
   async function handleAdd() {
     if (!query.trim()) { setErr("Please enter a name."); return; }
-
     const pos = customPos !== "" ? parseInt(customPos, 10) : nextPos;
     if (!pos || pos < 1) { setErr("Please enter a valid position number."); return; }
-
     setSaving(true);
     try {
       let personToAdd = selected;
-
-      // If no person was selected from autocomplete, check if name exists or create new
       if (!personToAdd) {
         const existing = people.find(p => p.name.toLowerCase() === query.trim().toLowerCase());
         if (existing) {
           personToAdd = existing;
         } else {
-          // Register as new person
           const res = await api("people", {
             method: "POST",
             body: JSON.stringify({ name: query.trim() }),
@@ -270,17 +269,13 @@ function ManualAddToQueue({ svc, people, records, numLabel, onAdd }) {
           personToAdd = newPerson;
         }
       }
-
       if (personToAdd.flagged) { setErr("This person is flagged and cannot be added."); setSaving(false); return; }
-
-      // Add to queue
       const res = await api("checkin_records", {
         method: "POST",
         body: JSON.stringify({ name: personToAdd.name, type: "Guest", service: svc, queue_position: pos, check_in: new Date().toISOString(), check_out: null }),
         headers: { ...HEADERS, "Prefer": "return=minimal" }
       });
       if (!res.ok) throw new Error("Failed to add to queue.");
-
       onAdd();
       setOpen(false); setQuery(""); setSelected(null); setCustomPos(""); setErr(null);
     } catch(e) { setErr(e.message || "Failed to add. Please try again."); }
@@ -295,12 +290,7 @@ function ManualAddToQueue({ svc, people, records, numLabel, onAdd }) {
         <div>
           <p style={{margin:"0 0 10px",fontSize:14,fontWeight:600,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.05em"}}>Add to {svc} queue</p>
           <div style={{position:"relative",marginBottom:10}} ref={ref}>
-            <input
-              placeholder="Type a name — existing or new…"
-              value={query}
-              onChange={e=>handleQuery(e.target.value)}
-              style={{...inpStyle,borderColor:err?"#C0392B":"#D0E6E5"}}
-            />
+            <input placeholder="Type a name — existing or new…" value={query} onChange={e=>handleQuery(e.target.value)} style={{...inpStyle,borderColor:err?"#C0392B":"#D0E6E5"}}/>
             {showSug && suggestions.length > 0 && (
               <div style={{position:"absolute",top:"calc(100% + 2px)",left:0,right:0,background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,zIndex:20,boxShadow:"0 6px 20px rgba(70,180,191,0.15)",overflow:"hidden"}}>
                 {suggestions.map(p=>{
@@ -318,7 +308,6 @@ function ManualAddToQueue({ svc, people, records, numLabel, onAdd }) {
               </div>
             )}
           </div>
-          {/* Hint shown when typed name doesn't match anyone */}
           {query.trim() && !selected && suggestions.length === 0 && (
             <p style={{margin:"-4px 0 10px",fontSize:13,color:C.tealDark}}>✦ "{query.trim()}" will be registered as a new person.</p>
           )}
@@ -420,9 +409,7 @@ function CheckoutTimeEditor({ records, people, onUpdate }) {
   const [saveMsg, setSaveMsg] = useState(null);
 
   const q = search.trim().toLowerCase();
-  const matched = q.length > 0
-    ? records.filter(r => r.name.toLowerCase().includes(q)).slice(0,8)
-    : [];
+  const matched = q.length > 0 ? records.filter(r => r.name.toLowerCase().includes(q)).slice(0,8) : [];
 
   async function save(r) {
     if (!editVal) return;
@@ -728,7 +715,96 @@ function AnalyticsTab({records}) {
   );
 }
 
-function QueueView({records,people,onMarkComplete,onCancel,onLogout,loadData}) {
+// ── PUBLIC PAGE ──────────────────────────────────────────────
+function PublicApp({ records, people, services, loading, dbError, loadData }) {
+  const [form, setForm] = useState(emptyForm);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [success, setSuccess] = useState(null);
+  const [flagAlert, setFlagAlert] = useState(null);
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  const suggestRef = useRef(null);
+
+  useEffect(()=>{
+    function h(e){if(suggestRef.current&&!suggestRef.current.contains(e.target))setShowSuggestions(false);}
+    document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
+  },[]);
+
+  function handleNameInput(val){
+    setForm(f=>({...f,name:val,guestNumber:""}));setErrors(e=>({...e,name:undefined}));setFlagAlert(null);
+    if(!val.trim()){setSuggestions([]);setShowSuggestions(false);return;}
+    const q=val.toLowerCase();
+    const m=people.filter(p=>p.name.toLowerCase().includes(q)||String(p.guest_number).includes(q)).slice(0,6);
+    setSuggestions(m);setShowSuggestions(m.length>0);
+  }
+  function selectPerson(p){
+    setForm(f=>({...f,name:p.name,guestNumber:String(p.guest_number)}));
+    setSuggestions([]);setShowSuggestions(false);setErrors(e=>({...e,name:undefined}));
+    if(p.flagged)setFlagAlert(p);else setFlagAlert(null);
+  }
+  function countToday(s){return records.filter(r=>r.service===s&&r.check_in>=todayISO()).length;}
+  function validate(){
+    const e={};
+    if(!form.name.trim()&&!form.guestNumber.trim())e.name="Name or guest number is required";
+    if(!form.service)e.service="Please select a service";
+    if(form.service&&CAPPED_SERVICES[form.service]&&countToday(form.service)>=CAPPED_SERVICES[form.service])e.service=`${form.service} is full for today.`;
+    return e;
+  }
+  async function submit(){
+    const e=validate();if(Object.keys(e).length){setErrors(e);return;}
+    let name=form.name.trim(),gNum=form.guestNumber.trim();
+    if(!name&&gNum){const match=people.find(p=>String(p.guest_number)===gNum);if(!match){setErrors({name:"Guest number not found."});return;}name=match.name;}
+    const person=people.find(p=>p.name.toLowerCase()===name.toLowerCase());
+    if(person?.flagged){setFlagAlert(person);return;}
+    setSaving(true);
+    let guestNumber=gNum;
+    const existing=person;
+    if(!existing){
+      try{
+        const res=await api("people",{method:"POST",body:JSON.stringify({name}),headers:{...HEADERS,"Prefer":"return=representation"}});
+        if(!res.ok) throw new Error();
+        const[np]=await res.json();guestNumber=String(np.guest_number);await loadData();
+      }catch(_){setErrors({submit:"Failed to register guest."});setSaving(false);return;}
+    }else{guestNumber=String(existing.guest_number);}
+    const now=new Date().toISOString();
+    const position=form.service&&CAPPED_SERVICES[form.service]?nextAvailablePosition(form.service,records):null;
+    const toInsert=[{name,member_id:form.memberId||null,type:form.type,service:form.service,notes:form.notes||null,queue_position:position,check_in:now,check_out:null}];
+    const addOns=[];
+    if(form.service==="Day Center"){
+      if(form.addShowers&&countToday("Showers")<CAPPED_SERVICES["Showers"]){
+        const p=nextAvailablePosition("Showers",records);
+        toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Showers",notes:form.notes||null,queue_position:p,check_in:now,check_out:null});
+        addOns.push({service:"Showers",position:p});
+      }
+      if(form.addLaundry&&countToday("Laundry")<CAPPED_SERVICES["Laundry"]){
+        const p=nextAvailablePosition("Laundry",records);
+        toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Laundry",notes:form.notes||null,queue_position:p,check_in:now,check_out:null});
+        addOns.push({service:"Laundry",position:p});
+      }
+    }
+    try{
+      const res=await api("checkin_records",{method:"POST",body:JSON.stringify(toInsert.length===1?toInsert[0]:toInsert),headers:{...HEADERS,"Prefer":"return=representation"}});
+      if(!res.ok) throw new Error();
+      await loadData();
+      setSuccess({name,guestNumber,service:form.service,position,isNew:!existing,addOns});
+      setForm(emptyForm);setErrors({});setFlagAlert(null);
+      setTimeout(()=>setSuccess(null),7000);
+    }catch(_){setErrors({submit:"Failed to save. Please try again."});}
+    setSaving(false);
+  }
+
+  async function markComplete(id){
+    await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+    loadData();
+  }
+  async function cancelRecord(id){
+    await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});
+    loadData();
+  }
+
+  const availableServices = services.filter(s => isServiceAvailableToday(s) && !CAPPED_SERVICES[s]);
+
   return (
     <div style={{minHeight:"100vh",background:"#F7FAFA"}}>
       <div style={{background:"#46b4bf",padding:"28px 24px 22px",textAlign:"center"}}>
@@ -736,19 +812,113 @@ function QueueView({records,people,onMarkComplete,onCancel,onLogout,loadData}) {
         <LiveClock/>
         <div style={{display:"flex",justifyContent:"center",gap:10,marginTop:14}}>
           <button onClick={loadData} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)"}}>Refresh ↻</button>
-          <button onClick={onLogout} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)"}}>Log out</button>
         </div>
       </div>
-      <div style={{maxWidth:900,margin:"0 auto",padding:"28px 24px"}}>
-        <h2 style={{margin:"0 0 6px",fontSize:24,fontWeight:700}}>Showers & Laundry</h2>
-        <p style={{margin:"0 0 24px",fontSize:15,color:"#5A7070"}}>Today's queue — tap "✓ Done" when complete</p>
-        <ShowerLaundryPanel records={records} people={people} onMarkComplete={onMarkComplete} onCancel={onCancel}/>
+
+      <div style={{maxWidth:900,margin:"0 auto",padding:"28px 24px 4rem"}}>
+        {dbError&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:10,padding:"12px 16px",marginBottom:20,fontSize:15,color:"#C0392B"}}>{dbError}</div>}
+
+        {/* Showers & Laundry queue — always visible */}
+        <div style={{marginBottom:32}}>
+          <h2 style={{margin:"0 0 6px",fontSize:22,fontWeight:700}}>Showers & Laundry</h2>
+          <p style={{margin:"0 0 18px",fontSize:15,color:"#5A7070"}}>Today's queue</p>
+          <ShowerLaundryPanel records={records} people={people} onMarkComplete={markComplete} onCancel={cancelRecord}/>
+        </div>
+
+        <div style={{borderTop:"2px solid #C0E8EC",paddingTop:28,marginBottom:24}}>
+          <h2 style={{margin:"0 0 6px",fontSize:22,fontWeight:700}}>Check in</h2>
+          <p style={{margin:"0 0 20px",fontSize:15,color:"#5A7070"}}>Select your service and enter your name to check in</p>
+        </div>
+
+        {flagAlert&&(
+          <div style={{background:"#FFF0F0",border:`2px solid #C0392B`,borderRadius:12,padding:"18px 20px",marginBottom:24}}>
+            <p style={{margin:"0 0 6px",fontSize:18,fontWeight:700,color:"#C0392B"}}>⚑ This person is not allowed on the premises</p>
+            <p style={{margin:"0 0 4px",fontSize:15,color:"#C0392B"}}><strong>{flagAlert.name}</strong></p>
+            {flagAlert.flag_reason&&<p style={{margin:0,fontSize:14,color:"#C0392B"}}>Reason: {flagAlert.flag_reason}</p>}
+            <p style={{margin:"10px 0 0",fontSize:14,color:"#5A7070"}}>Please contact a staff member. Check-in has been blocked.</p>
+          </div>
+        )}
+        {success&&!flagAlert&&(
+          <div style={{background:"#EAF7F8",border:"1.5px solid #C0E8EC",borderRadius:12,padding:"18px 20px",marginBottom:24}}>
+            <p style={{margin:"0 0 6px",fontSize:18,fontWeight:700,color:"#2E8A94"}}>{success.isNew?`Welcome, ${success.name}! You've been registered.`:`Welcome back, ${success.name}!`}</p>
+            {success.position&&<p style={{margin:"0 0 4px",fontSize:15,color:"#46b4bf"}}>{success.service}: queue <strong>#{success.position}</strong></p>}
+            {success.addOns&&success.addOns.map(a=>(
+              <p key={a.service} style={{margin:"0 0 4px",fontSize:15,color:"#46b4bf"}}>{a.service==="Showers"?"Shower":a.service==="Laundry"?"Laundry":"Queue"} #<strong>{a.position}</strong></p>
+            ))}
+          </div>
+        )}
+        {errors.submit&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:10,padding:"12px 16px",marginBottom:20,fontSize:15,color:"#C0392B"}}>{errors.submit}</div>}
+
+        <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Visitor type</p>
+        <div style={{display:"flex",gap:14,marginBottom:22}}>
+          {["Guest","Volunteer"].map(t=>(
+            <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"14px 0",borderRadius:10,border:form.type===t?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:form.type===t?"#EAF7F8":"#fff",fontWeight:form.type===t?700:400,fontSize:17,cursor:"pointer",color:form.type===t?"#2E8A94":"#5A7070",fontFamily:"inherit"}}>{t}</button>
+          ))}
+        </div>
+
+        <p style={{margin:"0 0 8px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Name</p>
+        <div style={{marginBottom:6,position:"relative"}} ref={suggestRef}>
+          <input placeholder="Enter your full name…" value={form.name} onChange={e=>handleNameInput(e.target.value)} style={{...inpStyle,borderColor:errors.name?"#C0392B":"#D0E6E5"}}/>
+          {errors.name&&<p style={{margin:"6px 0 0",fontSize:14,color:"#C0392B"}}>{errors.name}</p>}
+          {showSuggestions&&suggestions.length>0&&(
+            <div style={{position:"absolute",top:"calc(100% + 2px)",left:0,right:0,background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,zIndex:10,boxShadow:"0 6px 20px rgba(70,180,191,0.15)",overflow:"hidden"}}>
+              {suggestions.map(p=>{const av=avColor(p.name);return(
+                <div key={p.id} onClick={()=>selectPerson(p)} style={{display:"flex",alignItems:"center",gap:12,padding:"13px 16px",cursor:"pointer",borderBottom:"1px solid #D0E6E5",background:p.flagged?"#FFF5F5":"#fff"}} onMouseEnter={e=>e.currentTarget.style.background=p.flagged?"#FFE8E8":"#EAF7F8"} onMouseLeave={e=>e.currentTarget.style.background=p.flagged?"#FFF5F5":"#fff"}>
+                  <div style={{width:40,height:40,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:14,flexShrink:0}}>{initials(p.name)||"?"}</div>
+                  <div style={{flex:1}}><p style={{margin:0,fontSize:16,fontWeight:600}}>{p.name}</p></div>
+                  {p.flagged&&<span style={{fontSize:13,padding:"3px 10px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600,flexShrink:0}}>⚑ Flagged</span>}
+                </div>
+              );})}
+            </div>
+          )}
+        </div>
+
+        <div style={{marginBottom:18,marginTop:14}}>
+          <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Select service</p>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:12}}>
+            {availableServices.map(s=>{
+              const cap=CAPPED_SERVICES[s],used=cap?countToday(s):0,full=cap&&used>=cap;
+              const isSelected=form.service===s;
+              return (
+                <button key={s} disabled={full} onClick={()=>{if(!full){setForm(f=>({...f,service:s,addShowers:false,addLaundry:false}));setErrors(e=>({...e,service:undefined}));}}}
+                  style={{padding:"22px 10px",borderRadius:14,border:isSelected?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:isSelected?"#EAF7F8":full?"#F7FAFA":"#fff",color:isSelected?"#2E8A94":full?"#B0C4C4":"#1D2B2B",fontWeight:isSelected?700:500,fontSize:16,cursor:full?"not-allowed":"pointer",fontFamily:"inherit",textAlign:"center",lineHeight:1.3,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6,opacity:full?0.6:1,boxShadow:isSelected?"0 0 0 3px rgba(70,180,191,0.2)":"none",transition:"all 0.15s ease"}}>
+                  <span style={{fontSize:17,fontWeight:isSelected?700:500}}>{s}</span>
+                  {cap&&<span style={{fontSize:13,fontWeight:500,padding:"3px 10px",borderRadius:20,background:full?"#FCECEA":isSelected?"#C0E8EC":"#EAF7F8",color:full?"#C0392B":isSelected?"#2E8A94":"#46b4bf"}}>{full?"Full":`${cap-used} left`}</span>}
+                </button>
+              );
+            })}
+          </div>
+          {errors.service&&<p style={{margin:"10px 0 0",fontSize:14,color:"#C0392B"}}>{errors.service}</p>}
+        </div>
+
+        {form.service==="Day Center"&&(()=>{
+          const showersAvail=isServiceAvailableToday("Showers")&&countToday("Showers")<(CAPPED_SERVICES["Showers"]||Infinity);
+          const laundryAvail=isServiceAvailableToday("Laundry")&&countToday("Laundry")<(CAPPED_SERVICES["Laundry"]||Infinity);
+          if(!showersAvail&&!laundryAvail) return null;
+          return (
+            <div style={{background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:10,padding:"16px 18px",marginBottom:18}}>
+              <p style={{margin:"0 0 12px",fontSize:14,fontWeight:600,color:"#2E8A94",textTransform:"uppercase",letterSpacing:"0.05em"}}>Also sign up for:</p>
+              <div style={{display:"flex",gap:24,flexWrap:"wrap"}}>
+                {showersAvail&&(<label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:16,color:C.text}}><input type="checkbox" checked={form.addShowers} onChange={e=>setForm(f=>({...f,addShowers:e.target.checked}))} style={{width:20,height:20,accentColor:"#46b4bf",cursor:"pointer"}}/><span>Showers</span><span style={{fontSize:14,color:C.textMuted}}>({CAPPED_SERVICES["Showers"]-countToday("Showers")} spots left)</span></label>)}
+                {laundryAvail&&(<label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:16,color:C.text}}><input type="checkbox" checked={form.addLaundry} onChange={e=>setForm(f=>({...f,addLaundry:e.target.checked}))} style={{width:20,height:20,accentColor:"#46b4bf",cursor:"pointer"}}/><span>Laundry</span><span style={{fontSize:14,color:C.textMuted}}>({CAPPED_SERVICES["Laundry"]-countToday("Laundry")} spots left)</span></label>)}
+              </div>
+            </div>
+          );
+        })()}
+
+        <div style={{marginBottom:26}}>
+          <textarea placeholder="Notes (optional)" value={form.notes} onChange={ev=>setForm(f=>({...f,notes:ev.target.value}))} rows={3} style={{...inpStyle,resize:"vertical"}}/>
+        </div>
+        <button onClick={submit} disabled={saving||!!flagAlert} style={{...btnPrimary,width:"100%",padding:16,fontSize:18,opacity:(saving||!!flagAlert)?0.5:1,cursor:flagAlert?"not-allowed":"pointer"}}>
+          {saving?"Saving…":"Check in"}
+        </button>
       </div>
     </div>
   );
 }
 
-function App() {
+// ── ADMIN APP ────────────────────────────────────────────────
+function AdminApp() {
   const [view,setView]=useState("checkin");
   const [form,setForm]=useState(emptyForm);
   const [records,setRecords]=useState([]);
@@ -876,16 +1046,8 @@ function App() {
     const toInsert=[{name,member_id:form.memberId||null,type:form.type,service:form.service,notes:form.notes||null,queue_position:position,check_in:now,check_out:null}];
     const addOns=[];
     if(form.service==="Day Center"){
-      if(form.addShowers&&countToday("Showers")<CAPPED_SERVICES["Showers"]){
-        const showersPos=nextAvailablePosition("Showers",records);
-        toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Showers",notes:form.notes||null,queue_position:showersPos,check_in:now,check_out:null});
-        addOns.push({service:"Showers",position:showersPos});
-      }
-      if(form.addLaundry&&countToday("Laundry")<CAPPED_SERVICES["Laundry"]){
-        const laundryPos=nextAvailablePosition("Laundry",records);
-        toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Laundry",notes:form.notes||null,queue_position:laundryPos,check_in:now,check_out:null});
-        addOns.push({service:"Laundry",position:laundryPos});
-      }
+      if(form.addShowers&&countToday("Showers")<CAPPED_SERVICES["Showers"]){const p=nextAvailablePosition("Showers",records);toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Showers",notes:form.notes||null,queue_position:p,check_in:now,check_out:null});addOns.push({service:"Showers",position:p});}
+      if(form.addLaundry&&countToday("Laundry")<CAPPED_SERVICES["Laundry"]){const p=nextAvailablePosition("Laundry",records);toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Laundry",notes:form.notes||null,queue_position:p,check_in:now,check_out:null});addOns.push({service:"Laundry",position:p});}
     }
     try{
       const res=await api("checkin_records",{method:"POST",body:JSON.stringify(toInsert.length===1?toInsert[0]:toInsert),headers:{...HEADERS,"Prefer":"return=representation"}});
@@ -898,18 +1060,9 @@ function App() {
     setSaving(false);
   }
 
-  async function markComplete(id){
-    await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-    loadData();
-  }
-  async function checkOut(id){
-    await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-    loadData();
-  }
-  async function cancelRecord(id){
-    await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});
-    loadData();
-  }
+  async function markComplete(id){await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}
+  async function checkOut(id){await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}
+  async function cancelRecord(id){await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});loadData();}
   async function deleteRecord(id){await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});loadData();}
   async function flagPerson(p,flagged,reason){await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({flagged,flag_reason:reason||null}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}
   function exportCSV(){
@@ -944,14 +1097,15 @@ function App() {
     </button>
   );
 
-  const availableServices = services.filter(s => isServiceAvailableToday(s) && !CAPPED_SERVICES[s]);
+  const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_SERVICES[s]);
 
   return (
-    <div style={{minHeight:"100vh",background:"#F7FAFA",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"}}>
+    <div style={{minHeight:"100vh",background:"#F7FAFA"}}>
       <div style={{background:"#46b4bf",padding:"28px 24px 22px",textAlign:"center"}}>
         <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Logo/></div>
         <LiveClock/>
         <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:10,marginTop:16}}>
+          <span style={{fontSize:13,padding:"4px 12px",borderRadius:20,background:"rgba(255,255,255,0.2)",color:"#fff",fontWeight:600}}>Admin mode</span>
           <button onClick={()=>{setShowPinModal(showPinModal==="queue"?null:"queue");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:14}}>Showers & Laundry</button>
           <button onClick={()=>{setShowPinModal(showPinModal==="admin"?null:"admin");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:14}}>Admin</button>
         </div>
@@ -978,7 +1132,6 @@ function App() {
               <p style={{margin:0,fontWeight:700,fontSize:18}}>Admin panel</p>
               <button onClick={()=>setAdminAuth(false)} style={{...btnGhost,color:"#C0392B",borderColor:"#F0A9A3",fontSize:14}}>Log out</button>
             </div>
-
             <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service capacity today</p>
             <div style={{display:"flex",gap:14,marginBottom:22}}>
               {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{const used=countToday(svc),pct=Math.round(used/cap*100);return(
@@ -989,17 +1142,18 @@ function App() {
                 </div>
               );})}
             </div>
-
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
               <p style={{margin:"0 0 14px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Showers & Laundry queue</p>
               <ShowerLaundryPanel records={records} people={people} onMarkComplete={markComplete} onCancel={cancelRecord} onManualAdd={loadData}/>
             </div>
-
+            <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
+              <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Modify check-out times</p>
+              <CheckoutTimeEditor records={records} people={people} onUpdate={loadData}/>
+            </div>
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
               <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Manage people</p>
               <PeopleRemover people={people} onRemove={async(p)=>{await api(`people?id=eq.${p.id}`,{method:"DELETE"});loadData();}} onFlag={flagPerson}/>
             </div>
-
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
               <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service types</p>
               <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:12}}>
@@ -1010,7 +1164,6 @@ function App() {
                 <button onClick={addService} style={{...btnOutline,padding:"10px 20px",fontSize:15}}>Add</button>
               </div>
             </div>
-
             <button onClick={exportCSV} style={{...btnOutline,width:"100%",textAlign:"center",padding:13,fontSize:15}}>Export all check-ins as CSV ↓</button>
           </div>
         )}
@@ -1037,6 +1190,12 @@ function App() {
           </div>
         )}
 
+        <div style={{display:"flex",borderBottom:"2px solid #C0E8EC",marginBottom:28}}>
+          <Tab id="checkin" label="Check in"/>
+          <Tab id="log" label={`Visit log (${records.length})`}/>
+          {adminAuth&&<Tab id="analytics" label="Analytics"/>}
+        </div>
+
         {view==="checkin"&&(
           <div>
             {scanResult&&<ScanToast result={scanResult} onDone={()=>setScanResult(null)}/>}
@@ -1052,11 +1211,7 @@ function App() {
               <div style={{background:"#EAF7F8",border:"1.5px solid #C0E8EC",borderRadius:12,padding:"18px 20px",marginBottom:24}}>
                 <p style={{margin:"0 0 6px",fontSize:18,fontWeight:700,color:"#2E8A94"}}>{success.isNew?`Welcome, ${success.name}! You've been registered.`:`Welcome back, ${success.name}!`}</p>
                 {success.position&&<p style={{margin:"0 0 4px",fontSize:15,color:"#46b4bf"}}>{success.service}: queue <strong>#{success.position}</strong></p>}
-                {success.addOns&&success.addOns.map(a=>(
-                  <p key={a.service} style={{margin:"0 0 4px",fontSize:15,color:"#46b4bf"}}>
-                    {a.service==="Showers"?"Shower":a.service==="Laundry"?"Laundry":"Queue"} #<strong>{a.position}</strong>
-                  </p>
-                ))}
+                {success.addOns&&success.addOns.map(a=>(<p key={a.service} style={{margin:"0 0 4px",fontSize:15,color:"#46b4bf"}}>{a.service==="Showers"?"Shower":a.service==="Laundry"?"Laundry":"Queue"} #<strong>{a.position}</strong></p>))}
               </div>
             )}
             {errors.submit&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:10,padding:"12px 16px",marginBottom:20,fontSize:15,color:"#C0392B"}}>{errors.submit}</div>}
@@ -1085,64 +1240,23 @@ function App() {
               )}
             </div>
 
-            
-<div style={{marginBottom:18,marginTop:14}}>
-  <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Select service</p>
-  <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:12}}>
-    {availableServices.map(s=>{
-      const cap=CAPPED_SERVICES[s],used=cap?countToday(s):0,full=cap&&used>=cap;
-      const isSelected=form.service===s;
-      return (
-        <button
-          key={s}
-          disabled={full}
-          onClick={()=>{
-            if(!full){
-              setForm(f=>({...f,service:s,addShowers:false,addLaundry:false}));
-              setErrors(e=>({...e,service:undefined}));
-            }
-          }}
-          style={{
-            padding:"22px 10px",
-            borderRadius:14,
-            border: isSelected?"2px solid #46b4bf": full?"1.5px solid #D0E6E5":"1.5px solid #D0E6E5",
-            background: isSelected?"#EAF7F8": full?"#F7FAFA":"#fff",
-            color: isSelected?"#2E8A94": full?"#B0C4C4":"#1D2B2B",
-            fontWeight: isSelected?700:500,
-            fontSize:16,
-            cursor:full?"not-allowed":"pointer",
-            fontFamily:"inherit",
-            textAlign:"center",
-            lineHeight:1.3,
-            display:"flex",
-            flexDirection:"column",
-            alignItems:"center",
-            justifyContent:"center",
-            gap:6,
-            opacity:full?0.6:1,
-            boxShadow: isSelected?"0 0 0 3px rgba(70,180,191,0.2)":"none",
-            transition:"all 0.15s ease",
-          }}
-        >
-          <span style={{fontSize:17,fontWeight:isSelected?700:500}}>{s}</span>
-          {cap&&(
-            <span style={{
-              fontSize:13,
-              fontWeight:500,
-              padding:"3px 10px",
-              borderRadius:20,
-              background: full?"#FCECEA": isSelected?"#C0E8EC":"#EAF7F8",
-              color: full?"#C0392B": isSelected?"#2E8A94":"#46b4bf",
-            }}>
-              {full?"Full":`${cap-used} left`}
-            </span>
-          )}
-        </button>
-      );
-    })}
-  </div>
-  {errors.service&&<p style={{margin:"10px 0 0",fontSize:14,color:"#C0392B"}}>{errors.service}</p>}
-</div>
+            <div style={{marginBottom:18,marginTop:14}}>
+              <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Select service</p>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:12}}>
+                {availableServices.map(s=>{
+                  const cap=CAPPED_SERVICES[s],used=cap?countToday(s):0,full=cap&&used>=cap;
+                  const isSelected=form.service===s;
+                  return (
+                    <button key={s} disabled={full} onClick={()=>{if(!full){setForm(f=>({...f,service:s,addShowers:false,addLaundry:false}));setErrors(e=>({...e,service:undefined}));}}}
+                      style={{padding:"22px 10px",borderRadius:14,border:isSelected?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:isSelected?"#EAF7F8":full?"#F7FAFA":"#fff",color:isSelected?"#2E8A94":full?"#B0C4C4":"#1D2B2B",fontWeight:isSelected?700:500,fontSize:16,cursor:full?"not-allowed":"pointer",fontFamily:"inherit",textAlign:"center",lineHeight:1.3,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:6,opacity:full?0.6:1,boxShadow:isSelected?"0 0 0 3px rgba(70,180,191,0.2)":"none",transition:"all 0.15s ease"}}>
+                      <span style={{fontSize:17,fontWeight:isSelected?700:500}}>{s}</span>
+                      {cap&&<span style={{fontSize:13,fontWeight:500,padding:"3px 10px",borderRadius:20,background:full?"#FCECEA":isSelected?"#C0E8EC":"#EAF7F8",color:full?"#C0392B":isSelected?"#2E8A94":"#46b4bf"}}>{full?"Full":`${cap-used} left`}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              {errors.service&&<p style={{margin:"10px 0 0",fontSize:14,color:"#C0392B"}}>{errors.service}</p>}
+            </div>
 
             {form.service==="Day Center"&&(()=>{
               const showersAvail=isServiceAvailableToday("Showers")&&countToday("Showers")<(CAPPED_SERVICES["Showers"]||Infinity);
@@ -1152,20 +1266,8 @@ function App() {
                 <div style={{background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:10,padding:"16px 18px",marginBottom:18}}>
                   <p style={{margin:"0 0 12px",fontSize:14,fontWeight:600,color:"#2E8A94",textTransform:"uppercase",letterSpacing:"0.05em"}}>Also sign up for:</p>
                   <div style={{display:"flex",gap:24,flexWrap:"wrap"}}>
-                    {showersAvail&&(
-                      <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:16,color:C.text}}>
-                        <input type="checkbox" checked={form.addShowers} onChange={e=>setForm(f=>({...f,addShowers:e.target.checked}))} style={{width:20,height:20,accentColor:"#46b4bf",cursor:"pointer"}}/>
-                        <span>Showers</span>
-                        <span style={{fontSize:14,color:C.textMuted}}>({CAPPED_SERVICES["Showers"]-countToday("Showers")} spots left)</span>
-                      </label>
-                    )}
-                    {laundryAvail&&(
-                      <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:16,color:C.text}}>
-                        <input type="checkbox" checked={form.addLaundry} onChange={e=>setForm(f=>({...f,addLaundry:e.target.checked}))} style={{width:20,height:20,accentColor:"#46b4bf",cursor:"pointer"}}/>
-                        <span>Laundry</span>
-                        <span style={{fontSize:14,color:C.textMuted}}>({CAPPED_SERVICES["Laundry"]-countToday("Laundry")} spots left)</span>
-                      </label>
-                    )}
+                    {showersAvail&&(<label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:16,color:C.text}}><input type="checkbox" checked={form.addShowers} onChange={e=>setForm(f=>({...f,addShowers:e.target.checked}))} style={{width:20,height:20,accentColor:"#46b4bf",cursor:"pointer"}}/><span>Showers</span><span style={{fontSize:14,color:C.textMuted}}>({CAPPED_SERVICES["Showers"]-countToday("Showers")} spots left)</span></label>)}
+                    {laundryAvail&&(<label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:16,color:C.text}}><input type="checkbox" checked={form.addLaundry} onChange={e=>setForm(f=>({...f,addLaundry:e.target.checked}))} style={{width:20,height:20,accentColor:"#46b4bf",cursor:"pointer"}}/><span>Laundry</span><span style={{fontSize:14,color:C.textMuted}}>({CAPPED_SERVICES["Laundry"]-countToday("Laundry")} spots left)</span></label>)}
                   </div>
                 </div>
               );
@@ -1213,7 +1315,51 @@ function App() {
   );
 }
 
-ReactDOM.render(<App/>, document.getElementById("root"));
+// ── ROOT ─────────────────────────────────────────────────────
+function Root() {
+  const [records, setRecords] = useState([]);
+  const [services, setServices] = useState([]);
+  const [people, setPeople] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [dbError, setDbError] = useState(null);
+
+  const loadData = useCallback(async () => {
+    try {
+      const [rRes, sRes, pRes] = await Promise.all([api("checkin_records?order=check_in.desc"), api("checkin_services?order=name.asc"), api("people?order=name.asc")]);
+      if (!rRes.ok || !sRes.ok || !pRes.ok) throw new Error();
+      const [rData, sData, pData] = await Promise.all([rRes.json(), sRes.json(), pRes.json()]);
+      setRecords(rData); setServices(sData.map(s => s.name)); setPeople(pData); setDbError(null);
+    } catch (_) { setDbError("Could not connect to database."); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadData(); const t = setInterval(loadData, 15000); return () => clearInterval(t); }, [loadData]);
+
+  if (IS_ADMIN_MODE) return <AdminApp/>;
+  return <PublicApp records={records} people={people} services={services} loading={loading} dbError={dbError} loadData={loadData}/>;
+}
+
+function QueueView({records,people,onMarkComplete,onCancel,onLogout,loadData}) {
+  return (
+    <div style={{minHeight:"100vh",background:"#F7FAFA"}}>
+      <div style={{background:"#46b4bf",padding:"28px 24px 22px",textAlign:"center"}}>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Logo/></div>
+        <LiveClock/>
+        <div style={{display:"flex",justifyContent:"center",gap:10,marginTop:14}}>
+          <button onClick={loadData} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)"}}>Refresh ↻</button>
+          <button onClick={onLogout} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)"}}>Log out</button>
+        </div>
+      </div>
+      <div style={{maxWidth:900,margin:"0 auto",padding:"28px 24px"}}>
+        <h2 style={{margin:"0 0 6px",fontSize:24,fontWeight:700}}>Showers & Laundry</h2>
+        <p style={{margin:"0 0 24px",fontSize:15,color:"#5A7070"}}>Today's queue — tap "✓ Done" when complete</p>
+        <ShowerLaundryPanel records={records} people={people} onMarkComplete={onMarkComplete} onCancel={onCancel}/>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.render(<Root/>, document.getElementById("root"));
 </script>
 </body>
 </html>
