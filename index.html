@@ -221,9 +221,7 @@ function PeopleRemover({people, onRemove, onFlag}) {
               {p.type==="Volunteer"&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:"#2E8A94",fontWeight:500}}>Volunteer</span>}
             </div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              {p.type==="Volunteer"&&(
-                <button onClick={()=>setShowQR(showQR===p.id?null:p.id)} style={{...btnGhost,fontSize:12,color:C.teal,borderColor:C.tealMid}}>QR Code</button>
-              )}
+              <button onClick={()=>setShowQR(showQR===p.id?null:p.id)} style={{...btnGhost,fontSize:12,color:C.teal,borderColor:C.tealMid}}>QR Code</button>
               <button onClick={()=>{setFlagging(flagging===p.id?null:p.id);setConfirm(null);setFlagReason(p.flag_reason||"");}} style={{...btnGhost,fontSize:12,color:p.flagged?C.teal:C.danger,borderColor:p.flagged?C.border:C.dangerBorder}}>{p.flagged?"Unflag":"Flag"}</button>
               {confirm===p.id?(
                 <div style={{display:"flex",gap:6}}>
