@@ -844,6 +844,7 @@ function App() {
       <div style={{background:"#46b4bf",padding:"24px 20px 18px",textAlign:"center"}}>
         <div style={{display:"flex",justifyContent:"center",marginBottom:14}}><Logo/></div>
         <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:8}}>
+          {!loading&&<span style={{width:8,height:8,borderRadius:"50%",background:dbError?"#F5A623":"rgba(255,255,255,0.6)",display:"inline-block"}}/>}
           <button onClick={()=>{setShowPinModal(showPinModal==="queue"?null:"queue");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:12}}>Showers & Laundry</button>
           <button onClick={()=>{setShowPinModal(showPinModal==="admin"?null:"admin");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:12}}>{adminAuth?"Admin":"Admin"}</button>
         </div>
