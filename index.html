@@ -70,6 +70,19 @@ function duration(inT,outT,service) {
   const m=Math.round((new Date(outT)-new Date(inT))/60000);
   return m<60?`${m}m`:`${Math.floor(m/60)}h ${m%60}m`;
 }
+// Convert ISO to local datetime-local input value
+function isoToLocalInput(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+// Convert datetime-local input value to ISO
+function localInputToIso(val) {
+  if (!val) return null;
+  return new Date(val).toISOString();
+}
+
 const AV_COLORS=[{bg:"#C2E8E6",color:"#1D5C5A"},{bg:"#B8DFE8",color:"#1A4A5C"},{bg:"#C8E6D4",color:"#1A5C35"},{bg:"#E6D4C8",color:"#5C3A1A"},{bg:"#D4C8E6",color:"#3A1A5C"}];
 function avColor(name) { let h=0; for(let c of name)h=(h*31+c.charCodeAt(0))&0xffff; return AV_COLORS[h%AV_COLORS.length]; }
 const emptyForm = {name:"",guestNumber:"",memberId:"",type:"Guest",service:"",notes:""};
@@ -173,6 +186,152 @@ function SimpleLineChart({data,height=180}) {
     </div>
   );
 }
+
+// ── NEW: Checkout Time Editor ─────────────────────────────────────────────────
+function CheckoutTimeEditor({ records, people, onUpdate }) {
+  const [search, setSearch] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editVal, setEditVal] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState(null);
+
+  const q = search.trim().toLowerCase();
+  const matched = q.length > 0
+    ? records.filter(r => {
+        const p = people.find(x => x.name === r.name);
+        return r.name.toLowerCase().includes(q) || (p && String(p.guest_number).includes(q));
+      }).slice(0, 8)
+    : [];
+
+  async function save(r) {
+    if (!editVal) return;
+    const newOut = localInputToIso(editVal);
+    if (new Date(newOut) <= new Date(r.check_in)) {
+      setSaveMsg({ id: r.id, type: "error", text: "Check-out must be after check-in." });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await api(`checkin_records?id=eq.${r.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ check_out: newOut }),
+        headers: { ...HEADERS, "Prefer": "return=minimal" }
+      });
+      if (!res.ok) throw new Error();
+      setSaveMsg({ id: r.id, type: "ok", text: "Saved!" });
+      setEditingId(null);
+      onUpdate();
+      setTimeout(() => setSaveMsg(null), 2500);
+    } catch (_) {
+      setSaveMsg({ id: r.id, type: "error", text: "Failed to save. Try again." });
+    }
+    setSaving(false);
+  }
+
+  async function clearCheckout(r) {
+    setSaving(true);
+    try {
+      const res = await api(`checkin_records?id=eq.${r.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ check_out: null }),
+        headers: { ...HEADERS, "Prefer": "return=minimal" }
+      });
+      if (!res.ok) throw new Error();
+      setSaveMsg({ id: r.id, type: "ok", text: "Check-out cleared." });
+      setEditingId(null);
+      onUpdate();
+      setTimeout(() => setSaveMsg(null), 2500);
+    } catch (_) {
+      setSaveMsg({ id: r.id, type: "error", text: "Failed to clear. Try again." });
+    }
+    setSaving(false);
+  }
+
+  return (
+    <div>
+      <input
+        placeholder="Search by name or guest #…"
+        value={search}
+        onChange={e => { setSearch(e.target.value); setEditingId(null); setSaveMsg(null); }}
+        style={{ ...inpStyle, marginBottom: 8 }}
+      />
+      {q.length > 0 && matched.length === 0 && (
+        <p style={{ fontSize: 12, color: C.textMuted }}>No records found.</p>
+      )}
+      {matched.map(r => {
+        const person = people.find(p => p.name === r.name);
+        const av = avColor(r.name);
+        const isEditing = editingId === r.id;
+        const msg = saveMsg?.id === r.id ? saveMsg : null;
+        return (
+          <div key={r.id} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 8, overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px" }}>
+              <div style={{ width: 34, height: 34, borderRadius: "50%", background: av.bg, color: av.color, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 12, flexShrink: 0 }}>{initials(r.name) || "?"}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>{r.name}</span>
+                  {person && <span style={{ fontSize: 11, color: C.textMuted }}>#{person.guest_number}</span>}
+                  <span style={{ fontSize: 11, padding: "1px 7px", borderRadius: 20, background: C.tealLight, color: C.tealDark }}>{r.service}</span>
+                  {!r.check_out && <span style={{ fontSize: 11, padding: "1px 7px", borderRadius: 20, background: "#EAF7F8", color: "#46b4bf", fontWeight: 500 }}>Active</span>}
+                </div>
+                <p style={{ margin: "2px 0 0", fontSize: 11, color: C.textLight }}>
+                  In: {fmt(r.check_in)}
+                  {r.check_out ? ` · Out: ${fmt(r.check_out)}` : " · No check-out yet"}
+                </p>
+              </div>
+              <button
+                onClick={() => { setEditingId(isEditing ? null : r.id); setEditVal(isoToLocalInput(r.check_out)); setSaveMsg(null); }}
+                style={{ ...btnGhost, fontSize: 12, color: C.teal, borderColor: C.tealMid, flexShrink: 0 }}
+              >
+                {isEditing ? "Cancel" : r.check_out ? "Edit time" : "Set time"}
+              </button>
+            </div>
+            {isEditing && (
+              <div style={{ padding: "10px 12px", borderTop: `1px solid ${C.border}`, background: C.bg }}>
+                <p style={{ margin: "0 0 6px", fontSize: 12, color: C.textMuted }}>
+                  Set check-out time <span style={{ color: C.textLight }}>(check-in: {fmt(r.check_in)})</span>
+                </p>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <input
+                    type="datetime-local"
+                    value={editVal}
+                    onChange={e => setEditVal(e.target.value)}
+                    style={{ ...inpStyle, width: "auto", flex: 1, minWidth: 200 }}
+                  />
+                  <button
+                    onClick={() => save(r)}
+                    disabled={saving || !editVal}
+                    style={{ ...btnPrimary, padding: "9px 18px", fontSize: 13, opacity: saving || !editVal ? 0.5 : 1 }}
+                  >
+                    {saving ? "Saving…" : "Save"}
+                  </button>
+                  {r.check_out && (
+                    <button
+                      onClick={() => clearCheckout(r)}
+                      disabled={saving}
+                      style={{ ...btnGhost, fontSize: 12, color: C.danger, borderColor: C.dangerBorder }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                {msg && (
+                  <p style={{ margin: "6px 0 0", fontSize: 12, color: msg.type === "ok" ? C.tealDark : C.danger }}>
+                    {msg.type === "ok" ? "✓ " : "⚠ "}{msg.text}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      {q.length === 0 && (
+        <p style={{ fontSize: 12, color: C.textLight, textAlign: "center", padding: "8px 0" }}>Search for a visitor to edit their check-out time.</p>
+      )}
+    </div>
+  );
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function PeopleRemover({people,onRemove,onFlag}) {
   const [query,setQuery]=React.useState("");
@@ -590,6 +749,8 @@ function App() {
               <p style={{margin:0,fontWeight:700,fontSize:15}}>Admin panel</p>
               <button onClick={()=>setAdminAuth(false)} style={{...btnGhost,color:"#C0392B",borderColor:"#F0A9A3"}}>Log out</button>
             </div>
+
+            {/* Service capacity */}
             <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service capacity today</p>
             <div style={{display:"flex",gap:10,marginBottom:18}}>
               {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{const used=countToday(svc),pct=Math.round(used/cap*100);return(
@@ -600,10 +761,20 @@ function App() {
                 </div>
               );})}
             </div>
+
+            {/* Modify check-out times — NEW SECTION */}
+            <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
+              <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Modify check-out times</p>
+              <CheckoutTimeEditor records={records} people={people} onUpdate={loadData}/>
+            </div>
+
+            {/* Manage people */}
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
               <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Manage people</p>
               <PeopleRemover people={people} onRemove={async(p)=>{await api(`people?id=eq.${p.id}`,{method:"DELETE"});loadData();}} onFlag={flagPerson}/>
             </div>
+
+            {/* Service types */}
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
               <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service types</p>
               <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
@@ -614,6 +785,7 @@ function App() {
                 <button onClick={addService} style={{...btnOutline,padding:"8px 16px"}}>Add</button>
               </div>
             </div>
+
             <button onClick={exportCSV} style={{...btnOutline,width:"100%",textAlign:"center",padding:10}}>Export all check-ins as CSV ↓</button>
           </div>
         )}
