@@ -1037,12 +1037,6 @@ function App() {
           </div>
         )}
 
-        <div style={{display:"flex",borderBottom:"2px solid #C0E8EC",marginBottom:28}}>
-          <Tab id="checkin" label="Check in"/>
-          <Tab id="log" label={`Visit log (${records.length})`}/>
-          {adminAuth&&<Tab id="analytics" label="Analytics"/>}
-        </div>
-
         {view==="checkin"&&(
           <div>
             {scanResult&&<ScanToast result={scanResult} onDone={()=>setScanResult(null)}/>}
