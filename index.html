@@ -589,7 +589,7 @@ function App() {
     const existing=person;
     if(!existing){
       try{
-        const res=await api("people",{method:"POST",body:JSON.stringify({name,type:form.type}),headers:{...HEADERS,"Prefer":"return=representation"}});
+        const res=await api("people",{method:"POST",body:JSON.stringify({name}),headers:{...HEADERS,"Prefer":"return=representation"}});
         if(!res.ok) throw new Error();
         const[np]=await res.json();guestNumber=String(np.guest_number);await loadData();
       }catch(_){setErrors({submit:"Failed to register guest."});setSaving(false);return;}
