@@ -813,9 +813,18 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
         {dbError&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:10,padding:"12px 16px",marginBottom:20,fontSize:15,color:"#C0392B"}}>{dbError}</div>}
 
         {/* Showers & Laundry availability — simple public view */}
+        
+        {!loading&&(
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:14,marginBottom:24}}>
+            {[["Today",records.filter(r=>r.check_in>=todayISO()).length],["Guests",records.filter(r=>r.type==="Guest").length],["Volunteers",records.filter(r=>r.type==="Volunteer").length]].map(([l,v])=>(
+              <div key={l} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:"16px 14px",textAlign:"center"}}>
+                <p style={{margin:0,fontSize:28,fontWeight:700,color:"#46b4bf"}}>{v}</p>
+                <p style={{margin:0,fontSize:13,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{l}</p>
+              </div>
+            ))}
+          </div>
+        )}
         <div style={{marginBottom:32}}>
-          <h2 style={{margin:"0 0 6px",fontSize:22,fontWeight:700}}>Showers & Laundry</h2>
-          <p style={{margin:"0 0 18px",fontSize:15,color:"#5A7070"}}>Today's availability</p>
           <div style={{display:"flex",gap:14}}>
             {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{
               const used=records.filter(r=>r.service===svc&&r.check_in>=todayISO()).length;
@@ -830,17 +839,6 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
             })}
           </div>
         </div>
-
-        {!loading&&(
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:14,marginBottom:24}}>
-            {[["Today",records.filter(r=>r.check_in>=todayISO()).length],["Guests",records.filter(r=>r.type==="Guest").length],["Volunteers",records.filter(r=>r.type==="Volunteer").length]].map(([l,v])=>(
-              <div key={l} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:"16px 14px",textAlign:"center"}}>
-                <p style={{margin:0,fontSize:28,fontWeight:700,color:"#46b4bf"}}>{v}</p>
-                <p style={{margin:0,fontSize:13,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{l}</p>
-              </div>
-            ))}
-          </div>
-        )}
 
         <div style={{borderTop:"2px solid #C0E8EC",paddingTop:28,marginBottom:24}}>
           <h2 style={{margin:"0 0 6px",fontSize:22,fontWeight:700}}>Check in</h2>
