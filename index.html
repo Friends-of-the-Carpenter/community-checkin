@@ -113,10 +113,10 @@ function LiveClock() {
     return () => clearInterval(t);
   }, []);
   const date = now.toLocaleDateString("en-US", { weekday:"long", month:"long", day:"numeric", year:"numeric" });
-  const time = now.toLocaleTimeString("en-US", { hour:"numeric", minute:"2-digit", second:"2-digit" });
+  const time = now.toLocaleTimeString("en-US", { hour:"numeric", minute:"2-digit" });
   return (
     <div style={{marginTop:10,marginBottom:2}}>
-      <p style={{margin:0,fontSize:13,color:"rgba(255,255,255,0.9)",fontWeight:500}}>{date}</p>
+      <p style={{margin:0,fontSize:15,color:"rgba(255,255,255,0.9)",fontWeight:500}}>{date}</p>
       <p style={{margin:"2px 0 0",fontSize:20,color:"#fff",fontWeight:700,letterSpacing:"0.02em"}}>{time}</p>
     </div>
   );
@@ -265,7 +265,6 @@ function ShowerLaundryPanel({ records, people, onMarkComplete, onCancel, onManua
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}>
                       <span style={{fontWeight:600,fontSize:14}}>{r.name}</span>
-                      {person&&<span style={{fontSize:11,color:"#5A7070"}}>#{person.guest_number}</span>}
                     </div>
                     <p style={{margin:0,fontSize:11,color:"#5A7070"}}>{numLabel} #{r.queue_position} · In: {fmt(r.check_in)}</p>
                   </div>
@@ -1061,7 +1060,7 @@ function App() {
             {!scanResult&&success&&!flagAlert&&(
               <div style={{background:"#EAF7F8",border:"1.5px solid #C0E8EC",borderRadius:10,padding:"14px 16px",marginBottom:20}}>
                 <p style={{margin:"0 0 4px",fontSize:15,fontWeight:700,color:"#2E8A94"}}>{success.isNew?`Welcome, ${success.name}! You've been registered.`:`Welcome back, ${success.name}!`}</p>
-                <p style={{margin:"0 0 4px",fontSize:13,color:"#46b4bf"}}>Guest number: <strong>#{success.guestNumber}</strong></p>
+
                 {success.position&&<p style={{margin:"0 0 2px",fontSize:13,color:"#46b4bf"}}>{success.service}: queue <strong>#{success.position}</strong></p>}
                 {success.addOns&&success.addOns.map(a=>(
                   <p key={a.service} style={{margin:"0 0 2px",fontSize:13,color:"#46b4bf"}}>
@@ -1088,7 +1087,7 @@ function App() {
                   {suggestions.map(p=>{const av=avColor(p.name);return(
                     <div key={p.id} onClick={()=>selectPerson(p)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",cursor:"pointer",borderBottom:"1px solid #D0E6E5",background:p.flagged?"#FFF5F5":"#fff"}} onMouseEnter={e=>e.currentTarget.style.background=p.flagged?"#FFE8E8":"#EAF7F8"} onMouseLeave={e=>e.currentTarget.style.background=p.flagged?"#FFF5F5":"#fff"}>
                       <div style={{width:34,height:34,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:12,flexShrink:0}}>{initials(p.name)||"?"}</div>
-                      <div style={{flex:1}}><p style={{margin:0,fontSize:14,fontWeight:600}}>{p.name}</p><p style={{margin:0,fontSize:12,color:"#5A7070"}}>Guest #{p.guest_number}</p></div>
+                      <div style={{flex:1}}><p style={{margin:0,fontSize:14,fontWeight:600}}>{p.name}</p></div>
                       {p.flagged&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600,flexShrink:0}}>⚑ Flagged</span>}
                     </div>
                   );})}
