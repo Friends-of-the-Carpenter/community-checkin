@@ -124,7 +124,7 @@ function SimpleBarChart({data, keys, colors, height=180}) {
       </div>
       <div style={{display:"flex",gap:4,overflowX:"auto",paddingTop:4}}>
         {data.map((d, i) => (
-          <span key={i} style={{fontSize:10,color:"#8AA5A5",flexShrink:0,width:(barW*keys.length)+(keys.length-1)*2,textAlign:"center",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{d.date}</span>
+          <span key={i} style={{fontSize:12,color:"#8AA5A5",flexShrink:0,width:(barW*keys.length)+(keys.length-1)*2,textAlign:"center",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{d.date}</span>
         ))}
       </div>
     </div>
@@ -611,7 +611,7 @@ function App() {
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
               <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service types</p>
               <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
-                {services.map(s => (<span key={s} style={{display:"flex",alignItems:"center",gap:4,fontSize:12,padding:"4px 12px",background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:20,color:"#2E8A94",fontWeight:500}}>{s}{CAPPED_SERVICES[s]?<span style={{fontSize:10,opacity:0.7}}> · {CAPPED_SERVICES[s]}</span>:null}<button onClick={()=>removeService(s)} style={{background:"none",border:"none",cursor:"pointer",color:"#2E8A94",padding:"0 2px",fontSize:14,lineHeight:1,opacity:0.6}}>×</button></span>))}
+                {services.map(s => (<span key={s} style={{display:"flex",alignItems:"center",gap:4,fontSize:12,padding:"4px 12px",background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:20,color:"#2E8A94",fontWeight:500}}>{s}{CAPPED_SERVICES[s]?<span style={{fontSize:12,opacity:0.7}}> · {CAPPED_SERVICES[s]}</span>:null}<button onClick={()=>removeService(s)} style={{background:"none",border:"none",cursor:"pointer",color:"#2E8A94",padding:"0 2px",fontSize:14,lineHeight:1,opacity:0.6}}>×</button></span>))}
               </div>
               <div style={{display:"flex",gap:8}}>
                 <input placeholder="Add new service…" value={newService} onChange={e=>setNewService(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addService()} style={{...inpStyle,flex:1}}/>
