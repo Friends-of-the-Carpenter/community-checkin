@@ -113,7 +113,7 @@ function LiveClock() {
   const date = now.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});
   const time = now.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
   return (
-    <p style={{margin:"12px 0 4px",fontSize:18,color:"#fff",fontWeight:600}}>{date} · {time}</p>
+    <p style={{margin:"12px 0 4px",fontSize:20,color:"#fff",fontWeight:900}}>{date} | {time}</p>
   );
 }
 
