@@ -963,11 +963,6 @@ function App() {
             </div>
 
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
-              <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Modify check-out times</p>
-              <CheckoutTimeEditor records={records} people={people} onUpdate={loadData}/>
-            </div>
-
-            <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
               <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Manage people</p>
               <PeopleRemover people={people} onRemove={async(p)=>{await api(`people?id=eq.${p.id}`,{method:"DELETE"});loadData();}} onFlag={flagPerson}/>
             </div>
