@@ -102,7 +102,7 @@ function LiveClock() {
   useEffect(() => { const t=setInterval(()=>setNow(new Date()),1000); return()=>clearInterval(t); }, []);
   const date = now.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});
   const time = now.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
-  return <p style={{margin:"12px 0 4px",fontSize:18,color:"#fff",fontWeight:900}}>{date} | {time}</p>;
+  return <p style={{margin:"12px 0 4px",fontSize:18,color:"#fff",fontWeight:600}}>{date} · {time}</p>;
 }
 
 function Logo() {
@@ -691,7 +691,7 @@ function QueueView({records,people,onMarkComplete,onCancel,onLogout,loadData}) {
 function ServiceButtons({ availableServices, form, setForm, setErrors, countToday }) {
   return (
     <div style={{marginBottom:18,marginTop:14}}>
-      <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Reason For Visit</p>
+      <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Select service</p>
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:12}}>
         {availableServices.map(s=>{
           const cap=CAPPED_SERVICES[s],used=cap?countToday(s):0,full=cap&&used>=cap,isSelected=form.service===s;
@@ -801,7 +801,8 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
       </div>
       <div style={{maxWidth:900,margin:"0 auto",padding:"28px 24px 4rem"}}>
         {dbError&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:10,padding:"12px 16px",marginBottom:20,fontSize:15,color:"#C0392B"}}>{dbError}</div>}
-            {!loading&&(
+
+        {!loading&&(
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:14,marginBottom:24}}>
             {[["Today",todayCount],["Guests",guestCount],["Volunteers",volCount]].map(([l,v])=>(
               <div key={l} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:"16px 14px",textAlign:"center"}}>
@@ -811,7 +812,9 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
             ))}
           </div>
         )}
+
         <div style={{marginBottom:28}}>
+          <h2 style={{margin:"0 0 14px",fontSize:20,fontWeight:700}}>Showers & Laundry</h2>
           <div style={{display:"flex",gap:14}}>
             {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{
               const used=records.filter(r=>r.service===svc&&r.check_in>=todayISO()).length;
@@ -824,6 +827,11 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
               );
             })}
           </div>
+        </div>
+
+        <div style={{borderTop:"2px solid #C0E8EC",paddingTop:28,marginBottom:24}}>
+          <h2 style={{margin:"0 0 6px",fontSize:22,fontWeight:700}}>Check in</h2>
+          <p style={{margin:"0 0 20px",fontSize:15,color:"#5A7070"}}>Select your service and enter your name to check in</p>
         </div>
 
         {flagAlert&&(
@@ -843,7 +851,7 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
         )}
         {errors.submit&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:10,padding:"12px 16px",marginBottom:20,fontSize:15,color:"#C0392B"}}>{errors.submit}</div>}
 
-        <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Please Select</p>
+        <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Visitor type</p>
         <div style={{display:"flex",gap:14,marginBottom:22}}>
           {["Guest","Volunteer"].map(t=>(
             <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"14px 0",borderRadius:10,border:form.type===t?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:form.type===t?"#EAF7F8":"#fff",fontWeight:form.type===t?700:400,fontSize:17,cursor:"pointer",color:form.type===t?"#2E8A94":"#5A7070",fontFamily:"inherit"}}>{t}</button>
@@ -896,9 +904,32 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
   );
 }
 
+// ── ADMIN LANDING ────────────────────────────────────────────
+function AdminLanding({ onSelect }) {
+  return (
+    <div style={{minHeight:"100vh",background:"#F7FAFA",display:"flex",flexDirection:"column"}}>
+      <div style={{background:"#46b4bf",padding:"28px 24px 22px",textAlign:"center"}}>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Logo/></div>
+        <LiveClock/>
+      </div>
+      <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px",gap:20,maxWidth:500,margin:"0 auto",width:"100%"}}>
+        <p style={{fontSize:20,fontWeight:700,color:C.text,marginBottom:8}}>Staff Login</p>
+        <button onClick={()=>onSelect("queue")} style={{...btnPrimary,width:"100%",padding:"22px 0",fontSize:19,borderRadius:14,background:C.teal}}>
+          🚿 Showers & Laundry
+        </button>
+        <button onClick={()=>onSelect("admin")} style={{...btnOutline,width:"100%",padding:"22px 0",fontSize:19,borderRadius:14}}>
+          🔐 Admin
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── ADMIN APP ────────────────────────────────────────────────
 function AdminApp() {
   const [view,setView]=useState("checkin");
+  const [landing,setLanding]=useState(true);
+  const [pendingPin,setPendingPin]=useState(null);
   const [form,setForm]=useState(emptyForm);
   const [records,setRecords]=useState([]);
   const [services,setServices]=useState([]);
@@ -1049,8 +1080,8 @@ function AdminApp() {
     const a=document.createElement("a");a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);a.download="checkins.csv";a.click();
   }
   function tryPin(){
-    if(showPinModal==="admin"&&pinInput===ADMIN_PIN){setAdminAuth(true);setPinError(false);setPinInput("");setShowPinModal(null);}
-    else if(showPinModal==="queue"&&pinInput===QUEUE_PIN){setQueueAuth(true);setPinError(false);setPinInput("");setShowPinModal(null);}
+    if(pendingPin==="admin"&&pinInput===ADMIN_PIN){setAdminAuth(true);setPinError(false);setPinInput("");setPendingPin(null);}
+    else if(pendingPin==="queue"&&pinInput===QUEUE_PIN){setQueueAuth(true);setPinError(false);setPinInput("");setPendingPin(null);}
     else{setPinError(true);setPinInput("");}
   }
   async function addService(){const s=newService.trim();if(!s||services.includes(s)){setNewService("");return;}await api("checkin_services",{method:"POST",body:JSON.stringify({name:s}),headers:{...HEADERS,"Prefer":"return=minimal"}});setNewService("");loadData();}
@@ -1068,7 +1099,27 @@ function AdminApp() {
   const gs=realRecords.filter(r=>r.type==="Guest").length;
   const vs=realRecords.filter(r=>r.type==="Volunteer").length;
 
-  if(queueAuth) return <QueueView records={records} people={people} onMarkComplete={markComplete} onCancel={cancelRecord} onLogout={()=>setQueueAuth(false)} loadData={loadData}/>;
+  if(queueAuth) return <QueueView records={records} people={people} onMarkComplete={markComplete} onCancel={cancelRecord} onLogout={()=>{setQueueAuth(false);setLanding(true);}} loadData={loadData}/>;
+
+  // Landing page
+  if(landing) return <AdminLanding onSelect={mode=>{setPendingPin(mode);setLanding(false);}}/>;
+
+  // PIN entry screen
+  if(pendingPin&&!adminAuth&&!queueAuth) return (
+    <div style={{minHeight:"100vh",background:"#F7FAFA",display:"flex",flexDirection:"column"}}>
+      <div style={{background:"#46b4bf",padding:"28px 24px 22px",textAlign:"center"}}>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Logo/></div>
+        <LiveClock/>
+      </div>
+      <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px",maxWidth:400,margin:"0 auto",width:"100%"}}>
+        <p style={{fontSize:20,fontWeight:700,color:C.text,marginBottom:20}}>{pendingPin==="admin"?"Admin Login":"Showers & Laundry Login"}</p>
+        <input type="password" placeholder="Enter PIN" value={pinInput} onChange={e=>setPinInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")tryPin();}} style={{...inpStyle,marginBottom:12,fontSize:20,textAlign:"center",letterSpacing:"0.2em"}} autoFocus/>
+        {pinError&&<p style={{margin:"0 0 12px",fontSize:14,color:C.danger}}>Incorrect PIN. Please try again.</p>}
+        <button onClick={tryPin} style={{...btnPrimary,width:"100%",padding:"16px 0",fontSize:18,marginBottom:12}}>Login</button>
+        <button onClick={()=>{setLanding(true);setPendingPin(null);setPinError(false);setPinInput("");}} style={{...btnGhost,width:"100%",fontSize:16,padding:"12px 0"}}>← Back</button>
+      </div>
+    </div>
+  );
 
   const Tab=({id,label})=>(
     <button onClick={()=>setView(id)} style={{flex:1,padding:"14px 0",border:"none",background:"transparent",borderBottom:view===id?"3px solid #46b4bf":"3px solid transparent",fontWeight:view===id?700:400,fontSize:16,cursor:"pointer",color:view===id?"#46b4bf":"#5A7070",fontFamily:"inherit",marginBottom:-2}}>
@@ -1086,25 +1137,12 @@ function AdminApp() {
         <LiveClock/>
         <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:10,marginTop:16}}>
           <span style={{fontSize:13,padding:"4px 12px",borderRadius:20,background:"rgba(255,255,255,0.2)",color:"#fff",fontWeight:600}}>Admin mode</span>
-          <button onClick={()=>{setShowPinModal(showPinModal==="queue"?null:"queue");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:14}}>Showers & Laundry</button>
-          <button onClick={()=>{setShowPinModal(showPinModal==="admin"?null:"admin");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:14}}>Admin</button>
+          <button onClick={()=>{setLanding(true);setAdminAuth(false);}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:14}}>← Back</button>
         </div>
       </div>
 
       <div style={{maxWidth:900,margin:"0 auto",padding:"28px 24px 4rem"}}>
         {dbError&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:10,padding:"12px 16px",marginBottom:20,fontSize:15,color:"#C0392B"}}>{dbError}</div>}
-
-        {showPinModal&&(
-          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:24,marginBottom:24}}>
-            <p style={{margin:"0 0 14px",fontWeight:700,fontSize:18}}>{showPinModal==="admin"?"Admin login":"Showers & Laundry login"}</p>
-            <div style={{display:"flex",gap:10}}>
-              <input type="password" placeholder="Enter PIN" value={pinInput} onChange={e=>setPinInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&tryPin()} style={{...inpStyle,width:150,borderColor:pinError?"#C0392B":"#D0E6E5"}}/>
-              <button onClick={tryPin} style={{...btnPrimary,padding:"12px 24px",fontSize:16}}>Login</button>
-              <button onClick={()=>{setShowPinModal(null);setPinError(false);setPinInput("");}} style={{...btnGhost,fontSize:15}}>Cancel</button>
-            </div>
-            {pinError&&<p style={{margin:"10px 0 0",fontSize:14,color:"#C0392B"}}>Incorrect PIN. Please try again.</p>}
-          </div>
-        )}
 
         {adminAuth&&(
           <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:24,marginBottom:24}}>
@@ -1253,16 +1291,16 @@ function AdminApp() {
               <input placeholder="Search by name…" value={search} onChange={e=>setSearch(e.target.value)} style={{...inpStyle,flex:1,minWidth:160}}/>
               <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{...inpStyle,width:130}}><option>All</option><option>Guest</option><option>Volunteer</option></select>
               <select value={filterService} onChange={e=>setFilterService(e.target.value)} style={{...inpStyle,width:170}}><option>All</option>{services.map(s=><option key={s}>{s}</option>)}</select>
-          </div>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-            <p style={{margin:0,fontSize:14,color:"#5A7070"}}>{people.length} people in directory</p>
-            <button onClick={loadData} style={{...btnGhost,fontSize:14}}>Refresh ↻</button>
-          </div>
-          {loading?<p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>Loading…</p>
-          :filtered.length===0?<p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>No records found.</p>
-          :filtered.map(r=>{
-            const av=avColor(r.name),dur=duration(r.check_in,r.check_out,r.service),person=people.find(p=>p.name===r.name),isFlagged=person?.flagged;
-            return <LogRecord key={r.id} r={r} av={av} dur={dur} person={person} isFlagged={isFlagged} onCheckOut={checkOut} onDelete={deleteRecord} onUpdate={loadData}/>;
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <p style={{margin:0,fontSize:14,color:"#5A7070"}}>{people.length} people in directory</p>
+              <button onClick={loadData} style={{...btnGhost,fontSize:14}}>Refresh ↻</button>
+            </div>
+            {loading?<p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>Loading…</p>
+            :filtered.length===0?<p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>No records found.</p>
+            :filtered.map(r=>{
+              const av=avColor(r.name),dur=duration(r.check_in,r.check_out,r.service),person=people.find(p=>p.name===r.name),isFlagged=person?.flagged;
+              return <LogRecord key={r.id} r={r} av={av} dur={dur} person={person} isFlagged={isFlagged} onCheckOut={checkOut} onDelete={deleteRecord} onUpdate={loadData}/>;
             })}
           </div>
         )}
