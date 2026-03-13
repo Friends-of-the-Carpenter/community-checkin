@@ -29,7 +29,7 @@ const SUPABASE_URL = "https://bnkdmdcinmbcuueakhug.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJua2RtZGNpbm1iY3V1ZWFraHVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMzQyNTYsImV4cCI6MjA4ODkxMDI1Nn0.UnURxxIweDAYik0UXfZLtdB33q-9DPah2kwUQKL9oVY";
 const HEADERS = { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` };
 const CAPPED_SERVICES = { "Showers": 25, "Laundry": 25 };
-const CAPPED_SERVICES_DAYS = { "Showers": [2,3,4,5], "Laundry": [2,3,4,5] };
+const CAPPED_SERVICES_DAYS = { "Showers": [2,3,4], "Laundry": [2,3,4] };
 const NO_DURATION_SERVICES = ["Showers", "Laundry"];
 const MIN_DURATION_MINUTES = 1;
 const ADMIN_PIN = "9866";
@@ -189,7 +189,7 @@ function SimpleLineChart({data,height=180}) {
 }
 
 // ── Shower/Laundry Queue Panel (used in both QueueView and Admin) ─────────────
-function ShowerLaundryPanel({ records, people, onMarkComplete }) {
+function ShowerLaundryPanel({ records, people, onMarkComplete, onCancel }) {
   const services = Object.keys(CAPPED_SERVICES);
   return (
     <>
@@ -236,6 +236,7 @@ function ShowerLaundryPanel({ records, people, onMarkComplete }) {
                     <p style={{margin:0,fontSize:11,color:"#5A7070"}}>Queue #{r.queue_position} · In: {fmt(r.check_in)}</p>
                   </div>
                   <button onClick={()=>onMarkComplete(r.id)} style={{...btnSuccess,flexShrink:0}}>✓ Done</button>
+                  <button onClick={()=>onCancel(r.id)} style={{...btnGhost,fontSize:12,color:C.danger,borderColor:C.dangerBorder,flexShrink:0}}>Cancel</button>
                 </div>
               );
             })}
@@ -760,7 +761,10 @@ function App() {
     await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
     loadData();
   }
-  async function deleteRecord(id){await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});loadData();}
+  async function cancelRecord(id){
+    await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});
+    loadData();
+  }
   async function flagPerson(p,flagged,reason){await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({flagged,flag_reason:reason||null}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}
   function exportCSV(){
     const hdr=["Name","Guest #","Type","Member ID","Service","Queue #","Check-in","Check-out","Duration","Notes"];
@@ -843,7 +847,13 @@ function App() {
             {/* Showers & Laundry queue in Admin */}
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
               <p style={{margin:"0 0 12px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Showers & Laundry queue</p>
-              <ShowerLaundryPanel records={records} people={people} onMarkComplete={markComplete}/>
+              <ShowerLaundryPanel records={records} people={people} onMarkComplete={markComplete} onCancel={cancelRecord}/>
+            </div>
+
+            {/* Modify check-out times */}
+            <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
+              <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Modify check-out times</p>
+              <CheckoutTimeEditor records={records} people={people} onUpdate={loadData}/>
             </div>
 
             {/* Manage people */}
@@ -924,7 +934,7 @@ function App() {
                 <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"10px 0",borderRadius:8,border:form.type===t?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:form.type===t?"#EAF7F8":"#fff",fontWeight:form.type===t?700:400,fontSize:14,cursor:"pointer",color:form.type===t?"#2E8A94":"#5A7070",fontFamily:"inherit"}}>{t}</button>
               ))}
             </div>
-            <p style={{margin:"0 0 6px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Name Search — First visit? enter name and press check in</p>
+            <p style={{margin:"0 0 6px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Name Search — First visit? enter your name and press check in</p>
             <div style={{marginBottom:4,position:"relative"}} ref={suggestRef}>
               <div style={{display:"flex",gap:8,marginBottom:4}}>
                 <input placeholder="Enter your full name…" value={form.name} onChange={e=>handleNameInput(e.target.value)} style={{...inpStyle,flex:1,borderColor:errors.name?"#C0392B":"#D0E6E5"}}/>
