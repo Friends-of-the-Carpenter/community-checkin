@@ -37,10 +37,151 @@ const CHART_SERVICES = ["Showers","Laundry","Day Center","Community Partnership"
 const CHART_COLORS = { "Showers":"#46b4bf","Laundry":"#2E8A94","Day Center":"#E6A817","Community Partnership":"#7B61C4","Volunteer":"#3A9C6A" };
 const QR_PREFIX = "VOL-";
 
-// Dependency-free QR code via Google Charts API
-function getQRImageUrl(text) {
-  const encoded = encodeURIComponent(text);
-  return `https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=${encoded}&choe=UTF-8`;
+// Self-contained minimal QR code generator (numeric/alphanumeric, version 2, ECC M)
+// Encodes short alphanumeric strings like "VOL-1001"
+function makeQRMatrix(text) {
+  // Alphanumeric charset
+  const CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:";
+  const N = 25; // version 2 = 25x25
+  const matrix = Array.from({length:N},()=>new Array(N).fill(null));
+  const reserved = Array.from({length:N},()=>new Array(N).fill(false));
+
+  function setModule(r,c,v){ matrix[r][c]=v; reserved[r][c]=true; }
+
+  // Finder pattern
+  function finder(tr,tc){
+    for(let r=-1;r<=7;r++) for(let c=-1;c<=7;c++){
+      const rr=tr+r,cc=tc+c;
+      if(rr<0||rr>=N||cc<0||cc>=N) continue;
+      const dark=(r===0||r===6||c===0||c===6||(r>=2&&r<=4&&c>=2&&c<=4));
+      setModule(rr,cc,dark);
+    }
+  }
+  finder(0,0); finder(0,N-7); finder(N-7,0);
+
+  // Separators (already covered by finder border, just ensure reserved)
+  // Timing patterns
+  for(let i=8;i<N-8;i++){
+    setModule(6,i,i%2===0); setModule(i,6,i%2===0);
+  }
+  // Dark module
+  setModule(N-8,8,true);
+  // Format info area reservation
+  const fmtPos=[[0,8],[1,8],[2,8],[3,8],[4,8],[5,8],[7,8],[8,8],[8,7],[8,5],[8,4],[8,3],[8,2],[8,1],[8,0],[8,N-1],[8,N-2],[8,N-3],[8,N-4],[8,N-5],[8,N-6],[8,N-7],[8,N-8],[N-7,8],[N-6,8],[N-5,8],[N-4,8],[N-3,8],[N-2,8],[N-1,8]];
+  fmtPos.forEach(([r,c])=>{ if(!reserved[r][c]){reserved[r][c]=true;} });
+
+  // Encode alphanumeric
+  const upper = text.toUpperCase();
+  let bits = "";
+  // Mode indicator: alphanumeric = 0010
+  bits += "0010";
+  // Character count (9 bits for version 2 alphanumeric)
+  bits += upper.length.toString(2).padStart(9,"0");
+  for(let i=0;i<upper.length-1;i+=2){
+    const v=CHARS.indexOf(upper[i])*45+CHARS.indexOf(upper[i+1]);
+    bits += v.toString(2).padStart(11,"0");
+  }
+  if(upper.length%2===1){
+    bits += CHARS.indexOf(upper[upper.length-1]).toString(2).padStart(6,"0");
+  }
+  // Terminator
+  bits += "0000";
+  // Pad to 44 codewords = 352 bits
+  while(bits.length%8!==0) bits+="0";
+  const pads=["11101100","00010001"];
+  let pi=0;
+  while(bits.length<352){ bits+=pads[pi%2]; pi++; }
+
+  // Convert to codeword bytes
+  const codewords=[];
+  for(let i=0;i<bits.length;i+=8) codewords.push(parseInt(bits.slice(i,i+8),2));
+
+  // Reed-Solomon ECC (16 EC codewords for version 2-M)
+  const GEN=[42,159,74,221,218,36,
+    143,206,5,61,249,138,28,6,128,100];
+  function gfMul(a,b){
+    if(a===0||b===0) return 0;
+    const LOG=[];const EXP=[];
+    let x=1;
+    for(let i=0;i<256;i++){EXP[i]=x;LOG[x]=i;x<<=1;if(x>=256)x^=285;}
+    return EXP[(LOG[a]+LOG[b])%255];
+  }
+  function gfPow(x,p){let r=1;for(let i=0;i<p;i++)r=gfMul(r,x);return r;}
+  // Pre-build log/exp tables
+  const EXP2=new Uint8Array(512), LOG2=new Uint8Array(256);
+  let xx=1;
+  for(let i=0;i<255;i++){EXP2[i]=xx;EXP2[i+255]=xx;LOG2[xx]=i;xx=(xx<<1)^(xx>=128?285:0);}
+  function mul2(a,b){if(!a||!b)return 0;return EXP2[(LOG2[a]+LOG2[b])%255];}
+
+  let rem=[...codewords];
+  for(let i=0;i<GEN.length;i++) rem.push(0);
+  for(let i=0;i<codewords.length;i++){
+    const c=rem.shift();
+    rem.push(0);
+    if(c) for(let j=0;j<GEN.length;j++) rem[j]^=mul2(GEN[j],c);
+  }
+  const allData=[...codewords,...rem];
+
+  // Place data bits
+  let dataStr="";
+  allData.forEach(b=>{ dataStr+=b.toString(2).padStart(8,"0"); });
+  // Remainder bits for version 2 = 7
+  dataStr+="0000000";
+
+  let bitIdx=0;
+  let goingUp=true;
+  for(let col=N-1;col>=0;col-=2){
+    if(col===6) col--;
+    for(let row=0;row<N;row++){
+      const r=goingUp?N-1-row:row;
+      for(let dc=0;dc<2;dc++){
+        const c=col-dc;
+        if(!reserved[r][c]){
+          matrix[r][c]=bitIdx<dataStr.length?dataStr[bitIdx++]==="1":false;
+        }
+      }
+    }
+    goingUp=!goingUp;
+  }
+
+  // Apply mask pattern 0: (r+c)%2===0
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+    if(!reserved[r][c]) matrix[r][c]=matrix[r][c]^((r+c)%2===0);
+  }
+
+  // Format string for ECC-M mask-0 = 101010000010010
+  const fmt="101010000010010";
+  const fp1=[[0,8],[1,8],[2,8],[3,8],[4,8],[5,8],[7,8],[8,8],[8,7],[8,5],[8,4],[8,3],[8,2],[8,1],[8,0]];
+  const fp2=[[8,N-1],[8,N-2],[8,N-3],[8,N-4],[8,N-5],[8,N-6],[8,N-7],[N-7,8],[N-6,8],[N-5,8],[N-4,8],[N-3,8],[N-2,8],[N-1,8]];
+  fp1.forEach(([r,c],i)=>{ matrix[r][c]=fmt[i]==="1"; });
+  fp2.forEach(([r,c],i)=>{ matrix[r][c]=fmt[14-i]==="1"; });
+  matrix[N-8][8]=true;
+
+  return matrix;
+}
+
+function QRCanvas({ text, size=180 }) {
+  const canvasRef = useRef(null);
+  useEffect(()=>{
+    try {
+      const matrix = makeQRMatrix(text);
+      const N = matrix.length;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      const cell = Math.floor(size / (N + 8));
+      const offset = Math.floor((size - cell * N) / 2);
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = "#000";
+      for (let r = 0; r < N; r++) {
+        for (let c = 0; c < N; c++) {
+          if (matrix[r][c]) ctx.fillRect(offset + c*cell, offset + r*cell, cell, cell);
+        }
+      }
+    } catch(e) { console.error("QR error", e); }
+  }, [text, size]);
+  return <canvas ref={canvasRef} width={size} height={size} style={{borderRadius:8,border:"1.5px solid #D0E6E5"}}/>;
 }
 const SCANNER_TIMEOUT_MS = 100; // max ms between keystrokes to count as scanner input
 
@@ -107,13 +248,23 @@ function Logo() {
 }
 
 function QRCodeDisplay({ guestNumber }) {
+  const canvasRef = useRef(null);
   const code = `${QR_PREFIX}${guestNumber}`;
-  const url = getQRImageUrl(code);
+
+  function download() {
+    const canvas = document.querySelector(`#qr-${guestNumber}`);
+    if (!canvas) return;
+    const a = document.createElement("a");
+    a.href = canvas.toDataURL("image/png");
+    a.download = `volunteer-${guestNumber}-qr.png`;
+    a.click();
+  }
+
   return (
     <div style={{textAlign:"center"}}>
-      <img src={url} alt="QR Code" style={{width:160,height:160,borderRadius:8,border:"1.5px solid #D0E6E5"}}/>
+      <QRCanvas text={code} size={180} key={code}/>
       <p style={{margin:"6px 0 0",fontSize:11,color:"#8AA5A5"}}>{code}</p>
-      <a href={url} download={`volunteer-${guestNumber}-qr.png`} style={{display:"inline-block",marginTop:8,fontSize:12,color:"#46b4bf",textDecoration:"none",border:"1px solid #46b4bf",borderRadius:6,padding:"4px 12px"}}>Download QR</a>
+      <button onClick={download} style={{...btnOutline,marginTop:8,fontSize:12,padding:"4px 12px"}}>Download QR</button>
     </div>
   );
 }
