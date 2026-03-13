@@ -8,12 +8,15 @@
   <script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7.23.10/babel.min.js"></script>
+  <script src="https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #F7FAFA; color: #1D2B2B; min-height: 100vh; }
     input, select, textarea { font-family: inherit; font-size: 14px; border-radius: 8px; border: 1.5px solid #D0E6E5; padding: 10px 12px; outline: none; background: #fff; color: #1D2B2B; width: 100%; }
     input:focus, select:focus, textarea:focus { border-color: #46b4bf; box-shadow: 0 0 0 3px rgba(70,180,191,0.15); }
     button { font-family: inherit; cursor: pointer; }
+    @keyframes slideIn { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+    .scan-toast { animation: slideIn 0.25s ease; }
   </style>
 </head>
 <body>
@@ -25,19 +28,20 @@ const SUPABASE_URL = "https://bnkdmdcinmbcuueakhug.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJua2RtZGNpbm1iY3V1ZWFraHVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMzQyNTYsImV4cCI6MjA4ODkxMDI1Nn0.UnURxxIweDAYik0UXfZLtdB33q-9DPah2kwUQKL9oVY";
 const HEADERS = { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` };
 const CAPPED_SERVICES = { "Showers": 25, "Laundry": 25 };
-const CAPPED_SERVICES_DAYS = { "Showers": [2, 3, 4], "Laundry": [2, 3, 4] }; // 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu
+const CAPPED_SERVICES_DAYS = { "Showers": [2,3,4], "Laundry": [2,3,4] };
 const NO_DURATION_SERVICES = ["Showers", "Laundry"];
 const MIN_DURATION_MINUTES = 1;
-const ADMIN_PIN = "9866";
-const QUEUE_PIN = "7777";
+const ADMIN_PIN = "1234";
+const QUEUE_PIN = "5678";
 const CHART_SERVICES = ["Showers","Laundry","Day Center","Community Partnership","Volunteer"];
 const CHART_COLORS = { "Showers":"#46b4bf","Laundry":"#2E8A94","Day Center":"#E6A817","Community Partnership":"#7B61C4","Volunteer":"#3A9C6A" };
+const QR_PREFIX = "VOL-";
+const SCANNER_TIMEOUT_MS = 100; // max ms between keystrokes to count as scanner input
 
 const C = {
   teal:"#46b4bf",tealDark:"#2E8A94",tealLight:"#EAF7F8",tealMid:"#C0E8EC",
   white:"#FFFFFF",bg:"#F7FAFA",text:"#1D2B2B",textMuted:"#5A7070",textLight:"#8AA5A5",
   border:"#D0E6E5",danger:"#C0392B",dangerBg:"#FCECEA",dangerBorder:"#F0A9A3",
-  warning:"#8A5A00",warningBg:"#FEF7E6",warningBorder:"#F5D48A",
 };
 const inpStyle = {width:"100%",boxSizing:"border-box",padding:"10px 12px",fontSize:14,borderRadius:8,border:"1.5px solid #D0E6E5",background:"#fff",color:"#1D2B2B",fontFamily:"inherit",outline:"none"};
 const btnPrimary = {background:"#46b4bf",color:"#fff",border:"none",borderRadius:8,padding:"11px 20px",fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:"inherit"};
@@ -55,67 +59,104 @@ function isServiceAvailableToday(s) {
 }
 
 function todayISO() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
+  const d = new Date(); d.setHours(0,0,0,0); return d.toISOString();
 }
 
 function initials(name) {
-  return name.trim().split(" ").filter(Boolean).map(w => w[0].toUpperCase()).slice(0, 2).join("");
+  return name.trim().split(" ").filter(Boolean).map(w=>w[0].toUpperCase()).slice(0,2).join("");
 }
 
 function fmt(iso) {
   if (!iso) return "";
   const d = new Date(iso);
-  return d.toLocaleDateString("en-US", {month:"short",day:"numeric",year:"numeric"}) + " " + d.toLocaleTimeString("en-US", {hour:"numeric",minute:"2-digit"});
+  return d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})+" "+d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
 }
 
 function fmtDate(iso) {
   if (!iso) return "";
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-US", {month:"short",day:"numeric"});
+  return new Date(iso).toLocaleDateString("en-US",{month:"short",day:"numeric"});
 }
 
 function fmtMonth(iso) {
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-US", {month:"short",year:"numeric"});
+  return new Date(iso).toLocaleDateString("en-US",{month:"short",year:"numeric"});
 }
 
 function duration(inT, outT, service) {
   if (!outT || NO_DURATION_SERVICES.includes(service)) return null;
-  const m = Math.round((new Date(outT) - new Date(inT)) / 60000);
+  const m = Math.round((new Date(outT)-new Date(inT))/60000);
   return m < 60 ? `${m}m` : `${Math.floor(m/60)}h ${m%60}m`;
 }
 
 const AV_COLORS = [{bg:"#C2E8E6",color:"#1D5C5A"},{bg:"#B8DFE8",color:"#1A4A5C"},{bg:"#C8E6D4",color:"#1A5C35"},{bg:"#E6D4C8",color:"#5C3A1A"},{bg:"#D4C8E6",color:"#3A1A5C"}];
-
 function avColor(name) {
-  let h = 0;
-  for (let c of name) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
-  return AV_COLORS[h % AV_COLORS.length];
+  let h = 0; for (let c of name) h=(h*31+c.charCodeAt(0))&0xffff; return AV_COLORS[h%AV_COLORS.length];
 }
 
 const emptyForm = {name:"",guestNumber:"",memberId:"",type:"Guest",service:"",notes:""};
 
+async function generateQRDataURL(guestNumber) {
+  return new Promise((resolve, reject) => {
+    QRCode.toDataURL(`${QR_PREFIX}${guestNumber}`, {
+      width:200, margin:2,
+      color:{ dark:"#1D2B2B", light:"#FFFFFF" }
+    }, (err, url) => err ? reject(err) : resolve(url));
+  });
+}
+
 function Logo() {
-  return <img src="https://cdn.shopify.com/s/files/1/0582/8719/4214/files/FOC_Logo_white.png?v=1773347276" alt="Friends of the Carpenter" style={{height:105,width:"auto"}}/>;
+  return <img src="https://cdn.shopify.com/s/files/1/0582/8719/4214/files/FOC_Logo_white.png?v=1773347276" alt="Friends of the Carpenter" style={{height:85,width:"auto"}}/>;
+}
+
+function QRCodeDisplay({ guestNumber }) {
+  const [qrUrl, setQrUrl] = useState(null);
+  useEffect(() => {
+    generateQRDataURL(guestNumber).then(setQrUrl).catch(()=>setQrUrl(null));
+  }, [guestNumber]);
+  if (!qrUrl) return <p style={{fontSize:12,color:"#5A7070"}}>Generating QR…</p>;
+  return (
+    <div style={{textAlign:"center"}}>
+      <img src={qrUrl} alt="Volunteer QR Code" style={{width:160,height:160,borderRadius:8,border:"1.5px solid #D0E6E5"}}/>
+      <p style={{margin:"6px 0 0",fontSize:11,color:"#8AA5A5"}}>VOL-{guestNumber}</p>
+      <a href={qrUrl} download={`volunteer-${guestNumber}-qr.png`} style={{display:"inline-block",marginTop:8,fontSize:12,color:"#46b4bf",textDecoration:"none",border:"1px solid #46b4bf",borderRadius:6,padding:"4px 12px"}}>Download QR</a>
+    </div>
+  );
+}
+
+function ScanToast({ result, onDone }) {
+  useEffect(() => { const t = setTimeout(onDone, 4000); return () => clearTimeout(t); }, []);
+  const isCheckOut = result.action === "checkout";
+  const isError = result.action === "error";
+  return (
+    <div className="scan-toast" style={{
+      background: isError ? "#FCECEA" : isCheckOut ? "#FEF7E6" : "#EAF7F8",
+      border: `2px solid ${isError ? "#F0A9A3" : isCheckOut ? "#F5D48A" : "#C0E8EC"}`,
+      borderRadius:12, padding:"16px 18px", marginBottom:20
+    }}>
+      <p style={{margin:"0 0 2px",fontSize:16,fontWeight:700,color: isError?"#C0392B":isCheckOut?"#8A5A00":"#2E8A94"}}>
+        {isError ? "⚠ Not found" : isCheckOut ? "👋 Checked out" : "✓ Checked in"}
+      </p>
+      {!isError && <p style={{margin:0,fontSize:14,color:"#1D2B2B"}}><strong>{result.name}</strong> — Volunteer #{result.guestNumber}</p>}
+      {isError && <p style={{margin:0,fontSize:13,color:"#C0392B"}}>{result.message}</p>}
+      {!isError && isCheckOut && result.duration && <p style={{margin:"4px 0 0",fontSize:12,color:"#8A5A00"}}>Duration: {result.duration}</p>}
+    </div>
+  );
 }
 
 function SimpleBarChart({data, keys, colors, height=180}) {
-  if (!data || data.length === 0) return <p style={{textAlign:"center",color:"#5A7070",fontSize:13,padding:"1rem 0"}}>No data for this period.</p>;
-  const maxVal = Math.max(1, ...data.flatMap(d => keys.map(k => d[k] || 0)));
-  const barW = Math.max(8, Math.floor(280 / data.length) - 4);
+  if (!data||data.length===0) return <p style={{textAlign:"center",color:"#5A7070",fontSize:13,padding:"1rem 0"}}>No data for this period.</p>;
+  const maxVal = Math.max(1,...data.flatMap(d=>keys.map(k=>d[k]||0)));
+  const barW = Math.max(8,Math.floor(280/data.length)-4);
   return (
     <div style={{overflowX:"auto"}}>
-      <div style={{display:"flex",alignItems:"flex-end",gap:4,height,minWidth:data.length*((barW*keys.length)+8),paddingBottom:24,position:"relative"}}>
-        {data.map((d, i) => (
+      <div style={{display:"flex",alignItems:"flex-end",gap:4,height,minWidth:data.length*((barW*keys.length)+8),paddingBottom:24}}>
+        {data.map((d,i)=>(
           <div key={i} style={{display:"flex",alignItems:"flex-end",gap:2,flexShrink:0}}>
-            {keys.map(k => {
-              const pct = (d[k] || 0) / maxVal * 100;
+            {keys.map(k=>{
+              const pct=(d[k]||0)/maxVal*100;
               return (
                 <div key={k} style={{width:barW,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                  {d[k] > 0 && <span style={{fontSize:91,color:"#5A7070"}}>{d[k]}</span>}
-                  <div style={{width:"100%",height:`${pct*(height-32)/100}px`,background:colors[k],borderRadius:"3px 3px 0 0",minHeight:d[k]>0?4:0,transition:"height 0.3s"}}/>
+                  {d[k]>0&&<span style={{fontSize:9,color:"#5A7070"}}>{d[k]}</span>}
+                  <div style={{width:"100%",height:`${pct*(height-32)/100}px`,background:colors[k],borderRadius:"3px 3px 0 0",minHeight:d[k]>0?4:0}}/>
                 </div>
               );
             })}
@@ -123,41 +164,34 @@ function SimpleBarChart({data, keys, colors, height=180}) {
         ))}
       </div>
       <div style={{display:"flex",gap:4,overflowX:"auto",paddingTop:4}}>
-        {data.map((d, i) => (
-          <span key={i} style={{fontSize:12,color:"#8AA5A5",flexShrink:0,width:(barW*keys.length)+(keys.length-1)*2,textAlign:"center",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{d.date}</span>
-        ))}
+        {data.map((d,i)=><span key={i} style={{fontSize:10,color:"#8AA5A5",flexShrink:0,width:(barW*keys.length)+(keys.length-1)*2,textAlign:"center",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{d.date}</span>)}
       </div>
     </div>
   );
 }
 
 function SimpleLineChart({data, height=180}) {
-  if (!data || data.length === 0) return <p style={{textAlign:"center",color:"#5A7070",fontSize:13,padding:"1rem 0"}}>No completed volunteer check-outs for this period.</p>;
-  const maxVal = Math.max(1, ...data.map(d => d.hours));
-  const w = 500, h = height - 30, pad = 8;
-  const pts = data.map((d, i) => {
-    const x = pad + (i / Math.max(data.length - 1, 1)) * (w - pad * 2);
-    const y = h - (d.hours / maxVal) * (h - pad * 2) - pad;
-    return {x, y, d};
-  });
-  const pathD = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
-  const fmtHours = (hrs) => {
-    const h = Math.floor(hrs);
-    const m = Math.round((hrs % 1) * 60);
-    return m > 0 ? `${h}h ${m}m` : `${h}h`;
-  };
+  if (!data||data.length===0) return <p style={{textAlign:"center",color:"#5A7070",fontSize:13,padding:"1rem 0"}}>No completed volunteer check-outs for this period.</p>;
+  const maxVal = Math.max(1,...data.map(d=>d.hours));
+  const w=500, h=height-30, pad=8;
+  const pts = data.map((d,i)=>({
+    x: pad+(i/Math.max(data.length-1,1))*(w-pad*2),
+    y: h-(d.hours/maxVal)*(h-pad*2)-pad, d
+  }));
+  const pathD = pts.map((p,i)=>`${i===0?"M":"L"}${p.x},${p.y}`).join(" ");
+  const fmtH = hrs => { const hh=Math.floor(hrs),mm=Math.round((hrs%1)*60); return mm>0?`${hh}h ${mm}m`:`${hh}h`; };
   return (
     <div style={{overflowX:"auto"}}>
       <svg viewBox={`0 0 ${w} ${height}`} style={{width:"100%",height}}>
-        {[0,0.25,0.5,0.75,1].map(t => (
+        {[0,0.25,0.5,0.75,1].map(t=>(
           <line key={t} x1={pad} x2={w-pad} y1={h-(t*(h-pad*2))-pad} y2={h-(t*(h-pad*2))-pad} stroke="#D0E6E5" strokeDasharray="3 3"/>
         ))}
         <path d={pathD} fill="none" stroke={CHART_COLORS["Volunteer"]} strokeWidth={2.5} strokeLinejoin="round"/>
-        {pts.map((p, i) => (
+        {pts.map((p,i)=>(
           <g key={i}>
             <circle cx={p.x} cy={p.y} r={4} fill={CHART_COLORS["Volunteer"]}/>
-            <text x={p.x} y={p.y-8} textAnchor="middle" fontSize={12} fill="#5A7070">{fmtHours(p.d.hours)}</text>
-            <text x={p.x} y={height-4} textAnchor="middle" fontSize={12} fill="#8AA5A5">{p.d.date}</text>
+            <text x={p.x} y={p.y-8} textAnchor="middle" fontSize={9} fill="#5A7070">{fmtH(p.d.hours)}</text>
+            <text x={p.x} y={height-4} textAnchor="middle" fontSize={9} fill="#8AA5A5">{p.d.date}</text>
           </g>
         ))}
       </svg>
@@ -166,44 +200,54 @@ function SimpleLineChart({data, height=180}) {
 }
 
 function PeopleRemover({people, onRemove, onFlag}) {
-  const [query, setQuery] = React.useState("");
-  const [confirm, setConfirm] = React.useState(null);
-  const [flagReason, setFlagReason] = React.useState("");
-  const [flagging, setFlagging] = React.useState(null);
-  const matches = query.trim().length > 0
-    ? people.filter(p => p.name.toLowerCase().includes(query.toLowerCase()) || String(p.guest_number).includes(query)).slice(0, 5)
+  const [query,setQuery]=React.useState("");
+  const [confirm,setConfirm]=React.useState(null);
+  const [flagReason,setFlagReason]=React.useState("");
+  const [flagging,setFlagging]=React.useState(null);
+  const [showQR,setShowQR]=React.useState(null);
+  const matches = query.trim().length>0
+    ? people.filter(p=>p.name.toLowerCase().includes(query.toLowerCase())||String(p.guest_number).includes(query)).slice(0,5)
     : [];
   return (
     <div>
-      <input placeholder="Search by name or guest #…" value={query} onChange={e=>{setQuery(e.target.value);setConfirm(null);setFlagging(null);}} style={{...inpStyle,marginBottom:8}}/>
-      {matches.map(p => (
+      <input placeholder="Search by name or guest #…" value={query} onChange={e=>{setQuery(e.target.value);setConfirm(null);setFlagging(null);setShowQR(null);}} style={{...inpStyle,marginBottom:8}}/>
+      {matches.map(p=>(
         <div key={p.id} style={{background:p.flagged?"#FFF5F5":C.white,border:`1px solid ${p.flagged?C.dangerBorder:C.border}`,borderRadius:8,marginBottom:8,overflow:"hidden"}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",flexWrap:"wrap",gap:6}}>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <span style={{fontSize:13,fontWeight:600,color:C.text}}>{p.name}</span>
               <span style={{fontSize:12,color:C.textMuted}}>#{p.guest_number}</span>
-              {p.flagged && <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:C.dangerBg,color:C.danger,fontWeight:600}}>⚑ Flagged</span>}
+              {p.flagged&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:C.dangerBg,color:C.danger,fontWeight:600}}>⚑ Flagged</span>}
+              {p.type==="Volunteer"&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:"#2E8A94",fontWeight:500}}>Volunteer</span>}
             </div>
-            <div style={{display:"flex",gap:6}}>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {p.type==="Volunteer"&&(
+                <button onClick={()=>setShowQR(showQR===p.id?null:p.id)} style={{...btnGhost,fontSize:12,color:C.teal,borderColor:C.tealMid}}>QR Code</button>
+              )}
               <button onClick={()=>{setFlagging(flagging===p.id?null:p.id);setConfirm(null);setFlagReason(p.flag_reason||"");}} style={{...btnGhost,fontSize:12,color:p.flagged?C.teal:C.danger,borderColor:p.flagged?C.border:C.dangerBorder}}>{p.flagged?"Unflag":"Flag"}</button>
-              {confirm===p.id ? (
+              {confirm===p.id?(
                 <div style={{display:"flex",gap:6}}>
                   <button onClick={()=>{onRemove(p);setQuery("");setConfirm(null);}} style={{...btnGhost,color:C.danger,borderColor:C.dangerBorder,fontSize:12}}>Confirm</button>
                   <button onClick={()=>setConfirm(null)} style={btnGhost}>Cancel</button>
                 </div>
-              ) : (
+              ):(
                 <button onClick={()=>{setConfirm(p.id);setFlagging(null);}} style={{...btnGhost,color:C.danger,borderColor:C.dangerBorder}}>Remove</button>
               )}
             </div>
           </div>
-          {flagging===p.id && (
+          {showQR===p.id&&(
+            <div style={{padding:"14px 12px",borderTop:`1px solid ${C.border}`,background:C.bg}}>
+              <QRCodeDisplay guestNumber={p.guest_number}/>
+            </div>
+          )}
+          {flagging===p.id&&(
             <div style={{padding:"10px 12px",borderTop:`1px solid ${C.border}`,background:C.bg}}>
-              {p.flagged ? (
+              {p.flagged?(
                 <div>
                   <p style={{margin:"0 0 8px",fontSize:12,color:C.textMuted}}>Current reason: <em>{p.flag_reason||"No reason given"}</em></p>
                   <button onClick={()=>{onFlag(p,false,"");setFlagging(null);}} style={{...btnOutline,fontSize:12,padding:"6px 14px"}}>Confirm unflag</button>
                 </div>
-              ) : (
+              ):(
                 <div>
                   <input placeholder="Reason for flagging (optional)…" value={flagReason} onChange={e=>setFlagReason(e.target.value)} style={{...inpStyle,marginBottom:8,fontSize:13}}/>
                   <button onClick={()=>{onFlag(p,true,flagReason);setFlagging(null);setFlagReason("");}} style={{...btnPrimary,fontSize:13,padding:"7px 16px",background:C.danger}}>Confirm flag</button>
@@ -211,112 +255,90 @@ function PeopleRemover({people, onRemove, onFlag}) {
               )}
             </div>
           )}
-          {p.flagged && p.flag_reason && flagging!==p.id && <div style={{padding:"4px 12px 8px",fontSize:11,color:C.danger}}>Reason: {p.flag_reason}</div>}
+          {p.flagged&&p.flag_reason&&flagging!==p.id&&<div style={{padding:"4px 12px 8px",fontSize:11,color:C.danger}}>Reason: {p.flag_reason}</div>}
         </div>
       ))}
-      {query.trim().length > 0 && matches.length === 0 && <p style={{fontSize:12,color:C.textMuted}}>No matches found.</p>}
+      {query.trim().length>0&&matches.length===0&&<p style={{fontSize:12,color:C.textMuted}}>No matches found.</p>}
     </div>
   );
 }
 
 function AnalyticsTab({records}) {
-  const [range, setRange] = React.useState("7days");
+  const [range,setRange]=React.useState("7days");
 
   function getFiltered() {
-    const now = new Date();
-    let cutoff;
-    if (range==="7days") { cutoff=new Date(now); cutoff.setDate(cutoff.getDate()-6); }
-    else if (range==="30days") { cutoff=new Date(now); cutoff.setDate(cutoff.getDate()-29); }
-    else if (range==="month") { cutoff=new Date(now.getFullYear(),now.getMonth(),1); }
-    else if (range==="quarter") { const q=Math.floor(now.getMonth()/3); cutoff=new Date(now.getFullYear(),q*3,1); }
-    else if (range==="year") { cutoff=new Date(now.getFullYear(),0,1); }
-    else { cutoff=new Date(0); }
+    const now=new Date(); let cutoff;
+    if(range==="7days"){cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-6);}
+    else if(range==="30days"){cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-29);}
+    else if(range==="month"){cutoff=new Date(now.getFullYear(),now.getMonth(),1);}
+    else if(range==="quarter"){const q=Math.floor(now.getMonth()/3);cutoff=new Date(now.getFullYear(),q*3,1);}
+    else if(range==="year"){cutoff=new Date(now.getFullYear(),0,1);}
+    else{cutoff=new Date(0);}
     cutoff.setHours(0,0,0,0);
-    return records.filter(r => new Date(r.check_in) >= cutoff);
+    return records.filter(r=>new Date(r.check_in)>=cutoff);
   }
 
   function meetsMinDuration(r) {
-    if (NO_DURATION_SERVICES.includes(r.service)) return true;
-    if (!r.check_out) return false;
-    const mins = (new Date(r.check_out) - new Date(r.check_in)) / 60000;
-    return mins >= MIN_DURATION_MINUTES;
+    if(NO_DURATION_SERVICES.includes(r.service))return true;
+    if(!r.check_out)return false;
+    return (new Date(r.check_out)-new Date(r.check_in))/60000 >= MIN_DURATION_MINUTES;
   }
 
   function getKey(r) {
-    return range === "year" ? fmtMonth(r.check_in) : fmtDate(r.check_in);
+    return range==="year" ? fmtMonth(r.check_in) : fmtDate(r.check_in);
   }
 
   function groupBy(recs) {
-    const map = {};
-    recs.forEach(r => {
-      const k = getKey(r);
-      if (!map[k]) map[k] = {date:k};
-      CHART_SERVICES.forEach(s => { if (!map[k][s]) map[k][s] = 0; });
-      map[k][r.service] = (map[k][r.service] || 0) + 1;
-    });
-    return Object.values(map).sort((a,b) => new Date(a.date) > new Date(b.date) ? 1 : -1);
+    const map={};
+    recs.forEach(r=>{const k=getKey(r);if(!map[k])map[k]={date:k};CHART_SERVICES.forEach(s=>{if(!map[k][s])map[k][s]=0;});map[k][r.service]=(map[k][r.service]||0)+1;});
+    return Object.values(map).sort((a,b)=>new Date(a.date)>new Date(b.date)?1:-1);
   }
 
   function getVolHours(recs) {
-    const map = {};
-    recs.filter(r => r.service==="Volunteer" && r.check_out).forEach(r => {
-      const k = getKey(r);
-      if (!map[k]) map[k] = {date:k, hours:0};
-      map[k].hours += (new Date(r.check_out) - new Date(r.check_in)) / 3600000;
+    const map={};
+    recs.filter(r=>r.service==="Volunteer"&&r.check_out).forEach(r=>{
+      const k=getKey(r);if(!map[k])map[k]={date:k,hours:0};
+      map[k].hours+=(new Date(r.check_out)-new Date(r.check_in))/3600000;
     });
-    return Object.values(map).sort((a,b) => new Date(a.date) > new Date(b.date) ? 1 : -1);
+    return Object.values(map).sort((a,b)=>new Date(a.date)>new Date(b.date)?1:-1);
   }
 
-  const filtered = getFiltered().filter(meetsMinDuration);
-  const chartData = groupBy(filtered);
-  const volHours = getVolHours(filtered);
-  const totals = {};
-  CHART_SERVICES.forEach(s => { totals[s] = filtered.filter(r => r.service===s).length; });
-
-  const ranges = [{id:"7days",label:"7 days"},{id:"30days",label:"30 days"},{id:"month",label:"This month"},{id:"quarter",label:"This quarter"},{id:"year",label:"This year"},{id:"all",label:"All time"}];
-  const showersLaundryColors = {"Showers":CHART_COLORS["Showers"],"Laundry":CHART_COLORS["Laundry"]};
-  const dayCenterColors = {"Day Center":CHART_COLORS["Day Center"],"Community Partnership":CHART_COLORS["Community Partnership"]};
+  const filtered=getFiltered().filter(meetsMinDuration);
+  const chartData=groupBy(filtered);
+  const volHours=getVolHours(filtered);
+  const totals={};CHART_SERVICES.forEach(s=>{totals[s]=filtered.filter(r=>r.service===s).length;});
+  const ranges=[{id:"7days",label:"7 days"},{id:"30days",label:"30 days"},{id:"month",label:"This month"},{id:"quarter",label:"This quarter"},{id:"year",label:"This year"},{id:"all",label:"All time"}];
 
   return (
     <div>
       <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap"}}>
-        {ranges.map(r => (
-          <button key={r.id} onClick={()=>setRange(r.id)} style={{...btnGhost,fontSize:12,background:range===r.id?"#46b4bf":"transparent",color:range===r.id?"#fff":"#5A7070",borderColor:range===r.id?"#46b4bf":"#D0E6E5",padding:"6px 12px"}}>{r.label}</button>
-        ))}
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10,marginBottom:14}}>
-        {["Showers","Laundry","Day Center"].map(s => (
-          <div key={s} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:10,padding:"12px 10px",textAlign:"center"}}>
-            <p style={{margin:0,fontSize:22,fontWeight:700,color:CHART_COLORS[s]}}>{totals[s]||0}</p>
-            <p style={{margin:0,fontSize:11,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{s}</p>
-          </div>
-        ))}
+        {ranges.map(r=><button key={r.id} onClick={()=>setRange(r.id)} style={{...btnGhost,fontSize:12,background:range===r.id?"#46b4bf":"transparent",color:range===r.id?"#fff":"#5A7070",borderColor:range===r.id?"#46b4bf":"#D0E6E5",padding:"6px 12px"}}>{r.label}</button>)}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10,marginBottom:24}}>
-        {["Community Partnership","Volunteer"].map(s => (
-          <div key={s} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:10,padding:"12px 10px",textAlign:"center"}}>
-            <p style={{margin:0,fontSize:22,fontWeight:700,color:CHART_COLORS[s]}}>{totals[s]||0}</p>
-            <p style={{margin:0,fontSize:11,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{s}</p>
+        {CHART_SERVICES.map(s=>(
+          <div key={s} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:10,padding:"14px 12px",textAlign:"center"}}>
+            <p style={{margin:0,fontSize:28,fontWeight:700,color:CHART_COLORS[s]}}>{totals[s]||0}</p>
+            <p style={{margin:"4px 0 0",fontSize:12,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.04em",wordBreak:"break-word",lineHeight:1.3}}>{s}</p>
           </div>
         ))}
       </div>
       <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:16}}>
-        {CHART_SERVICES.map(s => (
+        {CHART_SERVICES.map(s=>(
           <div key={s} style={{display:"flex",alignItems:"center",gap:5}}>
             <div style={{width:10,height:10,borderRadius:"50%",background:CHART_COLORS[s]}}/>
             <span style={{fontSize:12,color:"#5A7070"}}>{s}</span>
           </div>
         ))}
       </div>
-      {chartData.length===0 ? <p style={{textAlign:"center",color:"#5A7070",padding:"2rem 0",fontSize:14}}>No data for this period.</p> : (
+      {chartData.length===0?<p style={{textAlign:"center",color:"#5A7070",padding:"2rem 0",fontSize:14}}>No data for this period.</p>:(
         <>
           <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:16,marginBottom:16}}>
             <p style={{margin:"0 0 14px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Showers & Laundry</p>
-            <SimpleBarChart data={chartData} keys={["Showers","Laundry"]} colors={showersLaundryColors}/>
+            <SimpleBarChart data={chartData} keys={["Showers","Laundry"]} colors={{"Showers":CHART_COLORS["Showers"],"Laundry":CHART_COLORS["Laundry"]}}/>
           </div>
           <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:16,marginBottom:16}}>
             <p style={{margin:"0 0 14px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Day Center & Community Partnership</p>
-            <SimpleBarChart data={chartData} keys={["Day Center","Community Partnership"]} colors={dayCenterColors}/>
+            <SimpleBarChart data={chartData} keys={["Day Center","Community Partnership"]} colors={{"Day Center":CHART_COLORS["Day Center"],"Community Partnership":CHART_COLORS["Community Partnership"]}}/>
           </div>
           <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:16,marginBottom:16}}>
             <p style={{margin:"0 0 14px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Volunteer hours</p>
@@ -329,7 +351,7 @@ function AnalyticsTab({records}) {
 }
 
 function QueueView({records, people, onCheckOut, onLogout, loadData}) {
-  const services = Object.keys(CAPPED_SERVICES);
+  const services=Object.keys(CAPPED_SERVICES);
   return (
     <div style={{minHeight:"100vh",background:"#F7FAFA"}}>
       <div style={{background:"#46b4bf",padding:"24px 20px 18px",textAlign:"center"}}>
@@ -340,15 +362,12 @@ function QueueView({records, people, onCheckOut, onLogout, loadData}) {
         </div>
       </div>
       <div style={{maxWidth:600,margin:"0 auto",padding:"24px 16px"}}>
-        <h2 style={{margin:"0 0 4px",fontSize:20,fontWeight:700}}>Showers & Laundry</h2>
+        <h2 style={{margin:"0 0 4px",fontSize:20,fontWeight:700}}>Queue View</h2>
         <p style={{margin:"0 0 24px",fontSize:13,color:"#5A7070"}}>Showers & Laundry — today</p>
-        {services.map(svc => {
-          const cap = CAPPED_SERVICES[svc];
-          const queue = records.filter(r => r.service===svc && r.check_in>=todayISO()).sort((a,b) => (a.queue_position||0)-(b.queue_position||0));
-          const active = queue.filter(r => !r.check_out);
-          const done = queue.filter(r => r.check_out);
-          const used = queue.length;
-          const pct = Math.round(used / cap * 100);
+        {services.map(svc=>{
+          const cap=CAPPED_SERVICES[svc];
+          const queue=records.filter(r=>r.service===svc&&r.check_in>=todayISO()).sort((a,b)=>(a.queue_position||0)-(b.queue_position||0));
+          const active=queue.filter(r=>!r.check_out),done=queue.filter(r=>r.check_out),used=queue.length,pct=Math.round(used/cap*100);
           return (
             <div key={svc} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:20,marginBottom:20}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
@@ -359,52 +378,44 @@ function QueueView({records, people, onCheckOut, onLogout, loadData}) {
                 <div style={{height:8,borderRadius:4,width:`${pct}%`,background:used>=cap?"#C0392B":used/cap>0.8?"#E6A817":"#46b4bf",transition:"width 0.3s"}}/>
               </div>
               <div style={{display:"flex",gap:20,marginBottom:16,paddingBottom:14,borderBottom:"1px solid #D0E6E5"}}>
-                {[["Total",used],["Active",active.length],["Done",done.length]].map(([l,v]) => (
+                {[["Total",used],["Active",active.length],["Done",done.length]].map(([l,v])=>(
                   <div key={l} style={{textAlign:"center"}}>
                     <p style={{margin:0,fontSize:22,fontWeight:700,color:"#46b4bf"}}>{v}</p>
                     <p style={{margin:0,fontSize:11,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{l}</p>
                   </div>
                 ))}
               </div>
-              {active.length===0 && <p style={{fontSize:13,color:"#5A7070",textAlign:"center",padding:"12px 0"}}>No active visitors in queue.</p>}
-              {active.map(r => {
-                const person = people.find(p => p.name===r.name);
-                const av = avColor(r.name);
-                return (
-                  <div key={r.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",background:"#EAF7F8",borderRadius:8,marginBottom:8,border:"1px solid #C0E8EC"}}>
-                    <div style={{width:36,height:36,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,flexShrink:0}}>{initials(r.name)||"?"}</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:"flex",alignItems:"center",gap:6}}>
-                        <span style={{fontWeight:600,fontSize:14}}>{r.name}</span>
-                        {person && <span style={{fontSize:11,color:"#5A7070"}}>#{person.guest_number}</span>}
-                      </div>
-                      <p style={{margin:0,fontSize:11,color:"#5A7070"}}>Queue #{r.queue_position} · In: {fmt(r.check_in)}</p>
+              {active.length===0&&<p style={{fontSize:13,color:"#5A7070",textAlign:"center",padding:"12px 0"}}>No active visitors in queue.</p>}
+              {active.map(r=>{const person=people.find(p=>p.name===r.name),av=avColor(r.name);return(
+                <div key={r.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",background:"#EAF7F8",borderRadius:8,marginBottom:8,border:"1px solid #C0E8EC"}}>
+                  <div style={{width:36,height:36,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,flexShrink:0}}>{initials(r.name)||"?"}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontWeight:600,fontSize:14}}>{r.name}</span>
+                      {person&&<span style={{fontSize:11,color:"#5A7070"}}>#{person.guest_number}</span>}
                     </div>
-                    <button onClick={()=>onCheckOut(r.id)} style={{...btnOutline,fontSize:12,padding:"5px 12px",flexShrink:0}}>Check out</button>
+                    <p style={{margin:0,fontSize:11,color:"#5A7070"}}>Queue #{r.queue_position} · In: {fmt(r.check_in)}</p>
                   </div>
-                );
-              })}
-              {done.length > 0 && (
+                  <button onClick={()=>onCheckOut(r.id)} style={{...btnOutline,fontSize:12,padding:"5px 12px",flexShrink:0}}>Check out</button>
+                </div>
+              );})}
+              {done.length>0&&(
                 <details style={{marginTop:8}}>
                   <summary style={{fontSize:12,color:"#5A7070",cursor:"pointer",userSelect:"none"}}>Show completed ({done.length})</summary>
                   <div style={{marginTop:8}}>
-                    {done.map(r => {
-                      const person = people.find(p => p.name===r.name);
-                      const av = avColor(r.name);
-                      return (
-                        <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:8,marginBottom:6,opacity:0.65}}>
-                          <div style={{width:30,height:30,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:11,flexShrink:0}}>{initials(r.name)||"?"}</div>
-                          <div style={{flex:1}}>
-                            <div style={{display:"flex",alignItems:"center",gap:6}}>
-                              <span style={{fontSize:13}}>{r.name}</span>
-                              {person && <span style={{fontSize:11,color:"#5A7070"}}>#{person.guest_number}</span>}
-                            </div>
-                            <p style={{margin:0,fontSize:11,color:"#5A7070"}}>Queue #{r.queue_position}</p>
+                    {done.map(r=>{const person=people.find(p=>p.name===r.name),av=avColor(r.name);return(
+                      <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:8,marginBottom:6,opacity:0.65}}>
+                        <div style={{width:30,height:30,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:11,flexShrink:0}}>{initials(r.name)||"?"}</div>
+                        <div style={{flex:1}}>
+                          <div style={{display:"flex",alignItems:"center",gap:6}}>
+                            <span style={{fontSize:13}}>{r.name}</span>
+                            {person&&<span style={{fontSize:11,color:"#5A7070"}}>#{person.guest_number}</span>}
                           </div>
-                          <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:"#46b4bf",fontWeight:500}}>Done</span>
+                          <p style={{margin:0,fontSize:11,color:"#5A7070"}}>Queue #{r.queue_position}</p>
                         </div>
-                      );
-                    })}
+                        <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:"#46b4bf",fontWeight:500}}>Done</span>
+                      </div>
+                    );})}
                   </div>
                 </details>
               )}
@@ -417,178 +428,252 @@ function QueueView({records, people, onCheckOut, onLogout, loadData}) {
 }
 
 function App() {
-  const [view, setView] = useState("checkin");
-  const [form, setForm] = useState(emptyForm);
-  const [records, setRecords] = useState([]);
-  const [services, setServices] = useState([]);
-  const [people, setPeople] = useState([]);
-  const [suggestions, setSuggestions] = useState([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [success, setSuccess] = useState(null);
-  const [flagAlert, setFlagAlert] = useState(null);
-  const [search, setSearch] = useState("");
-  const [filterType, setFilterType] = useState("All");
-  const [filterService, setFilterService] = useState("All");
-  const [errors, setErrors] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [adminAuth, setAdminAuth] = useState(false);
-  const [queueAuth, setQueueAuth] = useState(false);
-  const [pinInput, setPinInput] = useState("");
-  const [pinError, setPinError] = useState(false);
-  const [showPinModal, setShowPinModal] = useState(null);
-  const [newService, setNewService] = useState("");
-  const [dbError, setDbError] = useState(null);
-  const suggestRef = useRef(null);
+  const [view,setView]=useState("checkin");
+  const [form,setForm]=useState(emptyForm);
+  const [records,setRecords]=useState([]);
+  const [services,setServices]=useState([]);
+  const [people,setPeople]=useState([]);
+  const [suggestions,setSuggestions]=useState([]);
+  const [showSuggestions,setShowSuggestions]=useState(false);
+  const [success,setSuccess]=useState(null);
+  const [flagAlert,setFlagAlert]=useState(null);
+  const [scanResult,setScanResult]=useState(null);
+  const [search,setSearch]=useState("");
+  const [filterType,setFilterType]=useState("All");
+  const [filterService,setFilterService]=useState("All");
+  const [errors,setErrors]=useState({});
+  const [loading,setLoading]=useState(true);
+  const [saving,setSaving]=useState(false);
+  const [adminAuth,setAdminAuth]=useState(false);
+  const [queueAuth,setQueueAuth]=useState(false);
+  const [pinInput,setPinInput]=useState("");
+  const [pinError,setPinError]=useState(false);
+  const [showPinModal,setShowPinModal]=useState(null);
+  const [newService,setNewService]=useState("");
+  const [dbError,setDbError]=useState(null);
+  const suggestRef=useRef(null);
 
-  const loadData = useCallback(async () => {
+  // QR scanner state
+  const scanBuffer=useRef("");
+  const scanTimer=useRef(null);
+  const peopleRef=useRef([]);
+  const recordsRef=useRef([]);
+
+  // Keep refs in sync so the keydown handler always has fresh data
+  useEffect(()=>{ peopleRef.current=people; },[people]);
+  useEffect(()=>{ recordsRef.current=records; },[records]);
+
+  const loadData=useCallback(async()=>{
     try {
-      const [rRes, sRes, pRes] = await Promise.all([
+      const [rRes,sRes,pRes]=await Promise.all([
         api("checkin_records?order=check_in.desc"),
         api("checkin_services?order=name.asc"),
         api("people?order=name.asc")
       ]);
-      if (!rRes.ok || !sRes.ok || !pRes.ok) throw new Error();
-      const [rData, sData, pData] = await Promise.all([rRes.json(), sRes.json(), pRes.json()]);
-      setRecords(rData); setServices(sData.map(s => s.name)); setPeople(pData); setDbError(null);
+      if(!rRes.ok||!sRes.ok||!pRes.ok) throw new Error();
+      const [rData,sData,pData]=await Promise.all([rRes.json(),sRes.json(),pRes.json()]);
+      setRecords(rData); setServices(sData.map(s=>s.name)); setPeople(pData); setDbError(null);
     } catch(_) { setDbError("Could not connect to database."); }
     setLoading(false);
-  }, []);
+  },[]);
 
-  useEffect(() => { loadData(); const t = setInterval(loadData, 15000); return () => clearInterval(t); }, [loadData]);
-  useEffect(() => {
-    function h(e) { if (suggestRef.current && !suggestRef.current.contains(e.target)) setShowSuggestions(false); }
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
+  useEffect(()=>{ loadData(); const t=setInterval(loadData,15000); return()=>clearInterval(t); },[loadData]);
 
-  function handleNameInput(val) {
-    setForm(f => ({...f, name:val, guestNumber:""})); setErrors(e => ({...e, name:undefined})); setFlagAlert(null);
-    if (!val.trim()) { setSuggestions([]); setShowSuggestions(false); return; }
-    const q = val.toLowerCase();
-    const m = people.filter(p => p.name.toLowerCase().includes(q) || String(p.guest_number).includes(q)).slice(0, 6);
-    setSuggestions(m); setShowSuggestions(m.length > 0);
+  useEffect(()=>{
+    function h(e){if(suggestRef.current&&!suggestRef.current.contains(e.target))setShowSuggestions(false);}
+    document.addEventListener("mousedown",h);
+    return()=>document.removeEventListener("mousedown",h);
+  },[]);
+
+  // Global QR scanner listener
+  useEffect(()=>{
+    async function handleScan(code) {
+      if (!code.startsWith(QR_PREFIX)) return;
+      const guestNum = code.slice(QR_PREFIX.length);
+      const person = peopleRef.current.find(p=>String(p.guest_number)===guestNum);
+
+      if (!person) {
+        setScanResult({action:"error", message:`No volunteer found with ID ${guestNum}`});
+        return;
+      }
+
+      if (person.flagged) {
+        setScanResult({action:"error", message:`${person.name} is flagged and cannot check in.`});
+        return;
+      }
+
+      // Check if already checked in today without checkout
+      const activeRecord = recordsRef.current.find(r=>
+        r.name===person.name && r.service==="Volunteer" && r.check_in>=todayISO() && !r.check_out
+      );
+
+      if (activeRecord) {
+        // Check out
+        const now = new Date().toISOString();
+        await api(`checkin_records?id=eq.${activeRecord.id}`,{method:"PATCH",body:JSON.stringify({check_out:now}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+        const dur = duration(activeRecord.check_in, now, "Volunteer");
+        setScanResult({action:"checkout", name:person.name, guestNumber:guestNum, duration:dur});
+      } else {
+        // Check in
+        await api("checkin_records",{method:"POST",body:JSON.stringify({name:person.name,type:"Volunteer",service:"Volunteer",check_in:new Date().toISOString(),check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+        setScanResult({action:"checkin", name:person.name, guestNumber:guestNum});
+      }
+      loadData();
+    }
+
+    function onKeyDown(e) {
+      // Ignore if user is typing in an input/textarea/select
+      const tag = document.activeElement?.tagName;
+      if (tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT") return;
+
+      if (e.key==="Enter") {
+        const code = scanBuffer.current.trim();
+        scanBuffer.current = "";
+        if (scanTimer.current) clearTimeout(scanTimer.current);
+        if (code.length > 3) handleScan(code);
+        return;
+      }
+
+      // Only printable chars
+      if (e.key.length===1) {
+        if (scanTimer.current) clearTimeout(scanTimer.current);
+        scanBuffer.current += e.key;
+        // If no Enter within timeout, clear buffer (it was manual typing)
+        scanTimer.current = setTimeout(()=>{ scanBuffer.current=""; }, SCANNER_TIMEOUT_MS);
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return()=>document.removeEventListener("keydown", onKeyDown);
+  },[loadData]);
+
+  function handleNameInput(val){
+    setForm(f=>({...f,name:val,guestNumber:""}));setErrors(e=>({...e,name:undefined}));setFlagAlert(null);
+    if(!val.trim()){setSuggestions([]);setShowSuggestions(false);return;}
+    const q=val.toLowerCase();
+    const m=people.filter(p=>p.name.toLowerCase().includes(q)||String(p.guest_number).includes(q)).slice(0,6);
+    setSuggestions(m);setShowSuggestions(m.length>0);
   }
 
-  function handleGuestNumberInput(val) {
-    setForm(f => ({...f, guestNumber:val, name:""})); setErrors(e => ({...e, name:undefined})); setFlagAlert(null);
-    if (!val.trim()) { setSuggestions([]); setShowSuggestions(false); return; }
-    const m = people.filter(p => String(p.guest_number).includes(val.trim())).slice(0, 6);
-    setSuggestions(m); setShowSuggestions(m.length > 0);
+  function handleGuestNumberInput(val){
+    setForm(f=>({...f,guestNumber:val,name:""}));setErrors(e=>({...e,name:undefined}));setFlagAlert(null);
+    if(!val.trim()){setSuggestions([]);setShowSuggestions(false);return;}
+    const m=people.filter(p=>String(p.guest_number).includes(val.trim())).slice(0,6);
+    setSuggestions(m);setShowSuggestions(m.length>0);
   }
 
-  function selectPerson(p) {
-    setForm(f => ({...f, name:p.name, guestNumber:String(p.guest_number)}));
-    setSuggestions([]); setShowSuggestions(false); setErrors(e => ({...e, name:undefined}));
-    if (p.flagged) setFlagAlert(p); else setFlagAlert(null);
+  function selectPerson(p){
+    setForm(f=>({...f,name:p.name,guestNumber:String(p.guest_number)}));
+    setSuggestions([]);setShowSuggestions(false);setErrors(e=>({...e,name:undefined}));
+    if(p.flagged)setFlagAlert(p);else setFlagAlert(null);
   }
 
-  function countToday(s) { return records.filter(r => r.service===s && r.check_in>=todayISO()).length; }
+  function countToday(s){ return records.filter(r=>r.service===s&&r.check_in>=todayISO()).length; }
 
-  function validate() {
-    const e = {};
-    if (!form.name.trim() && !form.guestNumber.trim()) e.name = "Name or guest number is required";
-    if (!form.service) e.service = "Please select a service";
-    if (form.service && CAPPED_SERVICES[form.service] && countToday(form.service) >= CAPPED_SERVICES[form.service]) e.service = `${form.service} is full for today.`;
+  function validate(){
+    const e={};
+    if(!form.name.trim()&&!form.guestNumber.trim()) e.name="Name or guest number is required";
+    if(!form.service) e.service="Please select a service";
+    if(form.service&&CAPPED_SERVICES[form.service]&&countToday(form.service)>=CAPPED_SERVICES[form.service]) e.service=`${form.service} is full for today.`;
     return e;
   }
 
-  async function submit() {
-    const e = validate(); if (Object.keys(e).length) { setErrors(e); return; }
-    let name = form.name.trim(), gNum = form.guestNumber.trim();
-    if (!name && gNum) { const match = people.find(p => String(p.guest_number)===gNum); if (!match) { setErrors({name:"Guest number not found."}); return; } name = match.name; }
-    const person = people.find(p => p.name.toLowerCase()===name.toLowerCase());
-    if (person?.flagged) { setFlagAlert(person); return; }
+  async function submit(){
+    const e=validate();if(Object.keys(e).length){setErrors(e);return;}
+    let name=form.name.trim(),gNum=form.guestNumber.trim();
+    if(!name&&gNum){const match=people.find(p=>String(p.guest_number)===gNum);if(!match){setErrors({name:"Guest number not found."});return;}name=match.name;}
+    const person=people.find(p=>p.name.toLowerCase()===name.toLowerCase());
+    if(person?.flagged){setFlagAlert(person);return;}
     setSaving(true);
-    let guestNumber = gNum;
-    const existing = person;
-    if (!existing) {
-      try {
-        const res = await api("people", {method:"POST", body:JSON.stringify({name}), headers:{...HEADERS,"Prefer":"return=representation"}});
-        if (!res.ok) throw new Error();
-        const [np] = await res.json(); guestNumber = String(np.guest_number); await loadData();
-      } catch(_) { setErrors({submit:"Failed to register guest."}); setSaving(false); return; }
-    } else { guestNumber = String(existing.guest_number); }
-    const position = form.service && CAPPED_SERVICES[form.service] ? countToday(form.service) + 1 : null;
-    try {
-      const res = await api("checkin_records", {method:"POST", body:JSON.stringify({name, member_id:form.memberId||null, type:form.type, service:form.service, notes:form.notes||null, queue_position:position, check_in:new Date().toISOString(), check_out:null}), headers:{...HEADERS,"Prefer":"return=representation"}});
-      if (!res.ok) throw new Error();
+    let guestNumber=gNum;
+    const existing=person;
+    if(!existing){
+      try{
+        const res=await api("people",{method:"POST",body:JSON.stringify({name,type:form.type}),headers:{...HEADERS,"Prefer":"return=representation"}});
+        if(!res.ok) throw new Error();
+        const[np]=await res.json();guestNumber=String(np.guest_number);await loadData();
+      }catch(_){setErrors({submit:"Failed to register guest."});setSaving(false);return;}
+    }else{guestNumber=String(existing.guest_number);}
+    const position=form.service&&CAPPED_SERVICES[form.service]?countToday(form.service)+1:null;
+    try{
+      const res=await api("checkin_records",{method:"POST",body:JSON.stringify({name,member_id:form.memberId||null,type:form.type,service:form.service,notes:form.notes||null,queue_position:position,check_in:new Date().toISOString(),check_out:null}),headers:{...HEADERS,"Prefer":"return=representation"}});
+      if(!res.ok) throw new Error();
       await loadData();
-      setSuccess({name, guestNumber, service:form.service, position, isNew:!existing});
-      setForm(emptyForm); setErrors({}); setFlagAlert(null);
-      setTimeout(() => setSuccess(null), 6000);
-    } catch(_) { setErrors({submit:"Failed to save. Please try again."}); }
+      setSuccess({name,guestNumber,service:form.service,position,isNew:!existing});
+      setForm(emptyForm);setErrors({});setFlagAlert(null);
+      setTimeout(()=>setSuccess(null),6000);
+    }catch(_){setErrors({submit:"Failed to save. Please try again."});}
     setSaving(false);
   }
 
-  async function checkOut(id) { await api(`checkin_records?id=eq.${id}`, {method:"PATCH", body:JSON.stringify({check_out:new Date().toISOString()}), headers:{...HEADERS,"Prefer":"return=minimal"}}); loadData(); }
-  async function deleteRecord(id) { await api(`checkin_records?id=eq.${id}`, {method:"DELETE"}); loadData(); }
-  async function flagPerson(p, flagged, reason) { await api(`people?id=eq.${p.id}`, {method:"PATCH", body:JSON.stringify({flagged, flag_reason:reason||null}), headers:{...HEADERS,"Prefer":"return=minimal"}}); loadData(); }
+  async function checkOut(id){await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}
+  async function deleteRecord(id){await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});loadData();}
+  async function flagPerson(p,flagged,reason){await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({flagged,flag_reason:reason||null}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}
 
-  function exportCSV() {
-    const hdr = ["Name","Guest #","Type","Member ID","Service","Queue #","Check-in","Check-out","Duration","Notes"];
-    const rows = records.map(r => { const p = people.find(x => x.name===r.name); const dur = duration(r.check_in, r.check_out, r.service); return [r.name, p?p.guest_number:"", r.type, r.member_id||"", r.service, r.queue_position||"", fmt(r.check_in), r.check_out?fmt(r.check_out):"", dur||"", (r.notes||"").replace(/,/g," ")]; });
-    const csv = [hdr, ...rows].map(r => r.map(v => `"${v}"`).join(",")).join("\n");
-    const a = document.createElement("a"); a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv); a.download = "checkins.csv"; a.click();
+  function exportCSV(){
+    const hdr=["Name","Guest #","Type","Member ID","Service","Queue #","Check-in","Check-out","Duration","Notes"];
+    const rows=records.map(r=>{const p=people.find(x=>x.name===r.name);const dur=duration(r.check_in,r.check_out,r.service);return[r.name,p?p.guest_number:"",r.type,r.member_id||"",r.service,r.queue_position||"",fmt(r.check_in),r.check_out?fmt(r.check_out):"",dur||"",(r.notes||"").replace(/,/g," ")];});
+    const csv=[hdr,...rows].map(r=>r.map(v=>`"${v}"`).join(",")).join("\n");
+    const a=document.createElement("a");a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);a.download="checkins.csv";a.click();
   }
 
-  function tryPin() {
-    if (showPinModal==="admin" && pinInput===ADMIN_PIN) { setAdminAuth(true); setPinError(false); setPinInput(""); setShowPinModal(null); }
-    else if (showPinModal==="queue" && pinInput===QUEUE_PIN) { setQueueAuth(true); setPinError(false); setPinInput(""); setShowPinModal(null); }
-    else { setPinError(true); setPinInput(""); }
+  function tryPin(){
+    if(showPinModal==="admin"&&pinInput===ADMIN_PIN){setAdminAuth(true);setPinError(false);setPinInput("");setShowPinModal(null);}
+    else if(showPinModal==="queue"&&pinInput===QUEUE_PIN){setQueueAuth(true);setPinError(false);setPinInput("");setShowPinModal(null);}
+    else{setPinError(true);setPinInput("");}
   }
 
-  async function addService() { const s = newService.trim(); if (!s || services.includes(s)) { setNewService(""); return; } await api("checkin_services", {method:"POST", body:JSON.stringify({name:s}), headers:{...HEADERS,"Prefer":"return=minimal"}}); setNewService(""); loadData(); }
-  async function removeService(s) { await api(`checkin_services?name=eq.${encodeURIComponent(s)}`, {method:"DELETE"}); loadData(); }
+  async function addService(){const s=newService.trim();if(!s||services.includes(s)){setNewService("");return;}await api("checkin_services",{method:"POST",body:JSON.stringify({name:s}),headers:{...HEADERS,"Prefer":"return=minimal"}});setNewService("");loadData();}
+  async function removeService(s){await api(`checkin_services?name=eq.${encodeURIComponent(s)}`,{method:"DELETE"});loadData();}
 
-  const filtered = records.filter(r => {
-    const q = search.toLowerCase(), person = people.find(p => p.name===r.name), gn = person ? String(person.guest_number) : "";
-    const m = !q || r.name.toLowerCase().includes(q) || gn.includes(q) || (r.member_id||"").toLowerCase().includes(q);
-    return m && (filterType==="All" || r.type===filterType) && (filterService==="All" || r.service===filterService);
+  const filtered=records.filter(r=>{
+    const q=search.toLowerCase(),person=people.find(p=>p.name===r.name),gn=person?String(person.guest_number):"";
+    const m=!q||r.name.toLowerCase().includes(q)||gn.includes(q)||(r.member_id||"").toLowerCase().includes(q);
+    return m&&(filterType==="All"||r.type===filterType)&&(filterService==="All"||r.service===filterService);
   });
 
-  const today = records.filter(r => r.check_in >= todayISO()).length;
-  const gs = records.filter(r => r.type==="Guest").length;
-  const vs = records.filter(r => r.type==="Volunteer").length;
-  const ac = records.filter(r => !r.check_out).length;
+  const today=records.filter(r=>r.check_in>=todayISO()).length;
+  const gs=records.filter(r=>r.type==="Guest").length;
+  const vs=records.filter(r=>r.type==="Volunteer").length;
+  const ac=records.filter(r=>!r.check_out).length;
 
-  if (queueAuth) return <QueueView records={records} people={people} onCheckOut={checkOut} onLogout={()=>setQueueAuth(false)} loadData={loadData}/>;
+  if(queueAuth) return <QueueView records={records} people={people} onCheckOut={checkOut} onLogout={()=>setQueueAuth(false)} loadData={loadData}/>;
 
-  const Tab = ({id, label}) => (
+  const Tab=({id,label})=>(
     <button onClick={()=>setView(id)} style={{flex:1,padding:"10px 0",border:"none",background:"transparent",borderBottom:view===id?"3px solid #46b4bf":"3px solid transparent",fontWeight:view===id?700:400,fontSize:13,cursor:"pointer",color:view===id?"#46b4bf":"#5A7070",fontFamily:"inherit",marginBottom:-2}}>
       {label}
     </button>
   );
 
-  const availableServices = services.filter(s => isServiceAvailableToday(s));
+  const availableServices=services.filter(s=>isServiceAvailableToday(s));
 
   return (
-    <div style={{minHeight:"100vh",background:"#FFF",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"}}>
+    <div style={{minHeight:"100vh",background:"#F7FAFA",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"}}>
       <div style={{background:"#46b4bf",padding:"24px 20px 18px",textAlign:"center"}}>
         <div style={{display:"flex",justifyContent:"center",marginBottom:14}}><Logo/></div>
         <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:8}}>
-          {!loading && <span style={{width:8,height:8,borderRadius:"50%",background:dbError?"#F5A623":"rgba(255,255,255,0.6)",display:"inline-block"}}/>}
-          <button onClick={()=>{setShowPinModal(showPinModal==="queue"?null:"queue");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:12}}>Showers & Laundry</button>
-          <button onClick={()=>{setShowPinModal(showPinModal==="admin"?null:"admin");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:12}}>{adminAuth?"Admin":"Admin"}</button>
+          {!loading&&<span style={{width:8,height:8,borderRadius:"50%",background:dbError?"#F5A623":"rgba(255,255,255,0.6)",display:"inline-block"}}/>}
+          <button onClick={()=>{setShowPinModal(showPinModal==="queue"?null:"queue");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:12}}>Queue view</button>
+          <button onClick={()=>{setShowPinModal(showPinModal==="admin"?null:"admin");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:12}}>{adminAuth?"Admin":"Staff login"}</button>
         </div>
       </div>
 
       <div style={{maxWidth:600,margin:"0 auto",padding:"24px 16px 3rem"}}>
-        {dbError && <div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:13,color:"#C0392B"}}>{dbError}</div>}
+        {dbError&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:13,color:"#C0392B"}}>{dbError}</div>}
 
-        {showPinModal && (
+        {showPinModal&&(
           <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:20,marginBottom:20}}>
-            <p style={{margin:"0 0 12px",fontWeight:700,fontSize:15}}>{showPinModal==="admin"?"Admin Login":"Showers & Laundry Login"}</p>
+            <p style={{margin:"0 0 12px",fontWeight:700,fontSize:15}}>{showPinModal==="admin"?"Staff login":"Queue view login"}</p>
             <div style={{display:"flex",gap:8}}>
               <input type="password" placeholder="Enter PIN" value={pinInput} onChange={e=>setPinInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&tryPin()} style={{...inpStyle,width:130,borderColor:pinError?"#C0392B":"#D0E6E5"}}/>
               <button onClick={tryPin} style={{...btnPrimary,padding:"10px 20px",fontSize:14}}>Login</button>
               <button onClick={()=>{setShowPinModal(null);setPinError(false);setPinInput("");}} style={btnGhost}>Cancel</button>
             </div>
-            {pinError && <p style={{margin:"8px 0 0",fontSize:12,color:"#C0392B"}}>Incorrect PIN. Please try again.</p>}
+            {pinError&&<p style={{margin:"8px 0 0",fontSize:12,color:"#C0392B"}}>Incorrect PIN. Please try again.</p>}
           </div>
         )}
 
-        {adminAuth && (
+        {adminAuth&&(
           <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:20,marginBottom:20}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
               <p style={{margin:0,fontWeight:700,fontSize:15}}>Admin panel</p>
@@ -596,13 +681,13 @@ function App() {
             </div>
             <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service capacity today</p>
             <div style={{display:"flex",gap:10,marginBottom:18}}>
-              {Object.entries(CAPPED_SERVICES).map(([svc, cap]) => { const used = countToday(svc), pct = Math.round(used/cap*100); return (
+              {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{const used=countToday(svc),pct=Math.round(used/cap*100);return(
                 <div key={svc} style={{flex:1,background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:8,padding:"10px 14px"}}>
                   <p style={{margin:"0 0 2px",fontSize:12,fontWeight:600,color:"#2E8A94"}}>{svc}</p>
                   <p style={{margin:"0 0 8px",fontSize:13,color:used>=cap?"#C0392B":"#5A7070"}}>{used}/{cap} spots used</p>
                   <div style={{height:6,borderRadius:3,background:"#C0E8EC"}}><div style={{height:6,borderRadius:3,width:`${pct}%`,background:used>=cap?"#C0392B":used/cap>0.8?"#E6A817":"#46b4bf",transition:"width 0.3s"}}/></div>
                 </div>
-              ); })}
+              );})}
             </div>
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
               <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Manage people</p>
@@ -611,7 +696,7 @@ function App() {
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
               <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service types</p>
               <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
-                {services.map(s => (<span key={s} style={{display:"flex",alignItems:"center",gap:4,fontSize:12,padding:"4px 12px",background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:20,color:"#2E8A94",fontWeight:500}}>{s}{CAPPED_SERVICES[s]?<span style={{fontSize:12,opacity:0.7}}> · {CAPPED_SERVICES[s]}</span>:null}<button onClick={()=>removeService(s)} style={{background:"none",border:"none",cursor:"pointer",color:"#2E8A94",padding:"0 2px",fontSize:14,lineHeight:1,opacity:0.6}}>×</button></span>))}
+                {services.map(s=>(<span key={s} style={{display:"flex",alignItems:"center",gap:4,fontSize:12,padding:"4px 12px",background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:20,color:"#2E8A94",fontWeight:500}}>{s}{CAPPED_SERVICES[s]?<span style={{fontSize:10,opacity:0.7}}> · {CAPPED_SERVICES[s]}</span>:null}<button onClick={()=>removeService(s)} style={{background:"none",border:"none",cursor:"pointer",color:"#2E8A94",padding:"0 2px",fontSize:14,lineHeight:1,opacity:0.6}}>×</button></span>))}
               </div>
               <div style={{display:"flex",gap:8}}>
                 <input placeholder="Add new service…" value={newService} onChange={e=>setNewService(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addService()} style={{...inpStyle,flex:1}}/>
@@ -622,9 +707,9 @@ function App() {
           </div>
         )}
 
-        {!loading && (
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10,marginBottom:14}}>
-            {[["Guests",gs],["Volunteers",vs],["Active",ac]].map(([l,v]) => (
+        {!loading&&(
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:10,marginBottom:14}}>
+            {[["Today",today],["Guests",gs],["Volunteers",vs],["Active",ac]].map(([l,v])=>(
               <div key={l} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:10,padding:"12px 10px",textAlign:"center"}}>
                 <p style={{margin:0,fontSize:22,fontWeight:700,color:"#46b4bf"}}>{v}</p>
                 <p style={{margin:0,fontSize:11,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{l}</p>
@@ -633,45 +718,54 @@ function App() {
           </div>
         )}
 
-        {!loading && (
+        {!loading&&(
           <div style={{display:"flex",gap:10,marginBottom:20}}>
-            {Object.entries(CAPPED_SERVICES).map(([svc, cap]) => { const used = countToday(svc), full = used>=cap; return (
+            {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{const used=countToday(svc),full=used>=cap;return(
               <div key={svc} style={{flex:1,background:full?"#FCECEA":"#EAF7F8",border:`1.5px solid ${full?"#F0A9A3":"#C0E8EC"}`,borderRadius:10,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <span style={{fontSize:13,fontWeight:600,color:full?"#C0392B":"#2E8A94"}}>{svc}</span>
                 <span style={{fontSize:12,fontWeight:500,color:full?"#C0392B":"#46b4bf",background:full?"transparent":"#fff",padding:"2px 10px",borderRadius:20,border:`1px solid ${full?"#F0A9A3":"#C0E8EC"}`}}>{full?"Full":`${cap-used} left`}</span>
               </div>
-            ); })}
+            );})}
           </div>
         )}
 
         <div style={{display:"flex",borderBottom:"2px solid #C0E8EC",marginBottom:24}}>
           <Tab id="checkin" label="Check in"/>
           <Tab id="log" label={`Visit log (${records.length})`}/>
-          {adminAuth && <Tab id="analytics" label="Analytics"/>}
+          {adminAuth&&<Tab id="analytics" label="Analytics"/>}
         </div>
 
-        {view==="checkin" && (
+        {view==="checkin"&&(
           <div>
-            {flagAlert && (
+            {/* QR scan result toast */}
+            {scanResult&&<ScanToast result={scanResult} onDone={()=>setScanResult(null)}/>}
+
+            {!scanResult&&flagAlert&&(
               <div style={{background:"#FFF0F0",border:`2px solid #C0392B`,borderRadius:10,padding:"14px 16px",marginBottom:20}}>
                 <p style={{margin:"0 0 4px",fontSize:15,fontWeight:700,color:"#C0392B"}}>⚑ This person is not allowed on the premises</p>
                 <p style={{margin:"0 0 2px",fontSize:13,color:"#C0392B"}}><strong>{flagAlert.name}</strong> — Guest #{flagAlert.guest_number}</p>
-                {flagAlert.flag_reason && <p style={{margin:0,fontSize:12,color:"#C0392B"}}>Reason: {flagAlert.flag_reason}</p>}
+                {flagAlert.flag_reason&&<p style={{margin:0,fontSize:12,color:"#C0392B"}}>Reason: {flagAlert.flag_reason}</p>}
                 <p style={{margin:"8px 0 0",fontSize:12,color:"#5A7070"}}>Please contact a staff member. Check-in has been blocked.</p>
               </div>
             )}
-            {success && !flagAlert && (
+            {!scanResult&&success&&!flagAlert&&(
               <div style={{background:"#EAF7F8",border:"1.5px solid #C0E8EC",borderRadius:10,padding:"14px 16px",marginBottom:20}}>
                 <p style={{margin:"0 0 4px",fontSize:15,fontWeight:700,color:"#2E8A94"}}>{success.isNew?`Welcome, ${success.name}! You've been registered.`:`Welcome back, ${success.name}!`}</p>
                 <p style={{margin:"0 0 2px",fontSize:13,color:"#46b4bf"}}>Guest number: <strong>#{success.guestNumber}</strong></p>
-                {success.position && <p style={{margin:0,fontSize:13,color:"#46b4bf"}}>Queue position for {success.service}: <strong>#{success.position}</strong></p>}
+                {success.position&&<p style={{margin:0,fontSize:13,color:"#46b4bf"}}>Queue position for {success.service}: <strong>#{success.position}</strong></p>}
               </div>
             )}
-            {errors.submit && <div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:13,color:"#C0392B"}}>{errors.submit}</div>}
+            {errors.submit&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:13,color:"#C0392B"}}>{errors.submit}</div>}
+
+            {/* Scanner hint */}
+            <div style={{background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:8,padding:"8px 14px",marginBottom:20,fontSize:12,color:"#2E8A94",display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:16}}>📷</span>
+              <span>Volunteer QR codes are detected automatically — just scan anytime.</span>
+            </div>
 
             <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Visitor type</p>
             <div style={{display:"flex",gap:10,marginBottom:18}}>
-              {["Guest","Volunteer"].map(t => (
+              {["Guest","Volunteer"].map(t=>(
                 <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"10px 0",borderRadius:8,border:form.type===t?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:form.type===t?"#EAF7F8":"#fff",fontWeight:form.type===t?700:400,fontSize:14,cursor:"pointer",color:form.type===t?"#2E8A94":"#5A7070",fontFamily:"inherit"}}>
                   {t}
                 </button>
@@ -682,18 +776,18 @@ function App() {
             <div style={{marginBottom:4,position:"relative"}} ref={suggestRef}>
               <div style={{display:"flex",gap:8,marginBottom:4}}>
                 <input placeholder="Full name…" value={form.name} onChange={e=>handleNameInput(e.target.value)} style={{...inpStyle,flex:1,borderColor:errors.name?"#C0392B":"#D0E6E5"}}/>
-                <input placeholder="Guest # (e.g. 1001)" value={form.guestNumber} onChange={e=>handleGuestNumberInput(e.target.value)} style={{...inpStyle,width:160}}/>
+                <input placeholder="Guest #" value={form.guestNumber} onChange={e=>handleGuestNumberInput(e.target.value)} style={{...inpStyle,width:130}}/>
               </div>
-              {errors.name && <p style={{margin:"0 0 8px",fontSize:12,color:"#C0392B"}}>{errors.name}</p>}
-              {showSuggestions && suggestions.length > 0 && (
+              {errors.name&&<p style={{margin:"0 0 8px",fontSize:12,color:"#C0392B"}}>{errors.name}</p>}
+              {showSuggestions&&suggestions.length>0&&(
                 <div style={{position:"absolute",top:"calc(100% - 4px)",left:0,right:0,background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:10,zIndex:10,boxShadow:"0 6px 20px rgba(70,180,191,0.15)",overflow:"hidden"}}>
-                  {suggestions.map(p => { const av = avColor(p.name); return (
+                  {suggestions.map(p=>{const av=avColor(p.name);return(
                     <div key={p.id} onClick={()=>selectPerson(p)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",cursor:"pointer",borderBottom:"1px solid #D0E6E5",background:p.flagged?"#FFF5F5":"#fff"}} onMouseEnter={e=>e.currentTarget.style.background=p.flagged?"#FFE8E8":"#EAF7F8"} onMouseLeave={e=>e.currentTarget.style.background=p.flagged?"#FFF5F5":"#fff"}>
                       <div style={{width:34,height:34,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:12,flexShrink:0}}>{initials(p.name)||"?"}</div>
                       <div style={{flex:1}}><p style={{margin:0,fontSize:14,fontWeight:600}}>{p.name}</p><p style={{margin:0,fontSize:12,color:"#5A7070"}}>Guest #{p.guest_number}</p></div>
-                      {p.flagged && <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600,flexShrink:0}}>⚑ Flagged</span>}
+                      {p.flagged&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600,flexShrink:0}}>⚑ Flagged</span>}
                     </div>
-                  ); })}
+                  );})}
                 </div>
               )}
             </div>
@@ -701,9 +795,9 @@ function App() {
             <div style={{marginBottom:14,marginTop:10}}>
               <select value={form.service} onChange={ev=>{setForm(f=>({...f,service:ev.target.value}));setErrors(e=>({...e,service:undefined}));}} style={{...inpStyle,height:42,borderColor:errors.service?"#C0392B":"#D0E6E5"}}>
                 <option value="">Select service / reason for visit…</option>
-                {availableServices.map(s => { const cap=CAPPED_SERVICES[s], used=cap?countToday(s):0, full=cap&&used>=cap; return <option key={s} value={s} disabled={full}>{s}{cap?` (${used}/${cap}${full?" — Full":""})`:""}</option>; })}
+                {availableServices.map(s=>{const cap=CAPPED_SERVICES[s],used=cap?countToday(s):0,full=cap&&used>=cap;return<option key={s} value={s} disabled={full}>{s}{cap?` (${used}/${cap}${full?" — Full":""})`:""}</option>;})}
               </select>
-              {errors.service && <p style={{margin:"4px 0 0",fontSize:12,color:"#C0392B"}}>{errors.service}</p>}
+              {errors.service&&<p style={{margin:"4px 0 0",fontSize:12,color:"#C0392B"}}>{errors.service}</p>}
             </div>
 
             <div style={{marginBottom:22}}>
@@ -711,18 +805,18 @@ function App() {
             </div>
 
             <button onClick={submit} disabled={saving||!!flagAlert} style={{...btnPrimary,width:"100%",padding:13,fontSize:16,opacity:(saving||!!flagAlert)?0.5:1,cursor:flagAlert?"not-allowed":"pointer"}}>
-              {saving ? "Saving…" : "Check in"}
+              {saving?"Saving…":"Check in"}
             </button>
           </div>
         )}
 
-        {view==="log" && (
+        {view==="log"&&(
           <div>
-            {!adminAuth ? (
+            {!adminAuth?(
               <div style={{background:"#FEF7E6",border:"1px solid #F5D48A",borderRadius:8,padding:"12px 16px",marginBottom:16,fontSize:13,color:"#8A5A00"}}>
                 Staff login required to view the visit log. Click "Staff login" above.
               </div>
-            ) : (
+            ):(
               <>
                 <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
                   <input placeholder="Search by name or guest #…" value={search} onChange={e=>setSearch(e.target.value)} style={{...inpStyle,flex:1,minWidth:140}}/>
@@ -733,28 +827,28 @@ function App() {
                   <p style={{margin:0,fontSize:12,color:"#5A7070"}}>{people.length} people in directory</p>
                   <button onClick={loadData} style={btnGhost}>Refresh ↻</button>
                 </div>
-                {loading ? <p style={{color:"#5A7070",fontSize:14,textAlign:"center",padding:"2rem 0"}}>Loading…</p>
-                : filtered.length===0 ? <p style={{color:"#5A7070",fontSize:14,textAlign:"center",padding:"2rem 0"}}>No records found.</p>
-                : filtered.map(r => {
-                  const av = avColor(r.name), dur = duration(r.check_in, r.check_out, r.service), person = people.find(p => p.name===r.name), isFlagged = person?.flagged;
-                  return (
+                {loading?<p style={{color:"#5A7070",fontSize:14,textAlign:"center",padding:"2rem 0"}}>Loading…</p>
+                :filtered.length===0?<p style={{color:"#5A7070",fontSize:14,textAlign:"center",padding:"2rem 0"}}>No records found.</p>
+                :filtered.map(r=>{
+                  const av=avColor(r.name),dur=duration(r.check_in,r.check_out,r.service),person=people.find(p=>p.name===r.name),isFlagged=person?.flagged;
+                  return(
                     <div key={r.id} style={{background:isFlagged?"#FFF5F5":"#fff",border:`1.5px solid ${isFlagged?"#F0A9A3":"#D0E6E5"}`,borderRadius:12,padding:"12px 14px",marginBottom:10,display:"flex",alignItems:"flex-start",gap:12}}>
                       <div style={{width:42,height:42,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:14,flexShrink:0}}>{initials(r.name)||"?"}</div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:2}}>
                           <span style={{fontWeight:700,fontSize:14}}>{r.name}</span>
-                          {person && <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:"#2E8A94",fontWeight:500}}>#{person.guest_number}</span>}
-                          {isFlagged && <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600}}>⚑ Flagged</span>}
+                          {person&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:"#2E8A94",fontWeight:500}}>#{person.guest_number}</span>}
+                          {isFlagged&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600}}>⚑ Flagged</span>}
                           <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:r.type==="Volunteer"?"#EAF7F8":"#EEEEFB",color:r.type==="Volunteer"?"#2E8A94":"#3A3A8C",fontWeight:500}}>{r.type}</span>
-                          {r.queue_position && <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FEF7E6",color:"#8A5A00",fontWeight:500}}>Queue #{r.queue_position}</span>}
-                          {!r.check_out && <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:"#46b4bf",fontWeight:500}}>Active</span>}
+                          {r.queue_position&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FEF7E6",color:"#8A5A00",fontWeight:500}}>Queue #{r.queue_position}</span>}
+                          {!r.check_out&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:"#46b4bf",fontWeight:500}}>Active</span>}
                         </div>
                         <p style={{margin:"2px 0",fontSize:12,color:"#5A7070",fontWeight:500}}>{r.service}</p>
                         <p style={{margin:0,fontSize:11,color:"#8AA5A5"}}>In: {fmt(r.check_in)}{r.check_out?` · Out: ${fmt(r.check_out)}${dur?` · ${dur}`:""}`:""}</p>
-                        {r.notes && <p style={{margin:"4px 0 0",fontSize:12,color:"#5A7070",fontStyle:"italic"}}>{r.notes}</p>}
+                        {r.notes&&<p style={{margin:"4px 0 0",fontSize:12,color:"#5A7070",fontStyle:"italic"}}>{r.notes}</p>}
                       </div>
                       <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0}}>
-                        {!r.check_out && <button onClick={()=>checkOut(r.id)} style={{...btnOutline,fontSize:12,padding:"5px 10px"}}>Check out</button>}
+                        {!r.check_out&&<button onClick={()=>checkOut(r.id)} style={{...btnOutline,fontSize:12,padding:"5px 10px"}}>Check out</button>}
                         <button onClick={()=>deleteRecord(r.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#8AA5A5",fontSize:18,padding:"0 4px",lineHeight:1,alignSelf:"flex-end"}}>×</button>
                       </div>
                     </div>
@@ -765,7 +859,7 @@ function App() {
           </div>
         )}
 
-        {view==="analytics" && adminAuth && <AnalyticsTab records={records}/>}
+        {view==="analytics"&&adminAuth&&<AnalyticsTab records={records}/>}
       </div>
     </div>
   );
