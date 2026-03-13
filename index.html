@@ -103,6 +103,29 @@ function nextAvailablePosition(service, records) {
   return max + 1;
 }
 
+const FLAG_ALERT_SERVICE = "FLAG_ALERT";
+
+function FlagAlertPopup({ alerts, onDismiss }) {
+  if (!alerts || alerts.length === 0) return null;
+  return (
+    <div style={{position:"fixed",top:20,right:20,zIndex:1000,display:"flex",flexDirection:"column",gap:12,maxWidth:360}}>
+      {alerts.map(a => (
+        <div key={a.id} className="scan-toast" style={{background:"#FFF0F0",border:"2px solid #C0392B",borderRadius:14,padding:"18px 20px",boxShadow:"0 8px 32px rgba(192,57,43,0.18)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
+            <div>
+              <p style={{margin:"0 0 4px",fontSize:17,fontWeight:700,color:"#C0392B"}}>⚑ Flagged person attempted check-in</p>
+              <p style={{margin:"0 0 4px",fontSize:15,color:"#1D2B2B",fontWeight:600}}>{a.name}</p>
+              {a.notes && <p style={{margin:"0 0 4px",fontSize:14,color:"#C0392B"}}>Reason: {a.notes}</p>}
+              <p style={{margin:0,fontSize:13,color:"#8AA5A5"}}>{fmt(a.check_in)}</p>
+            </div>
+            <button onClick={()=>onDismiss(a.id)} style={{background:"#C0392B",border:"none",borderRadius:8,color:"#fff",fontWeight:700,fontSize:15,padding:"4px 10px",cursor:"pointer",flexShrink:0}}>Dismiss</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const AV_COLORS=[{bg:"#C2E8E6",color:"#1D5C5A"},{bg:"#B8DFE8",color:"#1A4A5C"},{bg:"#C8E6D4",color:"#1A5C35"},{bg:"#E6D4C8",color:"#5C3A1A"},{bg:"#D4C8E6",color:"#3A1A5C"}];
 function avColor(name) { let h=0; for(let c of name)h=(h*31+c.charCodeAt(0))&0xffff; return AV_COLORS[h%AV_COLORS.length]; }
 const emptyForm = {name:"",guestNumber:"",memberId:"",type:"Guest",service:"",notes:"",addShowers:false,addLaundry:false};
@@ -113,7 +136,7 @@ function LiveClock() {
   const date = now.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});
   const time = now.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
   return (
-    <p style={{margin:"12px 0 4px",fontSize:20,color:"#fff",fontWeight:900}}>{date} | {time}</p>
+    <p style={{margin:"12px 0 4px",fontSize:18,color:"#fff",fontWeight:600}}>{date} · {time}</p>
   );
 }
 
@@ -753,7 +776,13 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
     let name=form.name.trim(),gNum=form.guestNumber.trim();
     if(!name&&gNum){const match=people.find(p=>String(p.guest_number)===gNum);if(!match){setErrors({name:"Guest number not found."});return;}name=match.name;}
     const person=people.find(p=>p.name.toLowerCase()===name.toLowerCase());
-    if(person?.flagged){setFlagAlert(person);return;}
+    if(person?.flagged){
+      setFlagAlert(person);
+      // Write a flag alert record so admin is notified
+      await api("checkin_records",{method:"POST",body:JSON.stringify({name,type:"Guest",service:FLAG_ALERT_SERVICE,notes:person.flag_reason||null,check_in:new Date().toISOString(),check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      await loadData();
+      return;
+    }
     setSaving(true);
     let guestNumber=gNum;
     const existing=person;
@@ -813,18 +842,9 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
         {dbError&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:10,padding:"12px 16px",marginBottom:20,fontSize:15,color:"#C0392B"}}>{dbError}</div>}
 
         {/* Showers & Laundry availability — simple public view */}
-        
-        {!loading&&(
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:14,marginBottom:24}}>
-            {[["Today",records.filter(r=>r.check_in>=todayISO()).length],["Guests",records.filter(r=>r.type==="Guest").length],["Volunteers",records.filter(r=>r.type==="Volunteer").length]].map(([l,v])=>(
-              <div key={l} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:"16px 14px",textAlign:"center"}}>
-                <p style={{margin:0,fontSize:28,fontWeight:700,color:"#46b4bf"}}>{v}</p>
-                <p style={{margin:0,fontSize:13,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{l}</p>
-              </div>
-            ))}
-          </div>
-        )}
         <div style={{marginBottom:32}}>
+          <h2 style={{margin:"0 0 6px",fontSize:22,fontWeight:700}}>Showers & Laundry</h2>
+          <p style={{margin:"0 0 18px",fontSize:15,color:"#5A7070"}}>Today's availability</p>
           <div style={{display:"flex",gap:14}}>
             {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{
               const used=records.filter(r=>r.service===svc&&r.check_in>=todayISO()).length;
@@ -839,6 +859,23 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
             })}
           </div>
         </div>
+
+        {!loading&&(
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:14,marginBottom:24}}>
+            {[["Today",records.filter(r=>r.check_in>=todayISO()).length],["Guests",records.filter(r=>r.type==="Guest").length],["Volunteers",records.filter(r=>r.type==="Volunteer").length]].map(([l,v])=>(
+              <div key={l} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:"16px 14px",textAlign:"center"}}>
+                <p style={{margin:0,fontSize:28,fontWeight:700,color:"#46b4bf"}}>{v}</p>
+                <p style={{margin:0,fontSize:13,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{l}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{borderTop:"2px solid #C0E8EC",paddingTop:28,marginBottom:24}}>
+          <h2 style={{margin:"0 0 6px",fontSize:22,fontWeight:700}}>Check in</h2>
+          <p style={{margin:"0 0 20px",fontSize:15,color:"#5A7070"}}>Select your service and enter your name to check in</p>
+        </div>
+
         {flagAlert&&(
           <div style={{background:"#FFF0F0",border:`2px solid #C0392B`,borderRadius:12,padding:"18px 20px",marginBottom:24}}>
             <p style={{margin:"0 0 6px",fontSize:18,fontWeight:700,color:"#C0392B"}}>⚑ This person is not allowed on the premises</p>
@@ -883,7 +920,7 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
         </div>
 
         <div style={{marginBottom:18,marginTop:14}}>
-          <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Reason for Visit</p>
+          <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Select service</p>
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:12}}>
             {availableServices.map(s=>{
               const cap=CAPPED_SERVICES[s],used=cap?countToday(s):0,full=cap&&used>=cap;
@@ -951,6 +988,8 @@ function AdminApp() {
   const [showPinModal,setShowPinModal]=useState(null);
   const [newService,setNewService]=useState("");
   const [dbError,setDbError]=useState(null);
+  const [flagAlerts,setFlagAlerts]=useState([]);
+  const seenAlertIds=useRef(new Set());
   const suggestRef=useRef(null);
   const scanBuffer=useRef("");
   const scanTimer=useRef(null);
@@ -966,6 +1005,12 @@ function AdminApp() {
       if(!rRes.ok||!sRes.ok||!pRes.ok) throw new Error();
       const [rData,sData,pData]=await Promise.all([rRes.json(),sRes.json(),pRes.json()]);
       setRecords(rData);setServices(sData.map(s=>s.name));setPeople(pData);setDbError(null);
+      // Detect new unread flag alerts (check_out=null means unread)
+      const newAlerts=rData.filter(r=>r.service===FLAG_ALERT_SERVICE&&!r.check_out&&r.check_in>=todayISO()&&!seenAlertIds.current.has(r.id));
+      if(newAlerts.length>0){
+        newAlerts.forEach(a=>seenAlertIds.current.add(a.id));
+        setFlagAlerts(prev=>[...prev,...newAlerts]);
+      }
     } catch(_){setDbError("Could not connect to database.");}
     setLoading(false);
   },[]);
@@ -1100,6 +1145,11 @@ function AdminApp() {
 
   if(queueAuth) return <QueueView records={records} people={people} onMarkComplete={markComplete} onCancel={cancelRecord} onLogout={()=>setQueueAuth(false)} loadData={loadData}/>;
 
+  async function dismissAlert(id){
+    await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+    setFlagAlerts(prev=>prev.filter(a=>a.id!==id));
+  }
+
   const Tab=({id,label})=>(
     <button onClick={()=>setView(id)} style={{flex:1,padding:"14px 0",border:"none",background:"transparent",borderBottom:view===id?"3px solid #46b4bf":"3px solid transparent",fontWeight:view===id?700:400,fontSize:16,cursor:"pointer",color:view===id?"#46b4bf":"#5A7070",fontFamily:"inherit",marginBottom:-2}}>
       {label}
@@ -1110,11 +1160,7 @@ function AdminApp() {
 
   return (
     <div style={{minHeight:"100vh",background:"#F7FAFA"}}>
-      <div style={{background:"#46b4bf",padding:"28px 24px 22px",textAlign:"center"}}>
-        <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Logo/></div>
-        <LiveClock/>
-        <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:10,marginTop:16}}>
-          <span style={{fontSize:13,padding:"4px 12px",borderRadius:20,background:"rgba(255,255,255,0.2)",color:"#fff",fontWeight:600}}>Admin mode</span>
+      <FlagAlertPopup alerts={flagAlerts} onDismiss={dismissAlert}/>
           <button onClick={()=>{setShowPinModal(showPinModal==="queue"?null:"queue");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:14}}>Showers & Laundry</button>
           <button onClick={()=>{setShowPinModal(showPinModal==="admin"?null:"admin");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:14}}>Admin</button>
 
