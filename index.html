@@ -83,7 +83,6 @@ function localInputToIso(val) {
   if (!val) return null;
   return new Date(val).toISOString();
 }
-// Returns "Shower #", "Laundry #", or "Queue #" depending on service
 function queueLabel(service, position) {
   if (!position) return null;
   if (service === "Showers") return `Shower #${position}`;
@@ -95,7 +94,21 @@ const AV_COLORS=[{bg:"#C2E8E6",color:"#1D5C5A"},{bg:"#B8DFE8",color:"#1A4A5C"},{
 function avColor(name) { let h=0; for(let c of name)h=(h*31+c.charCodeAt(0))&0xffff; return AV_COLORS[h%AV_COLORS.length]; }
 const emptyForm = {name:"",guestNumber:"",memberId:"",type:"Guest",service:"",notes:"",addShowers:false,addLaundry:false};
 
-// Live clock component
+// Returns the lowest available queue position for a capped service today,
+// filling gaps left by cancelled (deleted) records first.
+function nextAvailablePosition(service, records) {
+  const cap = CAPPED_SERVICES[service];
+  const taken = new Set(
+    records
+      .filter(r => r.service === service && r.check_in >= todayISO() && !r.check_out)
+      .map(r => r.queue_position)
+  );
+  for (let i = 1; i <= cap; i++) {
+    if (!taken.has(i)) return i;
+  }
+  return null; // full
+}
+
 function LiveClock() {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
@@ -750,17 +763,24 @@ function App() {
       }catch(_){setErrors({submit:"Failed to register guest."});setSaving(false);return;}
     }else{guestNumber=String(existing.guest_number);}
     const now=new Date().toISOString();
-    const position=form.service&&CAPPED_SERVICES[form.service]? (records.filter(r => r.service === form.service && r.check_in >= todayISO()).reduce((max, r) => Math.max(max, r.queue_position || 0), 0)) + 1:null;
+
+    // Use nextAvailablePosition to fill gaps left by cancelled records
+    const position = form.service && CAPPED_SERVICES[form.service]
+      ? nextAvailablePosition(form.service, records)
+      : null;
+
     const toInsert=[{name,member_id:form.memberId||null,type:form.type,service:form.service,notes:form.notes||null,queue_position:position,check_in:now,check_out:null}];
     const addOns=[];
     if(form.service==="Day Center"){
       if(form.addShowers&&countToday("Showers")<CAPPED_SERVICES["Showers"]){
-        toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Showers",notes:form.notes||null,queue_position: (records.filter(r => r.service === "Showers" && r.check_in >= todayISO()).reduce((max, r) => Math.max(max, r.queue_position || 0), 0)) + 1,check_in:now,check_out:null});
-        addOns.push({service:"Showers",position:countToday("Showers")+1});
+        const showersPos = nextAvailablePosition("Showers", records);
+        toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Showers",notes:form.notes||null,queue_position:showersPos,check_in:now,check_out:null});
+        addOns.push({service:"Showers",position:showersPos});
       }
       if(form.addLaundry&&countToday("Laundry")<CAPPED_SERVICES["Laundry"]){
-        toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Laundry",notes:form.notes||null,queue_position: (records.filter(r => r.service === "Laundry" && r.check_in >= todayISO()).reduce((max, r) => Math.max(max, r.queue_position || 0), 0)) + 1,check_in:now,check_out:null});
-        addOns.push({service:"Laundry",position:countToday("Laundry")+1});
+        const laundryPos = nextAvailablePosition("Laundry", records);
+        toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Laundry",notes:form.notes||null,queue_position:laundryPos,check_in:now,check_out:null});
+        addOns.push({service:"Laundry",position:laundryPos});
       }
     }
     try{
