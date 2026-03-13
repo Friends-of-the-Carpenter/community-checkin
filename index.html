@@ -111,12 +111,9 @@ function LiveClock() {
   const [now, setNow] = useState(new Date());
   useEffect(() => { const t=setInterval(()=>setNow(new Date()),1000); return()=>clearInterval(t); }, []);
   const date = now.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});
-  const time = now.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",second:"2-digit"});
+  const time = now.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
   return (
-    <div style={{marginTop:12,marginBottom:4}}>
-      <p style={{margin:0,fontSize:15,color:"rgba(255,255,255,0.9)",fontWeight:500}}>{date}</p>
-      <p style={{margin:"4px 0 0",fontSize:26,color:"#fff",fontWeight:700,letterSpacing:"0.02em"}}>{time}</p>
-    </div>
+    <p style={{margin:"12px 0 4px",fontSize:18,color:"#fff",fontWeight:600}}>{date} · {time}</p>
   );
 }
 
@@ -810,9 +807,6 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
       <div style={{background:"#46b4bf",padding:"28px 24px 22px",textAlign:"center"}}>
         <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Logo/></div>
         <LiveClock/>
-        <div style={{display:"flex",justifyContent:"center",gap:10,marginTop:14}}>
-          <button onClick={loadData} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)"}}>Refresh ↻</button>
-        </div>
       </div>
 
       <div style={{maxWidth:900,margin:"0 auto",padding:"28px 24px 4rem"}}>
@@ -828,10 +822,9 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
               const full=used>=cap;
               const avail=cap-used;
               return (
-                <div key={svc} style={{flex:1,background:full?"#FCECEA":"#EAF7F8",border:`1.5px solid ${full?"#F0A9A3":"#C0E8EC"}`,borderRadius:14,padding:"22px 20px",textAlign:"center"}}>
-                  <p style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:full?"#C0392B":"#2E8A94"}}>{svc}</p>
-                  <p style={{margin:0,fontSize:full?20:32,fontWeight:700,color:full?"#C0392B":"#46b4bf"}}>{full?"Full":avail}</p>
-                  {!full&&<p style={{margin:"4px 0 0",fontSize:14,color:"#5A7070"}}>spots available</p>}
+                <div key={svc} style={{flex:1,background:full?"#FCECEA":"#EAF7F8",border:`1.5px solid ${full?"#F0A9A3":"#C0E8EC"}`,borderRadius:12,padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:15,fontWeight:600,color:full?"#C0392B":"#2E8A94"}}>{svc}</span>
+                  <span style={{fontSize:14,fontWeight:500,color:full?"#C0392B":"#46b4bf",background:full?"transparent":"#fff",padding:"4px 14px",borderRadius:20,border:`1px solid ${full?"#F0A9A3":"#C0E8EC"}`}}>{full?"Full":`${avail} left`}</span>
                 </div>
               );
             })}
@@ -1121,6 +1114,7 @@ function AdminApp() {
           <span style={{fontSize:13,padding:"4px 12px",borderRadius:20,background:"rgba(255,255,255,0.2)",color:"#fff",fontWeight:600}}>Admin mode</span>
           <button onClick={()=>{setShowPinModal(showPinModal==="queue"?null:"queue");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:14}}>Showers & Laundry</button>
           <button onClick={()=>{setShowPinModal(showPinModal==="admin"?null:"admin");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:14}}>Admin</button>
+
         </div>
       </div>
 
