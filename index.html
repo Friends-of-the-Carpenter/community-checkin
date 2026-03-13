@@ -15,8 +15,8 @@
   <script src="https://unpkg.com/@babel/standalone@7.23.10/babel.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #F7FAFA; color: #1D2B2B; min-height: 100vh; }
-    input, select, textarea { font-family: inherit; font-size: 14px; border-radius: 8px; border: 1.5px solid #D0E6E5; padding: 10px 12px; outline: none; background: #fff; color: #1D2B2B; width: 100%; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #F7FAFA; color: #1D2B2B; min-height: 100vh; font-size: 16px; }
+    input, select, textarea { font-family: inherit; font-size: 16px; border-radius: 10px; border: 1.5px solid #D0E6E5; padding: 13px 16px; outline: none; background: #fff; color: #1D2B2B; width: 100%; }
     input:focus, select:focus, textarea:focus { border-color: #46b4bf; box-shadow: 0 0 0 3px rgba(70,180,191,0.15); }
     button { font-family: inherit; cursor: pointer; }
     @keyframes slideIn { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
@@ -48,11 +48,11 @@ const C = {
   border:"#D0E6E5",danger:"#C0392B",dangerBg:"#FCECEA",dangerBorder:"#F0A9A3",
   success:"#3A9C6A",successBg:"#EAF7EE",successBorder:"#B0DFC0",
 };
-const inpStyle = {width:"100%",boxSizing:"border-box",padding:"10px 12px",fontSize:14,borderRadius:8,border:"1.5px solid #D0E6E5",background:"#fff",color:"#1D2B2B",fontFamily:"inherit",outline:"none"};
-const btnPrimary = {background:"#46b4bf",color:"#fff",border:"none",borderRadius:8,padding:"11px 20px",fontSize:15,fontWeight:600,cursor:"pointer",fontFamily:"inherit"};
-const btnOutline = {background:"transparent",color:"#46b4bf",border:"1.5px solid #46b4bf",borderRadius:8,padding:"7px 14px",fontSize:13,fontWeight:500,cursor:"pointer",fontFamily:"inherit"};
-const btnGhost = {background:"transparent",color:"#5A7070",border:"1px solid #D0E6E5",borderRadius:8,padding:"6px 12px",fontSize:12,cursor:"pointer",fontFamily:"inherit"};
-const btnSuccess = {background:"#3A9C6A",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"};
+const inpStyle = {width:"100%",boxSizing:"border-box",padding:"13px 16px",fontSize:16,borderRadius:10,border:"1.5px solid #D0E6E5",background:"#fff",color:"#1D2B2B",fontFamily:"inherit",outline:"none"};
+const btnPrimary = {background:"#46b4bf",color:"#fff",border:"none",borderRadius:10,padding:"14px 24px",fontSize:17,fontWeight:600,cursor:"pointer",fontFamily:"inherit"};
+const btnOutline = {background:"transparent",color:"#46b4bf",border:"1.5px solid #46b4bf",borderRadius:10,padding:"10px 18px",fontSize:15,fontWeight:500,cursor:"pointer",fontFamily:"inherit"};
+const btnGhost = {background:"transparent",color:"#5A7070",border:"1px solid #D0E6E5",borderRadius:10,padding:"9px 16px",fontSize:14,cursor:"pointer",fontFamily:"inherit"};
+const btnSuccess = {background:"#3A9C6A",color:"#fff",border:"none",borderRadius:10,padding:"9px 18px",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit"};
 
 function api(path, opts={}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: HEADERS, ...opts });
@@ -92,9 +92,6 @@ function queueLabel(service, position) {
   if (service === "Laundry") return `Laundry #${position}`;
   return `Queue #${position}`;
 }
-
-// Returns max queue_position used today + 1, regardless of cancellations.
-// If no one is currently active, resets back to 1.
 function nextAvailablePosition(service, records) {
   const todayRecords = records.filter(r => r.service === service && r.check_in >= todayISO());
   const activeRecords = todayRecords.filter(r => !r.check_out);
@@ -113,15 +110,15 @@ function LiveClock() {
   const date = now.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});
   const time = now.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
   return (
-    <div style={{marginTop:10,marginBottom:2}}>
+    <div style={{marginTop:12,marginBottom:4}}>
       <p style={{margin:0,fontSize:15,color:"rgba(255,255,255,0.9)",fontWeight:500}}>{date}</p>
-      <p style={{margin:"2px 0 0",fontSize:20,color:"#fff",fontWeight:700,letterSpacing:"0.02em"}}>{time}</p>
+      <p style={{margin:"4px 0 0",fontSize:26,color:"#fff",fontWeight:700,letterSpacing:"0.02em"}}>{time}</p>
     </div>
   );
 }
 
 function Logo() {
-  return <img src="https://cdn.shopify.com/s/files/1/0582/8719/4214/files/FOC_Logo_white.png?v=1773347276" alt="Friends of the Carpenter" style={{height:105,width:"auto"}}/>;
+  return <img src="https://cdn.shopify.com/s/files/1/0582/8719/4214/files/FOC_Logo_white.png?v=1773347276" alt="Friends of the Carpenter" style={{height:120,width:"auto"}}/>;
 }
 
 function QRCodeDisplay({ guestNumber }) {
@@ -130,9 +127,9 @@ function QRCodeDisplay({ guestNumber }) {
   useEffect(() => {
     if (!divRef.current) return;
     divRef.current.innerHTML = "";
-    if (typeof QRCode === "undefined") { divRef.current.innerHTML='<p style="color:red;font-size:12px">QR library not loaded</p>'; return; }
-    try { new QRCode(divRef.current,{text:code,width:180,height:180,colorDark:"#1D2B2B",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.M}); }
-    catch(e) { divRef.current.innerHTML='<p style="color:red;font-size:12px">QR error: '+e.message+'</p>'; }
+    if (typeof QRCode === "undefined") { divRef.current.innerHTML='<p style="color:red;font-size:14px">QR library not loaded</p>'; return; }
+    try { new QRCode(divRef.current,{text:code,width:200,height:200,colorDark:"#1D2B2B",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.M}); }
+    catch(e) { divRef.current.innerHTML='<p style="color:red;font-size:14px">QR error: '+e.message+'</p>'; }
   },[code]);
   function download() {
     if (!divRef.current) return;
@@ -143,9 +140,9 @@ function QRCodeDisplay({ guestNumber }) {
   }
   return (
     <div style={{textAlign:"center"}}>
-      <div ref={divRef} style={{display:"inline-block",borderRadius:8,border:"1.5px solid #D0E6E5",overflow:"hidden"}}/>
-      <p style={{margin:"6px 0 0",fontSize:11,color:"#8AA5A5"}}>{code}</p>
-      <button onClick={download} style={{...btnOutline,marginTop:8,fontSize:12,padding:"4px 12px"}}>Download QR</button>
+      <div ref={divRef} style={{display:"inline-block",borderRadius:10,border:"1.5px solid #D0E6E5",overflow:"hidden"}}/>
+      <p style={{margin:"8px 0 0",fontSize:13,color:"#8AA5A5"}}>{code}</p>
+      <button onClick={download} style={{...btnOutline,marginTop:10,fontSize:14,padding:"6px 16px"}}>Download QR</button>
     </div>
   );
 }
@@ -154,32 +151,32 @@ function ScanToast({ result, onDone }) {
   useEffect(()=>{const t=setTimeout(onDone,4000);return()=>clearTimeout(t);},[]);
   const isCheckOut=result.action==="checkout", isError=result.action==="error";
   return (
-    <div className="scan-toast" style={{background:isError?"#FCECEA":isCheckOut?"#FEF7E6":"#EAF7F8",border:`2px solid ${isError?"#F0A9A3":isCheckOut?"#F5D48A":"#C0E8EC"}`,borderRadius:12,padding:"16px 18px",marginBottom:20}}>
-      <p style={{margin:"0 0 2px",fontSize:16,fontWeight:700,color:isError?"#C0392B":isCheckOut?"#8A5A00":"#2E8A94"}}>
+    <div className="scan-toast" style={{background:isError?"#FCECEA":isCheckOut?"#FEF7E6":"#EAF7F8",border:`2px solid ${isError?"#F0A9A3":isCheckOut?"#F5D48A":"#C0E8EC"}`,borderRadius:14,padding:"20px 22px",marginBottom:24}}>
+      <p style={{margin:"0 0 4px",fontSize:19,fontWeight:700,color:isError?"#C0392B":isCheckOut?"#8A5A00":"#2E8A94"}}>
         {isError?"⚠ Not found":isCheckOut?"👋 Checked out":"✓ Checked in"}
       </p>
-      {!isError&&<p style={{margin:0,fontSize:14,color:"#1D2B2B"}}><strong>{result.name}</strong> — Volunteer #{result.guestNumber}</p>}
-      {isError&&<p style={{margin:0,fontSize:13,color:"#C0392B"}}>{result.message}</p>}
-      {!isError&&isCheckOut&&result.duration&&<p style={{margin:"4px 0 0",fontSize:12,color:"#8A5A00"}}>Duration: {result.duration}</p>}
+      {!isError&&<p style={{margin:0,fontSize:16,color:"#1D2B2B"}}><strong>{result.name}</strong> — Volunteer #{result.guestNumber}</p>}
+      {isError&&<p style={{margin:0,fontSize:15,color:"#C0392B"}}>{result.message}</p>}
+      {!isError&&isCheckOut&&result.duration&&<p style={{margin:"6px 0 0",fontSize:14,color:"#8A5A00"}}>Duration: {result.duration}</p>}
     </div>
   );
 }
 
-function SimpleBarChart({data,keys,colors,height=180}) {
-  if(!data||data.length===0) return <p style={{textAlign:"center",color:"#5A7070",fontSize:13,padding:"1rem 0"}}>No data for this period.</p>;
+function SimpleBarChart({data,keys,colors,height=200}) {
+  if(!data||data.length===0) return <p style={{textAlign:"center",color:"#5A7070",fontSize:15,padding:"1rem 0"}}>No data for this period.</p>;
   const maxVal=Math.max(1,...data.flatMap(d=>keys.map(k=>d[k]||0)));
-  const barW=Math.max(8,Math.floor(280/data.length)-4);
+  const barW=Math.max(10,Math.floor(320/data.length)-4);
   return (
     <div style={{overflowX:"auto"}}>
-      <div style={{display:"flex",alignItems:"flex-end",gap:4,height,minWidth:data.length*((barW*keys.length)+8),paddingBottom:24}}>
+      <div style={{display:"flex",alignItems:"flex-end",gap:4,height,minWidth:data.length*((barW*keys.length)+8),paddingBottom:28}}>
         {data.map((d,i)=>(
           <div key={i} style={{display:"flex",alignItems:"flex-end",gap:2,flexShrink:0}}>
             {keys.map(k=>{
               const pct=(d[k]||0)/maxVal*100;
               return (
                 <div key={k} style={{width:barW,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                  {d[k]>0&&<span style={{fontSize:12,color:"#5A7070"}}>{d[k]}</span>}
-                  <div style={{width:"100%",height:`${pct*(height-32)/100}px`,background:colors[k],borderRadius:"3px 3px 0 0",minHeight:d[k]>0?4:0}}/>
+                  {d[k]>0&&<span style={{fontSize:13,color:"#5A7070"}}>{d[k]}</span>}
+                  <div style={{width:"100%",height:`${pct*(height-36)/100}px`,background:colors[k],borderRadius:"3px 3px 0 0",minHeight:d[k]>0?4:0}}/>
                 </div>
               );
             })}
@@ -187,16 +184,16 @@ function SimpleBarChart({data,keys,colors,height=180}) {
         ))}
       </div>
       <div style={{display:"flex",gap:4,overflowX:"auto",paddingTop:4}}>
-        {data.map((d,i)=><span key={i} style={{fontSize:12,color:"#8AA5A5",flexShrink:0,width:(barW*keys.length)+(keys.length-1)*2,textAlign:"center",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{d.date}</span>)}
+        {data.map((d,i)=><span key={i} style={{fontSize:13,color:"#8AA5A5",flexShrink:0,width:(barW*keys.length)+(keys.length-1)*2,textAlign:"center",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{d.date}</span>)}
       </div>
     </div>
   );
 }
 
-function SimpleLineChart({data,height=180}) {
-  if(!data||data.length===0) return <p style={{textAlign:"center",color:"#5A7070",fontSize:13,padding:"1rem 0"}}>No completed volunteer check-outs for this period.</p>;
+function SimpleLineChart({data,height=200}) {
+  if(!data||data.length===0) return <p style={{textAlign:"center",color:"#5A7070",fontSize:15,padding:"1rem 0"}}>No completed volunteer check-outs for this period.</p>;
   const maxVal=Math.max(1,...data.map(d=>d.hours));
-  const w=500,h=height-30,pad=8;
+  const w=600,h=height-30,pad=10;
   const pts=data.map((d,i)=>({x:pad+(i/Math.max(data.length-1,1))*(w-pad*2),y:h-(d.hours/maxVal)*(h-pad*2)-pad,d}));
   const pathD=pts.map((p,i)=>`${i===0?"M":"L"}${p.x},${p.y}`).join(" ");
   const fmtH=hrs=>{const hh=Math.floor(hrs),mm=Math.round((hrs%1)*60);return mm>0?`${hh}h ${mm}m`:`${hh}h`;};
@@ -204,12 +201,12 @@ function SimpleLineChart({data,height=180}) {
     <div style={{overflowX:"auto"}}>
       <svg viewBox={`0 0 ${w} ${height}`} style={{width:"100%",height}}>
         {[0,0.25,0.5,0.75,1].map(t=><line key={t} x1={pad} x2={w-pad} y1={h-(t*(h-pad*2))-pad} y2={h-(t*(h-pad*2))-pad} stroke="#D0E6E5" strokeDasharray="3 3"/>)}
-        <path d={pathD} fill="none" stroke={CHART_COLORS["Volunteer"]} strokeWidth={2.5} strokeLinejoin="round"/>
+        <path d={pathD} fill="none" stroke={CHART_COLORS["Volunteer"]} strokeWidth={3} strokeLinejoin="round"/>
         {pts.map((p,i)=>(
           <g key={i}>
-            <circle cx={p.x} cy={p.y} r={4} fill={CHART_COLORS["Volunteer"]}/>
-            <text x={p.x} y={p.y-8} textAnchor="middle" fontSize={12} fill="#5A7070">{fmtH(p.d.hours)}</text>
-            <text x={p.x} y={height-4} textAnchor="middle" fontSize={12} fill="#8AA5A5">{p.d.date}</text>
+            <circle cx={p.x} cy={p.y} r={5} fill={CHART_COLORS["Volunteer"]}/>
+            <text x={p.x} y={p.y-10} textAnchor="middle" fontSize={13} fill="#5A7070">{fmtH(p.d.hours)}</text>
+            <text x={p.x} y={height-4} textAnchor="middle" fontSize={13} fill="#8AA5A5">{p.d.date}</text>
           </g>
         ))}
       </svg>
@@ -267,38 +264,38 @@ function ManualAddToQueue({ svc, people, records, numLabel, onAdd }) {
   }
 
   return (
-    <div style={{marginTop:12,borderTop:"1px solid #D0E6E5",paddingTop:12}}>
+    <div style={{marginTop:14,borderTop:"1px solid #D0E6E5",paddingTop:14}}>
       {!open ? (
-        <button onClick={()=>setOpen(true)} style={{...btnOutline,width:"100%",fontSize:13,padding:"8px 0"}}>+ Add to {svc} queue</button>
+        <button onClick={()=>setOpen(true)} style={{...btnOutline,width:"100%",fontSize:15,padding:"11px 0"}}>+ Add to {svc} queue</button>
       ) : (
         <div>
-          <p style={{margin:"0 0 8px",fontSize:12,fontWeight:600,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.05em"}}>Add to {svc} queue</p>
-          <div style={{position:"relative",marginBottom:8}} ref={ref}>
+          <p style={{margin:"0 0 10px",fontSize:14,fontWeight:600,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.05em"}}>Add to {svc} queue</p>
+          <div style={{position:"relative",marginBottom:10}} ref={ref}>
             <input placeholder="Search by name…" value={query} onChange={e=>handleQuery(e.target.value)} style={{...inpStyle,borderColor:err?"#C0392B":"#D0E6E5"}}/>
             {showSug && suggestions.length > 0 && (
-              <div style={{position:"absolute",top:"calc(100% + 2px)",left:0,right:0,background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:10,zIndex:20,boxShadow:"0 6px 20px rgba(70,180,191,0.15)",overflow:"hidden"}}>
+              <div style={{position:"absolute",top:"calc(100% + 2px)",left:0,right:0,background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,zIndex:20,boxShadow:"0 6px 20px rgba(70,180,191,0.15)",overflow:"hidden"}}>
                 {suggestions.map(p=>{
                   const av=avColor(p.name);
                   return (
-                    <div key={p.id} onClick={()=>selectPerson(p)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",cursor:"pointer",borderBottom:"1px solid #D0E6E5",background:p.flagged?"#FFF5F5":"#fff"}}
+                    <div key={p.id} onClick={()=>selectPerson(p)} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",cursor:"pointer",borderBottom:"1px solid #D0E6E5",background:p.flagged?"#FFF5F5":"#fff"}}
                       onMouseEnter={e=>e.currentTarget.style.background=p.flagged?"#FFE8E8":"#EAF7F8"}
                       onMouseLeave={e=>e.currentTarget.style.background=p.flagged?"#FFF5F5":"#fff"}>
-                      <div style={{width:30,height:30,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:11,flexShrink:0}}>{initials(p.name)||"?"}</div>
-                      <div style={{flex:1}}><p style={{margin:0,fontSize:13,fontWeight:600}}>{p.name}</p></div>
-                      {p.flagged&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600}}>⚑</span>}
+                      <div style={{width:36,height:36,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,flexShrink:0}}>{initials(p.name)||"?"}</div>
+                      <div style={{flex:1}}><p style={{margin:0,fontSize:15,fontWeight:600}}>{p.name}</p></div>
+                      {p.flagged&&<span style={{fontSize:12,padding:"2px 10px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600}}>⚑</span>}
                     </div>
                   );
                 })}
               </div>
             )}
           </div>
-          <div style={{marginBottom:8}}>
+          <div style={{marginBottom:10}}>
             <input type="number" min="1" placeholder={`${numLabel} # (default: ${nextPos})`} value={customPos} onChange={e=>setCustomPos(e.target.value)} style={{...inpStyle}}/>
           </div>
-          {err && <p style={{margin:"0 0 6px",fontSize:12,color:C.danger}}>⚠ {err}</p>}
-          <div style={{display:"flex",gap:8}}>
-            <button onClick={handleAdd} disabled={saving} style={{...btnPrimary,flex:1,fontSize:13,padding:"9px 0",opacity:saving?0.5:1}}>{saving?"Adding…":"Add to queue"}</button>
-            <button onClick={()=>{setOpen(false);setQuery("");setSelected(null);setCustomPos("");setErr(null);}} style={{...btnGhost,fontSize:13}}>Cancel</button>
+          {err && <p style={{margin:"0 0 8px",fontSize:14,color:C.danger}}>⚠ {err}</p>}
+          <div style={{display:"flex",gap:10}}>
+            <button onClick={handleAdd} disabled={saving} style={{...btnPrimary,flex:1,fontSize:15,padding:"12px 0",opacity:saving?0.5:1}}>{saving?"Adding…":"Add to queue"}</button>
+            <button onClick={()=>{setOpen(false);setQuery("");setSelected(null);setCustomPos("");setErr(null);}} style={{...btnGhost,fontSize:15}}>Cancel</button>
           </div>
         </div>
       )}
@@ -321,56 +318,53 @@ function ShowerLaundryPanel({ records, people, onMarkComplete, onCancel, onManua
         const pct = Math.round(used / cap * 100);
         const numLabel = svc === "Showers" ? "Shower" : "Laundry";
         return (
-          <div key={svc} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:20,marginBottom:16}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-              <h3 style={{margin:0,fontSize:16,fontWeight:700}}>{svc}</h3>
-              <span style={{fontSize:13,fontWeight:600,color:used>=cap?"#C0392B":"#46b4bf",background:used>=cap?"#FCECEA":"#EAF7F8",padding:"3px 10px",borderRadius:20}}>
+          <div key={svc} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:24,marginBottom:20}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+              <h3 style={{margin:0,fontSize:20,fontWeight:700}}>{svc}</h3>
+              <span style={{fontSize:15,fontWeight:600,color:used>=cap?"#C0392B":"#46b4bf",background:used>=cap?"#FCECEA":"#EAF7F8",padding:"5px 14px",borderRadius:20}}>
                 {used>=cap?"Full":`${cap-used} spots left`}
               </span>
             </div>
-            <div style={{height:8,borderRadius:4,background:"#EAF7F8",marginBottom:12}}>
-              <div style={{height:8,borderRadius:4,width:`${pct}%`,background:used>=cap?"#C0392B":used/cap>0.8?"#E6A817":"#46b4bf",transition:"width 0.3s"}}/>
+            <div style={{height:10,borderRadius:5,background:"#EAF7F8",marginBottom:16}}>
+              <div style={{height:10,borderRadius:5,width:`${pct}%`,background:used>=cap?"#C0392B":used/cap>0.8?"#E6A817":"#46b4bf",transition:"width 0.3s"}}/>
             </div>
-            <div style={{display:"flex",gap:20,marginBottom:14,paddingBottom:12,borderBottom:"1px solid #D0E6E5"}}>
+            <div style={{display:"flex",gap:28,marginBottom:18,paddingBottom:16,borderBottom:"1px solid #D0E6E5"}}>
               {[["Total",used],["Waiting",active.length],["Done",done.length]].map(([l,v])=>(
                 <div key={l} style={{textAlign:"center"}}>
-                  <p style={{margin:0,fontSize:20,fontWeight:700,color:"#46b4bf"}}>{v}</p>
-                  <p style={{margin:0,fontSize:11,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{l}</p>
+                  <p style={{margin:0,fontSize:26,fontWeight:700,color:"#46b4bf"}}>{v}</p>
+                  <p style={{margin:0,fontSize:13,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{l}</p>
                 </div>
               ))}
             </div>
-            {active.length===0 && <p style={{fontSize:13,color:"#5A7070",textAlign:"center",padding:"10px 0"}}>No one waiting.</p>}
+            {active.length===0 && <p style={{fontSize:15,color:"#5A7070",textAlign:"center",padding:"14px 0"}}>No one waiting.</p>}
             {active.map(r => {
-              const person = people.find(p => p.name === r.name);
               const av = avColor(r.name);
               return (
-                <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:"#EAF7F8",borderRadius:8,marginBottom:8,border:"1px solid #C0E8EC"}}>
-                  <div style={{width:36,height:36,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,flexShrink:0}}>{initials(r.name)||"?"}</div>
+                <div key={r.id} style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:"#EAF7F8",borderRadius:10,marginBottom:10,border:"1px solid #C0E8EC"}}>
+                  <div style={{width:44,height:44,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:15,flexShrink:0}}>{initials(r.name)||"?"}</div>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <span style={{fontWeight:600,fontSize:14}}>{r.name}</span>
-                    </div>
-                    <p style={{margin:0,fontSize:11,color:"#5A7070"}}>{numLabel} #{r.queue_position} · In: {fmt(r.check_in)}</p>
+                    <span style={{fontWeight:600,fontSize:16}}>{r.name}</span>
+                    <p style={{margin:"2px 0 0",fontSize:13,color:"#5A7070"}}>{numLabel} #{r.queue_position} · In: {fmt(r.check_in)}</p>
                   </div>
                   <button onClick={()=>onMarkComplete(r.id)} style={{...btnSuccess,flexShrink:0}}>✓ Done</button>
-                  <button onClick={()=>onCancel(r.id)} style={{...btnGhost,fontSize:12,color:C.danger,borderColor:C.dangerBorder,flexShrink:0}}>Cancel</button>
+                  <button onClick={()=>onCancel(r.id)} style={{...btnGhost,fontSize:14,color:C.danger,borderColor:C.dangerBorder,flexShrink:0}}>Cancel</button>
                 </div>
               );
             })}
             {done.length > 0 && (
-              <details style={{marginTop:8}}>
-                <summary style={{fontSize:12,color:"#5A7070",cursor:"pointer",userSelect:"none"}}>Show completed ({done.length})</summary>
-                <div style={{marginTop:8}}>
+              <details style={{marginTop:10}}>
+                <summary style={{fontSize:14,color:"#5A7070",cursor:"pointer",userSelect:"none"}}>Show completed ({done.length})</summary>
+                <div style={{marginTop:10}}>
                   {done.map(r => {
                     const av = avColor(r.name);
                     return (
-                      <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:8,marginBottom:6,opacity:0.65}}>
-                        <div style={{width:30,height:30,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:11,flexShrink:0}}>{initials(r.name)||"?"}</div>
+                      <div key={r.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",borderRadius:10,marginBottom:8,opacity:0.65}}>
+                        <div style={{width:36,height:36,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,flexShrink:0}}>{initials(r.name)||"?"}</div>
                         <div style={{flex:1}}>
-                          <span style={{fontSize:13}}>{r.name}</span>
-                          <p style={{margin:0,fontSize:11,color:"#5A7070"}}>{numLabel} #{r.queue_position}</p>
+                          <span style={{fontSize:15}}>{r.name}</span>
+                          <p style={{margin:0,fontSize:13,color:"#5A7070"}}>{numLabel} #{r.queue_position}</p>
                         </div>
-                        <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:C.successBg,color:C.success,fontWeight:600}}>✓ Done</span>
+                        <span style={{fontSize:13,padding:"3px 10px",borderRadius:20,background:C.successBg,color:C.success,fontWeight:600}}>✓ Done</span>
                       </div>
                     );
                   })}
@@ -394,10 +388,7 @@ function CheckoutTimeEditor({ records, people, onUpdate }) {
 
   const q = search.trim().toLowerCase();
   const matched = q.length > 0
-    ? records.filter(r => {
-        const p = people.find(x => x.name === r.name);
-        return r.name.toLowerCase().includes(q) || (p && String(p.guest_number).includes(q));
-      }).slice(0,8)
+    ? records.filter(r => r.name.toLowerCase().includes(q)).slice(0,8)
     : [];
 
   async function save(r) {
@@ -427,44 +418,43 @@ function CheckoutTimeEditor({ records, people, onUpdate }) {
 
   return (
     <div>
-      <input placeholder="Search by name…" value={search} onChange={e=>{setSearch(e.target.value);setEditingId(null);setSaveMsg(null);}} style={{...inpStyle,marginBottom:8}}/>
-      {q.length>0&&matched.length===0&&<p style={{fontSize:12,color:C.textMuted}}>No records found.</p>}
+      <input placeholder="Search by name…" value={search} onChange={e=>{setSearch(e.target.value);setEditingId(null);setSaveMsg(null);}} style={{...inpStyle,marginBottom:10}}/>
+      {q.length>0&&matched.length===0&&<p style={{fontSize:14,color:C.textMuted}}>No records found.</p>}
       {matched.map(r=>{
-        const person=people.find(p=>p.name===r.name);
         const av=avColor(r.name);
         const isEditing=editingId===r.id;
         const msg=saveMsg?.id===r.id?saveMsg:null;
         return (
-          <div key={r.id} style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:8,overflow:"hidden"}}>
-            <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px"}}>
-              <div style={{width:34,height:34,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:12,flexShrink:0}}>{initials(r.name)||"?"}</div>
+          <div key={r.id} style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:10,marginBottom:10,overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px"}}>
+              <div style={{width:40,height:40,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:14,flexShrink:0}}>{initials(r.name)||"?"}</div>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <span style={{fontWeight:600,fontSize:13}}>{r.name}</span>
-                  <span style={{fontSize:11,padding:"1px 7px",borderRadius:20,background:C.tealLight,color:C.tealDark}}>{r.service}</span>
-                  {!r.check_out&&<span style={{fontSize:11,padding:"1px 7px",borderRadius:20,background:"#EAF7F8",color:"#46b4bf",fontWeight:500}}>Active</span>}
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontWeight:600,fontSize:15}}>{r.name}</span>
+                  <span style={{fontSize:13,padding:"2px 8px",borderRadius:20,background:C.tealLight,color:C.tealDark}}>{r.service}</span>
+                  {!r.check_out&&<span style={{fontSize:13,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:"#46b4bf",fontWeight:500}}>Active</span>}
                 </div>
-                <p style={{margin:"2px 0 0",fontSize:11,color:C.textLight}}>In: {fmt(r.check_in)}{r.check_out?` · Out: ${fmt(r.check_out)}`:" · No check-out yet"}</p>
+                <p style={{margin:"3px 0 0",fontSize:13,color:C.textLight}}>In: {fmt(r.check_in)}{r.check_out?` · Out: ${fmt(r.check_out)}`:" · No check-out yet"}</p>
               </div>
-              <button onClick={()=>{setEditingId(isEditing?null:r.id);setEditVal(isoToLocalInput(r.check_out));setSaveMsg(null);}} style={{...btnGhost,fontSize:12,color:C.teal,borderColor:C.tealMid,flexShrink:0}}>
+              <button onClick={()=>{setEditingId(isEditing?null:r.id);setEditVal(isoToLocalInput(r.check_out));setSaveMsg(null);}} style={{...btnGhost,fontSize:14,color:C.teal,borderColor:C.tealMid,flexShrink:0}}>
                 {isEditing?"Cancel":r.check_out?"Edit time":"Set time"}
               </button>
             </div>
             {isEditing&&(
-              <div style={{padding:"10px 12px",borderTop:`1px solid ${C.border}`,background:C.bg}}>
-                <p style={{margin:"0 0 6px",fontSize:12,color:C.textMuted}}>Set check-out time <span style={{color:C.textLight}}>(check-in: {fmt(r.check_in)})</span></p>
-                <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+              <div style={{padding:"12px 16px",borderTop:`1px solid ${C.border}`,background:C.bg}}>
+                <p style={{margin:"0 0 8px",fontSize:14,color:C.textMuted}}>Set check-out time <span style={{color:C.textLight}}>(check-in: {fmt(r.check_in)})</span></p>
+                <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
                   <input type="datetime-local" value={editVal} onChange={e=>setEditVal(e.target.value)} style={{...inpStyle,width:"auto",flex:1,minWidth:200}}/>
-                  <button onClick={()=>save(r)} disabled={saving||!editVal} style={{...btnPrimary,padding:"9px 18px",fontSize:13,opacity:saving||!editVal?0.5:1}}>{saving?"Saving…":"Save"}</button>
-                  {r.check_out&&<button onClick={()=>clearCheckout(r)} disabled={saving} style={{...btnGhost,fontSize:12,color:C.danger,borderColor:C.dangerBorder}}>Clear</button>}
+                  <button onClick={()=>save(r)} disabled={saving||!editVal} style={{...btnPrimary,padding:"11px 20px",fontSize:15,opacity:saving||!editVal?0.5:1}}>{saving?"Saving…":"Save"}</button>
+                  {r.check_out&&<button onClick={()=>clearCheckout(r)} disabled={saving} style={{...btnGhost,fontSize:14,color:C.danger,borderColor:C.dangerBorder}}>Clear</button>}
                 </div>
-                {msg&&<p style={{margin:"6px 0 0",fontSize:12,color:msg.type==="ok"?C.tealDark:C.danger}}>{msg.type==="ok"?"✓ ":"⚠ "}{msg.text}</p>}
+                {msg&&<p style={{margin:"8px 0 0",fontSize:13,color:msg.type==="ok"?C.tealDark:C.danger}}>{msg.type==="ok"?"✓ ":"⚠ "}{msg.text}</p>}
               </div>
             )}
           </div>
         );
       })}
-      {q.length===0&&<p style={{fontSize:12,color:C.textLight,textAlign:"center",padding:"8px 0"}}>Search for a visitor to edit their check-out time.</p>}
+      {q.length===0&&<p style={{fontSize:14,color:C.textLight,textAlign:"center",padding:"10px 0"}}>Search for a visitor to edit their check-out time.</p>}
     </div>
   );
 }
@@ -488,55 +478,55 @@ function PeopleRemover({people, onRemove, onFlag}) {
 
   return (
     <div>
-      <div style={{display:"flex",gap:8,marginBottom:8}}>
+      <div style={{display:"flex",gap:10,marginBottom:10}}>
         <input placeholder="Filter by name…" value={query} onChange={e=>{setQuery(e.target.value);setConfirm(null);setFlagging(null);setShowQR(null);}} style={{...inpStyle,flex:1}}/>
-        <select value={filter} onChange={e=>setFilter(e.target.value)} style={{...inpStyle,width:110}}>
+        <select value={filter} onChange={e=>setFilter(e.target.value)} style={{...inpStyle,width:130}}>
           <option value="all">All</option>
           <option value="ok">OK</option>
           <option value="flagged">Flagged</option>
         </select>
       </div>
-      <p style={{margin:"0 0 8px",fontSize:12,color:C.textMuted}}>{filtered.length} {filtered.length===1?"person":"people"}</p>
-      <div style={{maxHeight:360,overflowY:"auto",borderRadius:8,border:`1px solid ${C.border}`}}>
-        {filtered.length===0 && <p style={{fontSize:12,color:C.textMuted,textAlign:"center",padding:"16px 0"}}>No people found.</p>}
+      <p style={{margin:"0 0 10px",fontSize:14,color:C.textMuted}}>{filtered.length} {filtered.length===1?"person":"people"}</p>
+      <div style={{maxHeight:420,overflowY:"auto",borderRadius:10,border:`1px solid ${C.border}`}}>
+        {filtered.length===0 && <p style={{fontSize:14,color:C.textMuted,textAlign:"center",padding:"20px 0"}}>No people found.</p>}
         {filtered.map((p,i) => (
           <div key={p.id} style={{background:p.flagged?"#FFF5F5":C.white,borderBottom:i<filtered.length-1?`1px solid ${C.border}`:"none",overflow:"hidden"}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 12px",gap:8,flexWrap:"wrap"}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
-                <div style={{width:30,height:30,borderRadius:"50%",background:avColor(p.name).bg,color:avColor(p.name).color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:11,flexShrink:0}}>{initials(p.name)||"?"}</div>
-                <span style={{fontSize:13,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
-                {p.flagged&&<span style={{fontSize:10,padding:"2px 6px",borderRadius:20,background:C.dangerBg,color:C.danger,fontWeight:600,flexShrink:0}}>⚑</span>}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",gap:10,flexWrap:"wrap"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+                <div style={{width:38,height:38,borderRadius:"50%",background:avColor(p.name).bg,color:avColor(p.name).color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,flexShrink:0}}>{initials(p.name)||"?"}</div>
+                <span style={{fontSize:15,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+                {p.flagged&&<span style={{fontSize:12,padding:"2px 8px",borderRadius:20,background:C.dangerBg,color:C.danger,fontWeight:600,flexShrink:0}}>⚑</span>}
               </div>
-              <div style={{display:"flex",gap:5,flexShrink:0}}>
-                <button onClick={()=>setShowQR(showQR===p.id?null:p.id)} style={{...btnGhost,fontSize:11,padding:"4px 8px",color:C.teal,borderColor:C.tealMid}}>QR</button>
-                <button onClick={()=>{setFlagging(flagging===p.id?null:p.id);setConfirm(null);setFlagReason(p.flag_reason||"");}} style={{...btnGhost,fontSize:11,padding:"4px 8px",color:p.flagged?C.teal:C.danger,borderColor:p.flagged?C.border:C.dangerBorder}}>{p.flagged?"Unflag":"Flag"}</button>
+              <div style={{display:"flex",gap:7,flexShrink:0}}>
+                <button onClick={()=>setShowQR(showQR===p.id?null:p.id)} style={{...btnGhost,fontSize:13,padding:"6px 12px",color:C.teal,borderColor:C.tealMid}}>QR</button>
+                <button onClick={()=>{setFlagging(flagging===p.id?null:p.id);setConfirm(null);setFlagReason(p.flag_reason||"");}} style={{...btnGhost,fontSize:13,padding:"6px 12px",color:p.flagged?C.teal:C.danger,borderColor:p.flagged?C.border:C.dangerBorder}}>{p.flagged?"Unflag":"Flag"}</button>
                 {confirm===p.id ? (
                   <>
-                    <button onClick={()=>{onRemove(p);setConfirm(null);}} style={{...btnGhost,color:C.danger,borderColor:C.dangerBorder,fontSize:11,padding:"4px 8px"}}>Confirm</button>
-                    <button onClick={()=>setConfirm(null)} style={{...btnGhost,fontSize:11,padding:"4px 8px"}}>Cancel</button>
+                    <button onClick={()=>{onRemove(p);setConfirm(null);}} style={{...btnGhost,color:C.danger,borderColor:C.dangerBorder,fontSize:13,padding:"6px 12px"}}>Confirm</button>
+                    <button onClick={()=>setConfirm(null)} style={{...btnGhost,fontSize:13,padding:"6px 12px"}}>Cancel</button>
                   </>
                 ) : (
-                  <button onClick={()=>{setConfirm(p.id);setFlagging(null);}} style={{...btnGhost,color:C.danger,borderColor:C.dangerBorder,fontSize:11,padding:"4px 8px"}}>Remove</button>
+                  <button onClick={()=>{setConfirm(p.id);setFlagging(null);}} style={{...btnGhost,color:C.danger,borderColor:C.dangerBorder,fontSize:13,padding:"6px 12px"}}>Remove</button>
                 )}
               </div>
             </div>
-            {showQR===p.id&&<div style={{padding:"14px 12px",borderTop:`1px solid ${C.border}`,background:C.bg}}><QRCodeDisplay guestNumber={p.guest_number}/></div>}
+            {showQR===p.id&&<div style={{padding:"16px",borderTop:`1px solid ${C.border}`,background:C.bg}}><QRCodeDisplay guestNumber={p.guest_number}/></div>}
             {flagging===p.id&&(
-              <div style={{padding:"10px 12px",borderTop:`1px solid ${C.border}`,background:C.bg}}>
+              <div style={{padding:"12px 16px",borderTop:`1px solid ${C.border}`,background:C.bg}}>
                 {p.flagged ? (
                   <div>
-                    <p style={{margin:"0 0 8px",fontSize:12,color:C.textMuted}}>Current reason: <em>{p.flag_reason||"No reason given"}</em></p>
-                    <button onClick={()=>{onFlag(p,false,"");setFlagging(null);}} style={{...btnOutline,fontSize:12,padding:"6px 14px"}}>Confirm unflag</button>
+                    <p style={{margin:"0 0 10px",fontSize:14,color:C.textMuted}}>Current reason: <em>{p.flag_reason||"No reason given"}</em></p>
+                    <button onClick={()=>{onFlag(p,false,"");setFlagging(null);}} style={{...btnOutline,fontSize:14,padding:"8px 18px"}}>Confirm unflag</button>
                   </div>
                 ) : (
                   <div>
-                    <input placeholder="Reason for flagging (optional)…" value={flagReason} onChange={e=>setFlagReason(e.target.value)} style={{...inpStyle,marginBottom:8,fontSize:13}}/>
-                    <button onClick={()=>{onFlag(p,true,flagReason);setFlagging(null);setFlagReason("");}} style={{...btnPrimary,fontSize:13,padding:"7px 16px",background:C.danger}}>Confirm flag</button>
+                    <input placeholder="Reason for flagging (optional)…" value={flagReason} onChange={e=>setFlagReason(e.target.value)} style={{...inpStyle,marginBottom:10,fontSize:15}}/>
+                    <button onClick={()=>{onFlag(p,true,flagReason);setFlagging(null);setFlagReason("");}} style={{...btnPrimary,fontSize:15,padding:"9px 20px",background:C.danger}}>Confirm flag</button>
                   </div>
                 )}
               </div>
             )}
-            {p.flagged&&p.flag_reason&&flagging!==p.id&&<div style={{padding:"2px 12px 8px",fontSize:11,color:C.danger}}>Reason: {p.flag_reason}</div>}
+            {p.flagged&&p.flag_reason&&flagging!==p.id&&<div style={{padding:"4px 16px 10px",fontSize:13,color:C.danger}}>Reason: {p.flag_reason}</div>}
           </div>
         ))}
       </div>
@@ -581,50 +571,50 @@ function LogRecord({r, av, dur, person, isFlagged, onCheckOut, onDelete, onUpdat
   const numLabel = r.service==="Showers"?"Shower":r.service==="Laundry"?"Laundry":"Queue";
 
   const timeRow = (
-    <p style={{margin:0,fontSize:11,color:"#8AA5A5",display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
+    <p style={{margin:0,fontSize:13,color:"#8AA5A5",display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
       <span>In:</span>
-      <button onClick={()=>startEdit("check_in")} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:11,color:"#46b4bf",textDecoration:"underline dotted",fontFamily:"inherit"}}>{fmt(r.check_in)}</button>
+      <button onClick={()=>startEdit("check_in")} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:13,color:"#46b4bf",textDecoration:"underline dotted",fontFamily:"inherit"}}>{fmt(r.check_in)}</button>
       {!isShowerLaundry && r.check_out && <>
         <span>· Out:</span>
-        <button onClick={()=>startEdit("check_out")} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:11,color:"#46b4bf",textDecoration:"underline dotted",fontFamily:"inherit"}}>{fmt(r.check_out)}</button>
+        <button onClick={()=>startEdit("check_out")} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:13,color:"#46b4bf",textDecoration:"underline dotted",fontFamily:"inherit"}}>{fmt(r.check_out)}</button>
         {dur&&<span>· {dur}</span>}
       </>}
-      {!isShowerLaundry && !r.check_out && <button onClick={()=>startEdit("check_out")} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:11,color:"#46b4bf",textDecoration:"underline dotted",fontFamily:"inherit"}}>+ set check-out</button>}
-      {isShowerLaundry && r.check_out && <span style={{marginLeft:4,fontSize:11,padding:"1px 8px",borderRadius:20,background:C.successBg,color:C.success,fontWeight:600}}>✓ Completed</span>}
+      {!isShowerLaundry && !r.check_out && <button onClick={()=>startEdit("check_out")} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:13,color:"#46b4bf",textDecoration:"underline dotted",fontFamily:"inherit"}}>+ set check-out</button>}
+      {isShowerLaundry && r.check_out && <span style={{marginLeft:4,fontSize:13,padding:"2px 10px",borderRadius:20,background:C.successBg,color:C.success,fontWeight:600}}>✓ Completed</span>}
     </p>
   );
 
   return (
-    <div style={{background:isFlagged?"#FFF5F5":"#fff",border:`1.5px solid ${isFlagged?"#F0A9A3":"#D0E6E5"}`,borderRadius:12,marginBottom:10,overflow:"hidden"}}>
-      <div style={{padding:"12px 14px",display:"flex",alignItems:"flex-start",gap:12}}>
-        <div style={{width:42,height:42,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:14,flexShrink:0}}>{initials(r.name)||"?"}</div>
+    <div style={{background:isFlagged?"#FFF5F5":"#fff",border:`1.5px solid ${isFlagged?"#F0A9A3":"#D0E6E5"}`,borderRadius:14,marginBottom:12,overflow:"hidden"}}>
+      <div style={{padding:"16px 18px",display:"flex",alignItems:"flex-start",gap:14}}>
+        <div style={{width:48,height:48,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:16,flexShrink:0}}>{initials(r.name)||"?"}</div>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:2}}>
-            <span style={{fontWeight:700,fontSize:14}}>{r.name}</span>
-            {isFlagged&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600}}>⚑ Flagged</span>}
-            <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:r.type==="Volunteer"?"#EAF7F8":"#EEEEFB",color:r.type==="Volunteer"?"#2E8A94":"#3A3A8C",fontWeight:500}}>{r.type}</span>
-            {r.queue_position&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FEF7E6",color:"#8A5A00",fontWeight:500}}>{numLabel} #{r.queue_position}</span>}
-            {!r.check_out&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:"#46b4bf",fontWeight:500}}>Active</span>}
+          <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap",marginBottom:4}}>
+            <span style={{fontWeight:700,fontSize:16}}>{r.name}</span>
+            {isFlagged&&<span style={{fontSize:13,padding:"2px 10px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600}}>⚑ Flagged</span>}
+            <span style={{fontSize:13,padding:"2px 10px",borderRadius:20,background:r.type==="Volunteer"?"#EAF7F8":"#EEEEFB",color:r.type==="Volunteer"?"#2E8A94":"#3A3A8C",fontWeight:500}}>{r.type}</span>
+            {r.queue_position&&<span style={{fontSize:13,padding:"2px 10px",borderRadius:20,background:"#FEF7E6",color:"#8A5A00",fontWeight:500}}>{numLabel} #{r.queue_position}</span>}
+            {!r.check_out&&<span style={{fontSize:13,padding:"2px 10px",borderRadius:20,background:"#EAF7F8",color:"#46b4bf",fontWeight:500}}>Active</span>}
           </div>
-          <p style={{margin:"2px 0",fontSize:12,color:"#5A7070",fontWeight:500}}>{r.service}</p>
+          <p style={{margin:"2px 0 4px",fontSize:14,color:"#5A7070",fontWeight:500}}>{r.service}</p>
           {timeRow}
-          {msg&&<p style={{margin:"4px 0 0",fontSize:11,color:msg.type==="ok"?C.tealDark:C.danger}}>{msg.type==="ok"?"✓ ":"⚠ "}{msg.text}</p>}
-          {r.notes&&<p style={{margin:"4px 0 0",fontSize:12,color:"#5A7070",fontStyle:"italic"}}>{r.notes}</p>}
+          {msg&&<p style={{margin:"5px 0 0",fontSize:13,color:msg.type==="ok"?C.tealDark:C.danger}}>{msg.type==="ok"?"✓ ":"⚠ "}{msg.text}</p>}
+          {r.notes&&<p style={{margin:"5px 0 0",fontSize:14,color:"#5A7070",fontStyle:"italic"}}>{r.notes}</p>}
         </div>
-        <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0,alignItems:"flex-end"}}>
-          {isShowerLaundry && !r.check_out && <button onClick={()=>onCheckOut(r.id)} style={{...btnSuccess,fontSize:12,padding:"5px 12px"}}>✓ Done</button>}
-          {!isShowerLaundry && !r.check_out && <button onClick={()=>onCheckOut(r.id)} style={{...btnOutline,fontSize:12,padding:"5px 10px"}}>Check out</button>}
-          <button onClick={()=>onDelete(r.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#8AA5A5",fontSize:18,padding:"0 4px",lineHeight:1}}>×</button>
+        <div style={{display:"flex",flexDirection:"column",gap:8,flexShrink:0,alignItems:"flex-end"}}>
+          {isShowerLaundry && !r.check_out && <button onClick={()=>onCheckOut(r.id)} style={{...btnSuccess,fontSize:14,padding:"7px 16px"}}>✓ Done</button>}
+          {!isShowerLaundry && !r.check_out && <button onClick={()=>onCheckOut(r.id)} style={{...btnOutline,fontSize:14,padding:"7px 14px"}}>Check out</button>}
+          <button onClick={()=>onDelete(r.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#8AA5A5",fontSize:22,padding:"0 4px",lineHeight:1}}>×</button>
         </div>
       </div>
       {editing&&(
-        <div style={{padding:"10px 14px",borderTop:`1px solid ${C.border}`,background:C.bg}}>
-          <p style={{margin:"0 0 6px",fontSize:12,color:C.textMuted}}>Edit {editing==="check_in"?"check-in":"check-out"} time</p>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+        <div style={{padding:"12px 18px",borderTop:`1px solid ${C.border}`,background:C.bg}}>
+          <p style={{margin:"0 0 8px",fontSize:14,color:C.textMuted}}>Edit {editing==="check_in"?"check-in":"check-out"} time</p>
+          <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
             <input type="datetime-local" value={editVal} onChange={e=>setEditVal(e.target.value)} style={{...inpStyle,width:"auto",flex:1,minWidth:200}}/>
-            <button onClick={save} disabled={saving||!editVal} style={{...btnPrimary,padding:"9px 16px",fontSize:13,opacity:saving||!editVal?0.5:1}}>{saving?"Saving…":"Save"}</button>
-            {editing==="check_out"&&r.check_out&&<button onClick={clearOut} disabled={saving} style={{...btnGhost,fontSize:12,color:C.danger,borderColor:C.dangerBorder}}>Clear</button>}
-            <button onClick={()=>setEditing(null)} style={btnGhost}>Cancel</button>
+            <button onClick={save} disabled={saving||!editVal} style={{...btnPrimary,padding:"11px 20px",fontSize:15,opacity:saving||!editVal?0.5:1}}>{saving?"Saving…":"Save"}</button>
+            {editing==="check_out"&&r.check_out&&<button onClick={clearOut} disabled={saving} style={{...btnGhost,fontSize:14,color:C.danger,borderColor:C.dangerBorder}}>Clear</button>}
+            <button onClick={()=>setEditing(null)} style={{...btnGhost,fontSize:14}}>Cancel</button>
           </div>
         </div>
       )}
@@ -671,32 +661,32 @@ function AnalyticsTab({records}) {
   const ranges=[{id:"7days",label:"7 days"},{id:"30days",label:"30 days"},{id:"month",label:"This month"},{id:"quarter",label:"This quarter"},{id:"year",label:"This year"},{id:"all",label:"All time"}];
   return (
     <div>
-      <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap"}}>
-        {ranges.map(r=><button key={r.id} onClick={()=>setRange(r.id)} style={{...btnGhost,fontSize:12,background:range===r.id?"#46b4bf":"transparent",color:range===r.id?"#fff":"#5A7070",borderColor:range===r.id?"#46b4bf":"#D0E6E5",padding:"6px 12px"}}>{r.label}</button>)}
+      <div style={{display:"flex",gap:8,marginBottom:24,flexWrap:"wrap"}}>
+        {ranges.map(r=><button key={r.id} onClick={()=>setRange(r.id)} style={{...btnGhost,fontSize:14,background:range===r.id?"#46b4bf":"transparent",color:range===r.id?"#fff":"#5A7070",borderColor:range===r.id?"#46b4bf":"#D0E6E5",padding:"8px 16px"}}>{r.label}</button>)}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10,marginBottom:24}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:14,marginBottom:28}}>
         {CHART_SERVICES.map(s=>(
-          <div key={s} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:10,padding:"14px 12px",textAlign:"center"}}>
-            <p style={{margin:0,fontSize:28,fontWeight:700,color:CHART_COLORS[s]}}>{totals[s]||0}</p>
-            <p style={{margin:"4px 0 0",fontSize:12,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.04em",wordBreak:"break-word",lineHeight:1.3}}>{s}</p>
+          <div key={s} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:"18px 16px",textAlign:"center"}}>
+            <p style={{margin:0,fontSize:34,fontWeight:700,color:CHART_COLORS[s]}}>{totals[s]||0}</p>
+            <p style={{margin:"6px 0 0",fontSize:14,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.04em",wordBreak:"break-word",lineHeight:1.3}}>{s}</p>
           </div>
         ))}
       </div>
-      <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:16}}>
-        {CHART_SERVICES.map(s=><div key={s} style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:10,height:10,borderRadius:"50%",background:CHART_COLORS[s]}}/><span style={{fontSize:12,color:"#5A7070"}}>{s}</span></div>)}
+      <div style={{display:"flex",flexWrap:"wrap",gap:12,marginBottom:20}}>
+        {CHART_SERVICES.map(s=><div key={s} style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:12,height:12,borderRadius:"50%",background:CHART_COLORS[s]}}/><span style={{fontSize:14,color:"#5A7070"}}>{s}</span></div>)}
       </div>
-      {chartData.length===0?<p style={{textAlign:"center",color:"#5A7070",padding:"2rem 0",fontSize:14}}>No data for this period.</p>:(
+      {chartData.length===0?<p style={{textAlign:"center",color:"#5A7070",padding:"2rem 0",fontSize:16}}>No data for this period.</p>:(
         <>
-          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:16,marginBottom:16}}>
-            <p style={{margin:"0 0 14px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Showers & Laundry</p>
+          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:20,marginBottom:20}}>
+            <p style={{margin:"0 0 16px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Showers & Laundry</p>
             <SimpleBarChart data={chartData} keys={["Showers","Laundry"]} colors={{"Showers":CHART_COLORS["Showers"],"Laundry":CHART_COLORS["Laundry"]}}/>
           </div>
-          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:16,marginBottom:16}}>
-            <p style={{margin:"0 0 14px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Day Center & Community Partnership</p>
+          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:20,marginBottom:20}}>
+            <p style={{margin:"0 0 16px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Day Center & Community Partnership</p>
             <SimpleBarChart data={chartData} keys={["Day Center","Community Partnership"]} colors={{"Day Center":CHART_COLORS["Day Center"],"Community Partnership":CHART_COLORS["Community Partnership"]}}/>
           </div>
-          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:16,marginBottom:16}}>
-            <p style={{margin:"0 0 14px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Volunteer hours</p>
+          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:20,marginBottom:20}}>
+            <p style={{margin:"0 0 16px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Volunteer hours</p>
             <SimpleLineChart data={volHours}/>
           </div>
         </>
@@ -708,17 +698,17 @@ function AnalyticsTab({records}) {
 function QueueView({records,people,onMarkComplete,onCancel,onLogout,loadData}) {
   return (
     <div style={{minHeight:"100vh",background:"#F7FAFA"}}>
-      <div style={{background:"#46b4bf",padding:"24px 20px 18px",textAlign:"center"}}>
-        <div style={{display:"flex",justifyContent:"center",marginBottom:10}}><Logo/></div>
+      <div style={{background:"#46b4bf",padding:"28px 24px 22px",textAlign:"center"}}>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Logo/></div>
         <LiveClock/>
-        <div style={{display:"flex",justifyContent:"center",gap:8,marginTop:12}}>
+        <div style={{display:"flex",justifyContent:"center",gap:10,marginTop:14}}>
           <button onClick={loadData} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)"}}>Refresh ↻</button>
           <button onClick={onLogout} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)"}}>Log out</button>
         </div>
       </div>
-      <div style={{maxWidth:600,margin:"0 auto",padding:"24px 16px"}}>
-        <h2 style={{margin:"0 0 4px",fontSize:20,fontWeight:700}}>Showers & Laundry</h2>
-        <p style={{margin:"0 0 20px",fontSize:13,color:"#5A7070"}}>Today's queue — tap "✓ Done" when complete</p>
+      <div style={{maxWidth:900,margin:"0 auto",padding:"28px 24px"}}>
+        <h2 style={{margin:"0 0 6px",fontSize:24,fontWeight:700}}>Showers & Laundry</h2>
+        <p style={{margin:"0 0 24px",fontSize:15,color:"#5A7070"}}>Today's queue — tap "✓ Done" when complete</p>
         <ShowerLaundryPanel records={records} people={people} onMarkComplete={onMarkComplete} onCancel={onCancel}/>
       </div>
     </div>
@@ -916,7 +906,7 @@ function App() {
   if(queueAuth) return <QueueView records={records} people={people} onMarkComplete={markComplete} onCancel={cancelRecord} onLogout={()=>setQueueAuth(false)} loadData={loadData}/>;
 
   const Tab=({id,label})=>(
-    <button onClick={()=>setView(id)} style={{flex:1,padding:"10px 0",border:"none",background:"transparent",borderBottom:view===id?"3px solid #46b4bf":"3px solid transparent",fontWeight:view===id?700:400,fontSize:13,cursor:"pointer",color:view===id?"#46b4bf":"#5A7070",fontFamily:"inherit",marginBottom:-2}}>
+    <button onClick={()=>setView(id)} style={{flex:1,padding:"14px 0",border:"none",background:"transparent",borderBottom:view===id?"3px solid #46b4bf":"3px solid transparent",fontWeight:view===id?700:400,fontSize:16,cursor:"pointer",color:view===id?"#46b4bf":"#5A7070",fontFamily:"inherit",marginBottom:-2}}>
       {label}
     </button>
   );
@@ -925,96 +915,101 @@ function App() {
 
   return (
     <div style={{minHeight:"100vh",background:"#F7FAFA",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"}}>
-      <div style={{background:"#46b4bf",padding:"24px 20px 18px",textAlign:"center"}}>
-        <div style={{display:"flex",justifyContent:"center",marginBottom:10}}><Logo/></div>
+      <div style={{background:"#46b4bf",padding:"28px 24px 22px",textAlign:"center"}}>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Logo/></div>
         <LiveClock/>
-        <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:8,marginTop:14}}>
-          <button onClick={()=>{setShowPinModal(showPinModal==="queue"?null:"queue");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:12}}>Showers & Laundry</button>
-          <button onClick={()=>{setShowPinModal(showPinModal==="admin"?null:"admin");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:12}}>Admin</button>
+        <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:10,marginTop:16}}>
+          <button onClick={()=>{setShowPinModal(showPinModal==="queue"?null:"queue");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:14}}>Showers & Laundry</button>
+          <button onClick={()=>{setShowPinModal(showPinModal==="admin"?null:"admin");setPinError(false);setPinInput("");}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:14}}>Admin</button>
         </div>
       </div>
 
-      <div style={{maxWidth:1000,margin:"0 auto",padding:"24px 16px 3rem"}}>
-        {dbError&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:13,color:"#C0392B"}}>{dbError}</div>}
+      <div style={{maxWidth:900,margin:"0 auto",padding:"28px 24px 4rem"}}>
+        {dbError&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:10,padding:"12px 16px",marginBottom:20,fontSize:15,color:"#C0392B"}}>{dbError}</div>}
 
         {showPinModal&&(
-          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:20,marginBottom:20}}>
-            <p style={{margin:"0 0 12px",fontWeight:700,fontSize:15}}>{showPinModal==="admin"?"Admin login":"Showers & Laundry login"}</p>
-            <div style={{display:"flex",gap:8}}>
-              <input type="password" placeholder="Enter PIN" value={pinInput} onChange={e=>setPinInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&tryPin()} style={{...inpStyle,width:130,borderColor:pinError?"#C0392B":"#D0E6E5"}}/>
-              <button onClick={tryPin} style={{...btnPrimary,padding:"10px 20px",fontSize:14}}>Login</button>
-              <button onClick={()=>{setShowPinModal(null);setPinError(false);setPinInput("");}} style={btnGhost}>Cancel</button>
+          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:24,marginBottom:24}}>
+            <p style={{margin:"0 0 14px",fontWeight:700,fontSize:18}}>{showPinModal==="admin"?"Admin login":"Showers & Laundry login"}</p>
+            <div style={{display:"flex",gap:10}}>
+              <input type="password" placeholder="Enter PIN" value={pinInput} onChange={e=>setPinInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&tryPin()} style={{...inpStyle,width:150,borderColor:pinError?"#C0392B":"#D0E6E5"}}/>
+              <button onClick={tryPin} style={{...btnPrimary,padding:"12px 24px",fontSize:16}}>Login</button>
+              <button onClick={()=>{setShowPinModal(null);setPinError(false);setPinInput("");}} style={{...btnGhost,fontSize:15}}>Cancel</button>
             </div>
-            {pinError&&<p style={{margin:"8px 0 0",fontSize:12,color:"#C0392B"}}>Incorrect PIN. Please try again.</p>}
+            {pinError&&<p style={{margin:"10px 0 0",fontSize:14,color:"#C0392B"}}>Incorrect PIN. Please try again.</p>}
           </div>
         )}
 
         {adminAuth&&(
-          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:20,marginBottom:20}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-              <p style={{margin:0,fontWeight:700,fontSize:15}}>Admin panel</p>
-              <button onClick={()=>setAdminAuth(false)} style={{...btnGhost,color:"#C0392B",borderColor:"#F0A9A3"}}>Log out</button>
+          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:24,marginBottom:24}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+              <p style={{margin:0,fontWeight:700,fontSize:18}}>Admin panel</p>
+              <button onClick={()=>setAdminAuth(false)} style={{...btnGhost,color:"#C0392B",borderColor:"#F0A9A3",fontSize:14}}>Log out</button>
             </div>
 
-            <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service capacity today</p>
-            <div style={{display:"flex",gap:10,marginBottom:18}}>
+            <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service capacity today</p>
+            <div style={{display:"flex",gap:14,marginBottom:22}}>
               {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{const used=countToday(svc),pct=Math.round(used/cap*100);return(
-                <div key={svc} style={{flex:1,background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:8,padding:"10px 14px"}}>
-                  <p style={{margin:"0 0 2px",fontSize:12,fontWeight:600,color:"#2E8A94"}}>{svc}</p>
-                  <p style={{margin:"0 0 8px",fontSize:13,color:used>=cap?"#C0392B":"#5A7070"}}>{used}/{cap} spots used</p>
-                  <div style={{height:6,borderRadius:3,background:"#C0E8EC"}}><div style={{height:6,borderRadius:3,width:`${pct}%`,background:used>=cap?"#C0392B":used/cap>0.8?"#E6A817":"#46b4bf",transition:"width 0.3s"}}/></div>
+                <div key={svc} style={{flex:1,background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:10,padding:"14px 18px"}}>
+                  <p style={{margin:"0 0 4px",fontSize:14,fontWeight:600,color:"#2E8A94"}}>{svc}</p>
+                  <p style={{margin:"0 0 10px",fontSize:15,color:used>=cap?"#C0392B":"#5A7070"}}>{used}/{cap} spots used</p>
+                  <div style={{height:8,borderRadius:4,background:"#C0E8EC"}}><div style={{height:8,borderRadius:4,width:`${pct}%`,background:used>=cap?"#C0392B":used/cap>0.8?"#E6A817":"#46b4bf",transition:"width 0.3s"}}/></div>
                 </div>
               );})}
             </div>
 
-            <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
-              <p style={{margin:"0 0 12px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Showers & Laundry List</p>
+            <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
+              <p style={{margin:"0 0 14px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Showers & Laundry queue</p>
               <ShowerLaundryPanel records={records} people={people} onMarkComplete={markComplete} onCancel={cancelRecord} onManualAdd={loadData}/>
             </div>
 
-            <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
-              <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Manage people</p>
+            <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
+              <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Modify check-out times</p>
+              <CheckoutTimeEditor records={records} people={people} onUpdate={loadData}/>
+            </div>
+
+            <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
+              <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Manage people</p>
               <PeopleRemover people={people} onRemove={async(p)=>{await api(`people?id=eq.${p.id}`,{method:"DELETE"});loadData();}} onFlag={flagPerson}/>
             </div>
 
-            <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
-              <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service types</p>
-              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
-                {services.map(s=>(<span key={s} style={{display:"flex",alignItems:"center",gap:4,fontSize:12,padding:"4px 12px",background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:20,color:"#2E8A94",fontWeight:500}}>{s}{CAPPED_SERVICES[s]?<span style={{fontSize:10,opacity:0.7}}> · {CAPPED_SERVICES[s]}</span>:null}<button onClick={()=>removeService(s)} style={{background:"none",border:"none",cursor:"pointer",color:"#2E8A94",padding:"0 2px",fontSize:14,lineHeight:1,opacity:0.6}}>×</button></span>))}
+            <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
+              <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service types</p>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:12}}>
+                {services.map(s=>(<span key={s} style={{display:"flex",alignItems:"center",gap:5,fontSize:14,padding:"6px 14px",background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:20,color:"#2E8A94",fontWeight:500}}>{s}{CAPPED_SERVICES[s]?<span style={{fontSize:12,opacity:0.7}}> · {CAPPED_SERVICES[s]}</span>:null}<button onClick={()=>removeService(s)} style={{background:"none",border:"none",cursor:"pointer",color:"#2E8A94",padding:"0 2px",fontSize:16,lineHeight:1,opacity:0.6}}>×</button></span>))}
               </div>
-              <div style={{display:"flex",gap:8}}>
+              <div style={{display:"flex",gap:10}}>
                 <input placeholder="Add new service…" value={newService} onChange={e=>setNewService(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addService()} style={{...inpStyle,flex:1}}/>
-                <button onClick={addService} style={{...btnOutline,padding:"8px 16px"}}>Add</button>
+                <button onClick={addService} style={{...btnOutline,padding:"10px 20px",fontSize:15}}>Add</button>
               </div>
             </div>
 
-            <button onClick={exportCSV} style={{...btnOutline,width:"100%",textAlign:"center",padding:10}}>Export all check-ins as CSV ↓</button>
+            <button onClick={exportCSV} style={{...btnOutline,width:"100%",textAlign:"center",padding:13,fontSize:15}}>Export all check-ins as CSV ↓</button>
           </div>
         )}
 
         {!loading&&(
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10,marginBottom:14}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:14,marginBottom:18}}>
             {[["Total",today],["Guests",gs],["Volunteers",vs]].map(([l,v])=>(
-              <div key={l} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:10,padding:"12px 10px",textAlign:"center"}}>
-                <p style={{margin:0,fontSize:22,fontWeight:700,color:"#46b4bf"}}>{v}</p>
-                <p style={{margin:0,fontSize:11,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{l}</p>
+              <div key={l} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:"16px 14px",textAlign:"center"}}>
+                <p style={{margin:0,fontSize:28,fontWeight:700,color:"#46b4bf"}}>{v}</p>
+                <p style={{margin:0,fontSize:13,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{l}</p>
               </div>
             ))}
           </div>
         )}
 
         {!loading&&(
-          <div style={{display:"flex",gap:10,marginBottom:20}}>
+          <div style={{display:"flex",gap:14,marginBottom:24}}>
             {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{const used=countToday(svc),full=used>=cap;return(
-              <div key={svc} style={{flex:1,background:full?"#FCECEA":"#EAF7F8",border:`1.5px solid ${full?"#F0A9A3":"#C0E8EC"}`,borderRadius:10,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:13,fontWeight:600,color:full?"#C0392B":"#2E8A94"}}>{svc}</span>
-                <span style={{fontSize:12,fontWeight:500,color:full?"#C0392B":"#46b4bf",background:full?"transparent":"#fff",padding:"2px 10px",borderRadius:20,border:`1px solid ${full?"#F0A9A3":"#C0E8EC"}`}}>{full?"Full":`${cap-used} left`}</span>
+              <div key={svc} style={{flex:1,background:full?"#FCECEA":"#EAF7F8",border:`1.5px solid ${full?"#F0A9A3":"#C0E8EC"}`,borderRadius:12,padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:15,fontWeight:600,color:full?"#C0392B":"#2E8A94"}}>{svc}</span>
+                <span style={{fontSize:14,fontWeight:500,color:full?"#C0392B":"#46b4bf",background:full?"transparent":"#fff",padding:"4px 14px",borderRadius:20,border:`1px solid ${full?"#F0A9A3":"#C0E8EC"}`}}>{full?"Full":`${cap-used} left`}</span>
               </div>
             );})}
           </div>
         )}
 
-        <div style={{display:"flex",borderBottom:"2px solid #C0E8EC",marginBottom:24}}>
+        <div style={{display:"flex",borderBottom:"2px solid #C0E8EC",marginBottom:28}}>
           <Tab id="checkin" label="Check in"/>
           <Tab id="log" label={`Visit log (${records.length})`}/>
           {adminAuth&&<Tab id="analytics" label="Analytics"/>}
@@ -1024,86 +1019,89 @@ function App() {
           <div>
             {scanResult&&<ScanToast result={scanResult} onDone={()=>setScanResult(null)}/>}
             {!scanResult&&flagAlert&&(
-              <div style={{background:"#FFF0F0",border:`2px solid #C0392B`,borderRadius:10,padding:"14px 16px",marginBottom:20}}>
-                <p style={{margin:"0 0 4px",fontSize:15,fontWeight:700,color:"#C0392B"}}>⚑ This person is not allowed on the premises</p>
-                <p style={{margin:"0 0 2px",fontSize:13,color:"#C0392B"}}><strong>{flagAlert.name}</strong></p>
-                {flagAlert.flag_reason&&<p style={{margin:0,fontSize:12,color:"#C0392B"}}>Reason: {flagAlert.flag_reason}</p>}
-                <p style={{margin:"8px 0 0",fontSize:12,color:"#5A7070"}}>Please contact a staff member. Check-in has been blocked.</p>
+              <div style={{background:"#FFF0F0",border:`2px solid #C0392B`,borderRadius:12,padding:"18px 20px",marginBottom:24}}>
+                <p style={{margin:"0 0 6px",fontSize:18,fontWeight:700,color:"#C0392B"}}>⚑ This person is not allowed on the premises</p>
+                <p style={{margin:"0 0 4px",fontSize:15,color:"#C0392B"}}><strong>{flagAlert.name}</strong></p>
+                {flagAlert.flag_reason&&<p style={{margin:0,fontSize:14,color:"#C0392B"}}>Reason: {flagAlert.flag_reason}</p>}
+                <p style={{margin:"10px 0 0",fontSize:14,color:"#5A7070"}}>Please contact a staff member. Check-in has been blocked.</p>
               </div>
             )}
             {!scanResult&&success&&!flagAlert&&(
-              <div style={{background:"#EAF7F8",border:"1.5px solid #C0E8EC",borderRadius:10,padding:"14px 16px",marginBottom:20}}>
-                <p style={{margin:"0 0 4px",fontSize:15,fontWeight:700,color:"#2E8A94"}}>{success.isNew?`Welcome, ${success.name}! You've been registered.`:`Welcome back, ${success.name}!`}</p>
-                {success.position&&<p style={{margin:"0 0 2px",fontSize:13,color:"#46b4bf"}}>{success.service}: queue <strong>#{success.position}</strong></p>}
+              <div style={{background:"#EAF7F8",border:"1.5px solid #C0E8EC",borderRadius:12,padding:"18px 20px",marginBottom:24}}>
+                <p style={{margin:"0 0 6px",fontSize:18,fontWeight:700,color:"#2E8A94"}}>{success.isNew?`Welcome, ${success.name}! You've been registered.`:`Welcome back, ${success.name}!`}</p>
+                {success.position&&<p style={{margin:"0 0 4px",fontSize:15,color:"#46b4bf"}}>{success.service}: queue <strong>#{success.position}</strong></p>}
                 {success.addOns&&success.addOns.map(a=>(
-                  <p key={a.service} style={{margin:"0 0 2px",fontSize:13,color:"#46b4bf"}}>
+                  <p key={a.service} style={{margin:"0 0 4px",fontSize:15,color:"#46b4bf"}}>
                     {a.service==="Showers"?"Shower":a.service==="Laundry"?"Laundry":"Queue"} #<strong>{a.position}</strong>
                   </p>
                 ))}
               </div>
             )}
-            {errors.submit&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:13,color:"#C0392B"}}>{errors.submit}</div>}
-            <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Visitor type</p>
-            <div style={{display:"flex",gap:10,marginBottom:18}}>
+            {errors.submit&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:10,padding:"12px 16px",marginBottom:20,fontSize:15,color:"#C0392B"}}>{errors.submit}</div>}
+
+            <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Visitor type</p>
+            <div style={{display:"flex",gap:14,marginBottom:22}}>
               {["Guest","Volunteer"].map(t=>(
-                <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"10px 0",borderRadius:8,border:form.type===t?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:form.type===t?"#EAF7F8":"#fff",fontWeight:form.type===t?700:400,fontSize:14,cursor:"pointer",color:form.type===t?"#2E8A94":"#5A7070",fontFamily:"inherit"}}>{t}</button>
+                <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"14px 0",borderRadius:10,border:form.type===t?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:form.type===t?"#EAF7F8":"#fff",fontWeight:form.type===t?700:400,fontSize:17,cursor:"pointer",color:form.type===t?"#2E8A94":"#5A7070",fontFamily:"inherit"}}>{t}</button>
               ))}
             </div>
-            <p style={{margin:"0 0 6px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Name Search — First time visit? enter your name and press check in</p>
-            <div style={{marginBottom:4,position:"relative"}} ref={suggestRef}>
-              <div style={{display:"flex",gap:8,marginBottom:4}}>
-                <input placeholder="Enter your full name…" value={form.name} onChange={e=>handleNameInput(e.target.value)} style={{...inpStyle,flex:1,borderColor:errors.name?"#C0392B":"#D0E6E5"}}/>
-              </div>
-              {errors.name&&<p style={{margin:"0 0 8px",fontSize:12,color:"#C0392B"}}>{errors.name}</p>}
+
+            <p style={{margin:"0 0 8px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Name — First time? Just enter your name and check in</p>
+            <div style={{marginBottom:6,position:"relative"}} ref={suggestRef}>
+              <input placeholder="Enter your full name…" value={form.name} onChange={e=>handleNameInput(e.target.value)} style={{...inpStyle,borderColor:errors.name?"#C0392B":"#D0E6E5"}}/>
+              {errors.name&&<p style={{margin:"6px 0 0",fontSize:14,color:"#C0392B"}}>{errors.name}</p>}
               {showSuggestions&&suggestions.length>0&&(
-                <div style={{position:"absolute",top:"calc(100% - 4px)",left:0,right:0,background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:10,zIndex:10,boxShadow:"0 6px 20px rgba(70,180,191,0.15)",overflow:"hidden"}}>
+                <div style={{position:"absolute",top:"calc(100% + 2px)",left:0,right:0,background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,zIndex:10,boxShadow:"0 6px 20px rgba(70,180,191,0.15)",overflow:"hidden"}}>
                   {suggestions.map(p=>{const av=avColor(p.name);return(
-                    <div key={p.id} onClick={()=>selectPerson(p)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",cursor:"pointer",borderBottom:"1px solid #D0E6E5",background:p.flagged?"#FFF5F5":"#fff"}} onMouseEnter={e=>e.currentTarget.style.background=p.flagged?"#FFE8E8":"#EAF7F8"} onMouseLeave={e=>e.currentTarget.style.background=p.flagged?"#FFF5F5":"#fff"}>
-                      <div style={{width:34,height:34,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:12,flexShrink:0}}>{initials(p.name)||"?"}</div>
-                      <div style={{flex:1}}><p style={{margin:0,fontSize:14,fontWeight:600}}>{p.name}</p></div>
-                      {p.flagged&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600,flexShrink:0}}>⚑ Flagged</span>}
+                    <div key={p.id} onClick={()=>selectPerson(p)} style={{display:"flex",alignItems:"center",gap:12,padding:"13px 16px",cursor:"pointer",borderBottom:"1px solid #D0E6E5",background:p.flagged?"#FFF5F5":"#fff"}} onMouseEnter={e=>e.currentTarget.style.background=p.flagged?"#FFE8E8":"#EAF7F8"} onMouseLeave={e=>e.currentTarget.style.background=p.flagged?"#FFF5F5":"#fff"}>
+                      <div style={{width:40,height:40,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:14,flexShrink:0}}>{initials(p.name)||"?"}</div>
+                      <div style={{flex:1}}><p style={{margin:0,fontSize:16,fontWeight:600}}>{p.name}</p></div>
+                      {p.flagged&&<span style={{fontSize:13,padding:"3px 10px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600,flexShrink:0}}>⚑ Flagged</span>}
                     </div>
                   );})}
                 </div>
               )}
             </div>
-            <div style={{marginBottom:14,marginTop:10}}>
-              <select value={form.service} onChange={ev=>{setForm(f=>({...f,service:ev.target.value,addShowers:false,addLaundry:false}));setErrors(e=>({...e,service:undefined}));}} style={{...inpStyle,height:42,borderColor:errors.service?"#C0392B":"#D0E6E5"}}>
+
+            <div style={{marginBottom:18,marginTop:14}}>
+              <select value={form.service} onChange={ev=>{setForm(f=>({...f,service:ev.target.value,addShowers:false,addLaundry:false}));setErrors(e=>({...e,service:undefined}));}} style={{...inpStyle,height:50,borderColor:errors.service?"#C0392B":"#D0E6E5"}}>
                 <option value="">Select service / reason for visit…</option>
                 {availableServices.map(s=>{const cap=CAPPED_SERVICES[s],used=cap?countToday(s):0,full=cap&&used>=cap;return<option key={s} value={s} disabled={full}>{s}{cap?` (${used}/${cap}${full?" — Full":""})`:""}</option>;})}
               </select>
-              {errors.service&&<p style={{margin:"4px 0 0",fontSize:12,color:"#C0392B"}}>{errors.service}</p>}
+              {errors.service&&<p style={{margin:"6px 0 0",fontSize:14,color:"#C0392B"}}>{errors.service}</p>}
             </div>
+
             {form.service==="Day Center"&&(()=>{
               const showersAvail=isServiceAvailableToday("Showers")&&countToday("Showers")<(CAPPED_SERVICES["Showers"]||Infinity);
               const laundryAvail=isServiceAvailableToday("Laundry")&&countToday("Laundry")<(CAPPED_SERVICES["Laundry"]||Infinity);
               if(!showersAvail&&!laundryAvail) return null;
               return (
-                <div style={{background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:8,padding:"12px 14px",marginBottom:14}}>
-                  <p style={{margin:"0 0 10px",fontSize:12,fontWeight:600,color:"#2E8A94",textTransform:"uppercase",letterSpacing:"0.05em"}}>Select if you would like to take a shower and/or do laundry:</p>
-                  <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+                <div style={{background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:10,padding:"16px 18px",marginBottom:18}}>
+                  <p style={{margin:"0 0 12px",fontSize:14,fontWeight:600,color:"#2E8A94",textTransform:"uppercase",letterSpacing:"0.05em"}}>Also sign up for:</p>
+                  <div style={{display:"flex",gap:24,flexWrap:"wrap"}}>
                     {showersAvail&&(
-                      <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:14,color:C.text}}>
-                        <input type="checkbox" checked={form.addShowers} onChange={e=>setForm(f=>({...f,addShowers:e.target.checked}))} style={{width:16,height:16,accentColor:"#46b4bf",cursor:"pointer"}}/>
+                      <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:16,color:C.text}}>
+                        <input type="checkbox" checked={form.addShowers} onChange={e=>setForm(f=>({...f,addShowers:e.target.checked}))} style={{width:20,height:20,accentColor:"#46b4bf",cursor:"pointer"}}/>
                         <span>Showers</span>
-                        <span style={{fontSize:12,color:C.textMuted}}>({CAPPED_SERVICES["Showers"]-countToday("Showers")} spots left)</span>
+                        <span style={{fontSize:14,color:C.textMuted}}>({CAPPED_SERVICES["Showers"]-countToday("Showers")} spots left)</span>
                       </label>
                     )}
                     {laundryAvail&&(
-                      <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:14,color:C.text}}>
-                        <input type="checkbox" checked={form.addLaundry} onChange={e=>setForm(f=>({...f,addLaundry:e.target.checked}))} style={{width:16,height:16,accentColor:"#46b4bf",cursor:"pointer"}}/>
+                      <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:16,color:C.text}}>
+                        <input type="checkbox" checked={form.addLaundry} onChange={e=>setForm(f=>({...f,addLaundry:e.target.checked}))} style={{width:20,height:20,accentColor:"#46b4bf",cursor:"pointer"}}/>
                         <span>Laundry</span>
-                        <span style={{fontSize:12,color:C.textMuted}}>({CAPPED_SERVICES["Laundry"]-countToday("Laundry")} spots left)</span>
+                        <span style={{fontSize:14,color:C.textMuted}}>({CAPPED_SERVICES["Laundry"]-countToday("Laundry")} spots left)</span>
                       </label>
                     )}
                   </div>
                 </div>
               );
             })()}
-            <div style={{marginBottom:22}}>
+
+            <div style={{marginBottom:26}}>
               <textarea placeholder="Notes (optional)" value={form.notes} onChange={ev=>setForm(f=>({...f,notes:ev.target.value}))} rows={3} style={{...inpStyle,resize:"vertical"}}/>
             </div>
-            <button onClick={submit} disabled={saving||!!flagAlert} style={{...btnPrimary,width:"100%",padding:13,fontSize:16,opacity:(saving||!!flagAlert)?0.5:1,cursor:flagAlert?"not-allowed":"pointer"}}>
+            <button onClick={submit} disabled={saving||!!flagAlert} style={{...btnPrimary,width:"100%",padding:16,fontSize:18,opacity:(saving||!!flagAlert)?0.5:1,cursor:flagAlert?"not-allowed":"pointer"}}>
               {saving?"Saving…":"Check in"}
             </button>
           </div>
@@ -1112,22 +1110,22 @@ function App() {
         {view==="log"&&(
           <div>
             {!adminAuth?(
-              <div style={{background:"#FEF7E6",border:"1px solid #F5D48A",borderRadius:8,padding:"12px 16px",marginBottom:16,fontSize:13,color:"#8A5A00"}}>
+              <div style={{background:"#FEF7E6",border:"1px solid #F5D48A",borderRadius:10,padding:"14px 18px",marginBottom:20,fontSize:15,color:"#8A5A00"}}>
                 Admin login required to view the visit log. Click "Admin" above.
               </div>
             ):(
               <>
-                <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
-                  <input placeholder="Search by name…" value={search} onChange={e=>setSearch(e.target.value)} style={{...inpStyle,flex:1,minWidth:140}}/>
-                  <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{...inpStyle,width:110}}><option>All</option><option>Guest</option><option>Volunteer</option></select>
-                  <select value={filterService} onChange={e=>setFilterService(e.target.value)} style={{...inpStyle,width:150}}><option>All</option>{services.map(s=><option key={s}>{s}</option>)}</select>
+                <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+                  <input placeholder="Search by name…" value={search} onChange={e=>setSearch(e.target.value)} style={{...inpStyle,flex:1,minWidth:160}}/>
+                  <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{...inpStyle,width:130}}><option>All</option><option>Guest</option><option>Volunteer</option></select>
+                  <select value={filterService} onChange={e=>setFilterService(e.target.value)} style={{...inpStyle,width:170}}><option>All</option>{services.map(s=><option key={s}>{s}</option>)}</select>
                 </div>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                  <p style={{margin:0,fontSize:12,color:"#5A7070"}}>{people.length} people in directory</p>
-                  <button onClick={loadData} style={btnGhost}>Refresh ↻</button>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                  <p style={{margin:0,fontSize:14,color:"#5A7070"}}>{people.length} people in directory</p>
+                  <button onClick={loadData} style={{...btnGhost,fontSize:14}}>Refresh ↻</button>
                 </div>
-                {loading?<p style={{color:"#5A7070",fontSize:14,textAlign:"center",padding:"2rem 0"}}>Loading…</p>
-                :filtered.length===0?<p style={{color:"#5A7070",fontSize:14,textAlign:"center",padding:"2rem 0"}}>No records found.</p>
+                {loading?<p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>Loading…</p>
+                :filtered.length===0?<p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>No records found.</p>
                 :filtered.map(r=>{
                   const av=avColor(r.name),dur=duration(r.check_in,r.check_out,r.service),person=people.find(p=>p.name===r.name),isFlagged=person?.flagged;
                   return <LogRecord key={r.id} r={r} av={av} dur={dur} person={person} isFlagged={isFlagged} onCheckOut={checkOut} onDelete={deleteRecord} onUpdate={loadData}/>;
