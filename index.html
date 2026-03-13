@@ -819,7 +819,6 @@ function App() {
     const e={};
     if(!form.name.trim()&&!form.guestNumber.trim())e.name="Name or guest number is required";
     if(!form.service)e.service="Please select a service";
-    if(form.service&&CAPPED_SERVICES[form.service]&&countToday(form.service)>=CAPPED_SERVICES[form.service])e.service=`${form.service} is full for today.`;
     return e;
   }
   async function submit(){
