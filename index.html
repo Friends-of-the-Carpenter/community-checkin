@@ -1092,13 +1092,64 @@ function App() {
               )}
             </div>
 
-            <div style={{marginBottom:18,marginTop:14}}>
-              <select value={form.service} onChange={ev=>{setForm(f=>({...f,service:ev.target.value,addShowers:false,addLaundry:false}));setErrors(e=>({...e,service:undefined}));}} style={{...inpStyle,height:50,borderColor:errors.service?"#C0392B":"#D0E6E5"}}>
-                <option value="">Select service / reason for visit…</option>
-                {availableServices.map(s=>{const cap=CAPPED_SERVICES[s],used=cap?countToday(s):0,full=cap&&used>=cap;return<option key={s} value={s} disabled={full}>{s}{cap?` (${used}/${cap}${full?" — Full":""})`:""}</option>;})}
-              </select>
-              {errors.service&&<p style={{margin:"6px 0 0",fontSize:14,color:"#C0392B"}}>{errors.service}</p>}
-            </div>
+            
+<div style={{marginBottom:18,marginTop:14}}>
+  <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Select service</p>
+  <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:12}}>
+    {availableServices.map(s=>{
+      const cap=CAPPED_SERVICES[s],used=cap?countToday(s):0,full=cap&&used>=cap;
+      const isSelected=form.service===s;
+      return (
+        <button
+          key={s}
+          disabled={full}
+          onClick={()=>{
+            if(!full){
+              setForm(f=>({...f,service:s,addShowers:false,addLaundry:false}));
+              setErrors(e=>({...e,service:undefined}));
+            }
+          }}
+          style={{
+            padding:"22px 10px",
+            borderRadius:14,
+            border: isSelected?"2px solid #46b4bf": full?"1.5px solid #D0E6E5":"1.5px solid #D0E6E5",
+            background: isSelected?"#EAF7F8": full?"#F7FAFA":"#fff",
+            color: isSelected?"#2E8A94": full?"#B0C4C4":"#1D2B2B",
+            fontWeight: isSelected?700:500,
+            fontSize:16,
+            cursor:full?"not-allowed":"pointer",
+            fontFamily:"inherit",
+            textAlign:"center",
+            lineHeight:1.3,
+            display:"flex",
+            flexDirection:"column",
+            alignItems:"center",
+            justifyContent:"center",
+            gap:6,
+            opacity:full?0.6:1,
+            boxShadow: isSelected?"0 0 0 3px rgba(70,180,191,0.2)":"none",
+            transition:"all 0.15s ease",
+          }}
+        >
+          <span style={{fontSize:17,fontWeight:isSelected?700:500}}>{s}</span>
+          {cap&&(
+            <span style={{
+              fontSize:13,
+              fontWeight:500,
+              padding:"3px 10px",
+              borderRadius:20,
+              background: full?"#FCECEA": isSelected?"#C0E8EC":"#EAF7F8",
+              color: full?"#C0392B": isSelected?"#2E8A94":"#46b4bf",
+            }}>
+              {full?"Full":`${cap-used} left`}
+            </span>
+          )}
+        </button>
+      );
+    })}
+  </div>
+  {errors.service&&<p style={{margin:"10px 0 0",fontSize:14,color:"#C0392B"}}>{errors.service}</p>}
+</div>
 
             {form.service==="Day Center"&&(()=>{
               const showersAvail=isServiceAvailableToday("Showers")&&countToday("Showers")<(CAPPED_SERVICES["Showers"]||Infinity);
