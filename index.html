@@ -252,17 +252,16 @@ function QRCodeDisplay({ guestNumber }) {
   const code = `${QR_PREFIX}${guestNumber}`;
 
   function download() {
-    const canvas = document.querySelector(`#qr-${guestNumber}`);
-    if (!canvas) return;
+    if (!canvasRef.current) return;
     const a = document.createElement("a");
-    a.href = canvas.toDataURL("image/png");
+    a.href = canvasRef.current.toDataURL("image/png");
     a.download = `volunteer-${guestNumber}-qr.png`;
     a.click();
   }
 
   return (
     <div style={{textAlign:"center"}}>
-      <QRCanvas text={code} size={180} key={code}/>
+      <QRCanvas text={code} size={180} canvasRef={canvasRef}/>
       <p style={{margin:"6px 0 0",fontSize:11,color:"#8AA5A5"}}>{code}</p>
       <button onClick={download} style={{...btnOutline,marginTop:8,fontSize:12,padding:"4px 12px"}}>Download QR</button>
     </div>
