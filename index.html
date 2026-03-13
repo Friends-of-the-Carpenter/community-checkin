@@ -236,7 +236,7 @@ function ManualAddToQueue({ svc, people, records, numLabel, onAdd }) {
     setQuery(val); setSelected(null); setErr(null);
     if (!val.trim()) { setSuggestions([]); setShowSug(false); return; }
     const q = val.toLowerCase();
-    const m = people.filter(p => p.name.toLowerCase().includes(q) || String(p.guest_number).includes(q)).slice(0,6);
+    const m = people.filter(p => p.name.toLowerCase().includes(q) || String(p.guest_number).includes(q)).slice(0, 6);
     setSuggestions(m); setShowSug(m.length > 0);
   }
 
@@ -245,21 +245,46 @@ function ManualAddToQueue({ svc, people, records, numLabel, onAdd }) {
   }
 
   async function handleAdd() {
-    if (!selected) { setErr("Please select a person from the list."); return; }
-    if (selected.flagged) { setErr("This person is flagged and cannot be added."); return; }
+    if (!query.trim()) { setErr("Please enter a name."); return; }
+
     const pos = customPos !== "" ? parseInt(customPos, 10) : nextPos;
     if (!pos || pos < 1) { setErr("Please enter a valid position number."); return; }
+
     setSaving(true);
     try {
+      let personToAdd = selected;
+
+      // If no person was selected from autocomplete, check if name exists or create new
+      if (!personToAdd) {
+        const existing = people.find(p => p.name.toLowerCase() === query.trim().toLowerCase());
+        if (existing) {
+          personToAdd = existing;
+        } else {
+          // Register as new person
+          const res = await api("people", {
+            method: "POST",
+            body: JSON.stringify({ name: query.trim() }),
+            headers: { ...HEADERS, "Prefer": "return=representation" }
+          });
+          if (!res.ok) throw new Error("Failed to register person.");
+          const [newPerson] = await res.json();
+          personToAdd = newPerson;
+        }
+      }
+
+      if (personToAdd.flagged) { setErr("This person is flagged and cannot be added."); setSaving(false); return; }
+
+      // Add to queue
       const res = await api("checkin_records", {
         method: "POST",
-        body: JSON.stringify({ name: selected.name, type: "Guest", service: svc, queue_position: pos, check_in: new Date().toISOString(), check_out: null }),
+        body: JSON.stringify({ name: personToAdd.name, type: "Guest", service: svc, queue_position: pos, check_in: new Date().toISOString(), check_out: null }),
         headers: { ...HEADERS, "Prefer": "return=minimal" }
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error("Failed to add to queue.");
+
       onAdd();
       setOpen(false); setQuery(""); setSelected(null); setCustomPos(""); setErr(null);
-    } catch(_) { setErr("Failed to add. Please try again."); }
+    } catch(e) { setErr(e.message || "Failed to add. Please try again."); }
     setSaving(false);
   }
 
@@ -271,7 +296,12 @@ function ManualAddToQueue({ svc, people, records, numLabel, onAdd }) {
         <div>
           <p style={{margin:"0 0 10px",fontSize:14,fontWeight:600,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.05em"}}>Add to {svc} queue</p>
           <div style={{position:"relative",marginBottom:10}} ref={ref}>
-            <input placeholder="Search by name…" value={query} onChange={e=>handleQuery(e.target.value)} style={{...inpStyle,borderColor:err?"#C0392B":"#D0E6E5"}}/>
+            <input
+              placeholder="Type a name — existing or new…"
+              value={query}
+              onChange={e=>handleQuery(e.target.value)}
+              style={{...inpStyle,borderColor:err?"#C0392B":"#D0E6E5"}}
+            />
             {showSug && suggestions.length > 0 && (
               <div style={{position:"absolute",top:"calc(100% + 2px)",left:0,right:0,background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,zIndex:20,boxShadow:"0 6px 20px rgba(70,180,191,0.15)",overflow:"hidden"}}>
                 {suggestions.map(p=>{
@@ -289,6 +319,10 @@ function ManualAddToQueue({ svc, people, records, numLabel, onAdd }) {
               </div>
             )}
           </div>
+          {/* Hint shown when typed name doesn't match anyone */}
+          {query.trim() && !selected && suggestions.length === 0 && (
+            <p style={{margin:"-4px 0 10px",fontSize:13,color:C.tealDark}}>✦ "{query.trim()}" will be registered as a new person.</p>
+          )}
           <div style={{marginBottom:10}}>
             <input type="number" min="1" placeholder={`${numLabel} # (default: ${nextPos})`} value={customPos} onChange={e=>setCustomPos(e.target.value)} style={{...inpStyle}}/>
           </div>
