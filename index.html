@@ -90,30 +90,25 @@ function queueLabel(service, position) {
   return `Queue #${position}`;
 }
 
-const AV_COLORS=[{bg:"#C2E8E6",color:"#1D5C5A"},{bg:"#B8DFE8",color:"#1A4A5C"},{bg:"#C8E6D4",color:"#1A5C35"},{bg:"#E6D4C8",color:"#5C3A1A"},{bg:"#D4C8E6",color:"#3A1A5C"}];
-function avColor(name) { let h=0; for(let c of name)h=(h*31+c.charCodeAt(0))&0xffff; return AV_COLORS[h%AV_COLORS.length]; }
-const emptyForm = {name:"",guestNumber:"",memberId:"",type:"Guest",service:"",notes:"",addShowers:false,addLaundry:false};
-
 // Returns max queue_position used today + 1, regardless of cancellations.
-// If all positions have been checked out (or none exist), resets back to 1.
+// If no one is currently active, resets back to 1.
 function nextAvailablePosition(service, records) {
   const todayRecords = records.filter(r => r.service === service && r.check_in >= todayISO());
   const activeRecords = todayRecords.filter(r => !r.check_out);
-  // If no one is currently active, reset the counter back to 1
   if (activeRecords.length === 0) return 1;
-  // Otherwise take the highest position used today and add 1
   const max = todayRecords.reduce((m, r) => Math.max(m, r.queue_position || 0), 0);
   return max + 1;
 }
 
+const AV_COLORS=[{bg:"#C2E8E6",color:"#1D5C5A"},{bg:"#B8DFE8",color:"#1A4A5C"},{bg:"#C8E6D4",color:"#1A5C35"},{bg:"#E6D4C8",color:"#5C3A1A"},{bg:"#D4C8E6",color:"#3A1A5C"}];
+function avColor(name) { let h=0; for(let c of name)h=(h*31+c.charCodeAt(0))&0xffff; return AV_COLORS[h%AV_COLORS.length]; }
+const emptyForm = {name:"",guestNumber:"",memberId:"",type:"Guest",service:"",notes:"",addShowers:false,addLaundry:false};
+
 function LiveClock() {
   const [now, setNow] = useState(new Date());
-  useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  const date = now.toLocaleDateString("en-US", { weekday:"long", month:"long", day:"numeric", year:"numeric" });
-  const time = now.toLocaleTimeString("en-US", { hour:"numeric", minute:"2-digit" });
+  useEffect(() => { const t=setInterval(()=>setNow(new Date()),1000); return()=>clearInterval(t); }, []);
+  const date = now.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});
+  const time = now.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
   return (
     <div style={{marginTop:10,marginBottom:2}}>
       <p style={{margin:0,fontSize:15,color:"rgba(255,255,255,0.9)",fontWeight:500}}>{date}</p>
@@ -132,18 +127,16 @@ function QRCodeDisplay({ guestNumber }) {
   useEffect(() => {
     if (!divRef.current) return;
     divRef.current.innerHTML = "";
-    if (typeof QRCode === "undefined") { divRef.current.innerHTML = '<p style="color:red;font-size:12px">QR library not loaded</p>'; return; }
-    try {
-      new QRCode(divRef.current, { text:code, width:180, height:180, colorDark:"#1D2B2B", colorLight:"#ffffff", correctLevel:QRCode.CorrectLevel.M });
-    } catch(e) { divRef.current.innerHTML = '<p style="color:red;font-size:12px">QR error: '+e.message+'</p>'; }
-  }, [code]);
+    if (typeof QRCode === "undefined") { divRef.current.innerHTML='<p style="color:red;font-size:12px">QR library not loaded</p>'; return; }
+    try { new QRCode(divRef.current,{text:code,width:180,height:180,colorDark:"#1D2B2B",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.M}); }
+    catch(e) { divRef.current.innerHTML='<p style="color:red;font-size:12px">QR error: '+e.message+'</p>'; }
+  },[code]);
   function download() {
     if (!divRef.current) return;
-    const img = divRef.current.querySelector("img");
-    const canvas = divRef.current.querySelector("canvas");
-    const src = img ? img.src : canvas ? canvas.toDataURL("image/png") : null;
+    const img=divRef.current.querySelector("img"),canvas=divRef.current.querySelector("canvas");
+    const src=img?img.src:canvas?canvas.toDataURL("image/png"):null;
     if (!src) return;
-    const a = document.createElement("a"); a.href=src; a.download=`volunteer-${guestNumber}-qr.png`; a.click();
+    const a=document.createElement("a");a.href=src;a.download=`volunteer-${guestNumber}-qr.png`;a.click();
   }
   return (
     <div style={{textAlign:"center"}}>
@@ -155,9 +148,8 @@ function QRCodeDisplay({ guestNumber }) {
 }
 
 function ScanToast({ result, onDone }) {
-  useEffect(() => { const t=setTimeout(onDone,4000); return ()=>clearTimeout(t); }, []);
-  const isCheckOut = result.action==="checkout";
-  const isError = result.action==="error";
+  useEffect(()=>{const t=setTimeout(onDone,4000);return()=>clearTimeout(t);},[]);
+  const isCheckOut=result.action==="checkout", isError=result.action==="error";
   return (
     <div className="scan-toast" style={{background:isError?"#FCECEA":isCheckOut?"#FEF7E6":"#EAF7F8",border:`2px solid ${isError?"#F0A9A3":isCheckOut?"#F5D48A":"#C0E8EC"}`,borderRadius:12,padding:"16px 18px",marginBottom:20}}>
       <p style={{margin:"0 0 2px",fontSize:16,fontWeight:700,color:isError?"#C0392B":isCheckOut?"#8A5A00":"#2E8A94"}}>
@@ -222,6 +214,95 @@ function SimpleLineChart({data,height=180}) {
   );
 }
 
+function ManualAddToQueue({ svc, people, records, numLabel, onAdd }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [customPos, setCustomPos] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSug, setShowSug] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+  const ref = useRef(null);
+  const nextPos = nextAvailablePosition(svc, records);
+
+  useEffect(() => {
+    function h(e) { if (ref.current && !ref.current.contains(e.target)) setShowSug(false); }
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  function handleQuery(val) {
+    setQuery(val); setSelected(null); setErr(null);
+    if (!val.trim()) { setSuggestions([]); setShowSug(false); return; }
+    const q = val.toLowerCase();
+    const m = people.filter(p => p.name.toLowerCase().includes(q) || String(p.guest_number).includes(q)).slice(0,6);
+    setSuggestions(m); setShowSug(m.length > 0);
+  }
+
+  function selectPerson(p) {
+    setSelected(p); setQuery(p.name); setSuggestions([]); setShowSug(false); setErr(null);
+  }
+
+  async function handleAdd() {
+    if (!selected) { setErr("Please select a person from the list."); return; }
+    if (selected.flagged) { setErr("This person is flagged and cannot be added."); return; }
+    const pos = customPos !== "" ? parseInt(customPos, 10) : nextPos;
+    if (!pos || pos < 1) { setErr("Please enter a valid position number."); return; }
+    setSaving(true);
+    try {
+      const res = await api("checkin_records", {
+        method: "POST",
+        body: JSON.stringify({ name: selected.name, type: "Guest", service: svc, queue_position: pos, check_in: new Date().toISOString(), check_out: null }),
+        headers: { ...HEADERS, "Prefer": "return=minimal" }
+      });
+      if (!res.ok) throw new Error();
+      onAdd();
+      setOpen(false); setQuery(""); setSelected(null); setCustomPos(""); setErr(null);
+    } catch(_) { setErr("Failed to add. Please try again."); }
+    setSaving(false);
+  }
+
+  return (
+    <div style={{marginTop:12,borderTop:"1px solid #D0E6E5",paddingTop:12}}>
+      {!open ? (
+        <button onClick={()=>setOpen(true)} style={{...btnOutline,width:"100%",fontSize:13,padding:"8px 0"}}>+ Add to {svc} queue</button>
+      ) : (
+        <div>
+          <p style={{margin:"0 0 8px",fontSize:12,fontWeight:600,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.05em"}}>Add to {svc} queue</p>
+          <div style={{position:"relative",marginBottom:8}} ref={ref}>
+            <input placeholder="Search by name…" value={query} onChange={e=>handleQuery(e.target.value)} style={{...inpStyle,borderColor:err?"#C0392B":"#D0E6E5"}}/>
+            {showSug && suggestions.length > 0 && (
+              <div style={{position:"absolute",top:"calc(100% + 2px)",left:0,right:0,background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:10,zIndex:20,boxShadow:"0 6px 20px rgba(70,180,191,0.15)",overflow:"hidden"}}>
+                {suggestions.map(p=>{
+                  const av=avColor(p.name);
+                  return (
+                    <div key={p.id} onClick={()=>selectPerson(p)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",cursor:"pointer",borderBottom:"1px solid #D0E6E5",background:p.flagged?"#FFF5F5":"#fff"}}
+                      onMouseEnter={e=>e.currentTarget.style.background=p.flagged?"#FFE8E8":"#EAF7F8"}
+                      onMouseLeave={e=>e.currentTarget.style.background=p.flagged?"#FFF5F5":"#fff"}>
+                      <div style={{width:30,height:30,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:11,flexShrink:0}}>{initials(p.name)||"?"}</div>
+                      <div style={{flex:1}}><p style={{margin:0,fontSize:13,fontWeight:600}}>{p.name}</p></div>
+                      {p.flagged&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600}}>⚑</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <div style={{marginBottom:8}}>
+            <input type="number" min="1" placeholder={`${numLabel} # (default: ${nextPos})`} value={customPos} onChange={e=>setCustomPos(e.target.value)} style={{...inpStyle}}/>
+          </div>
+          {err && <p style={{margin:"0 0 6px",fontSize:12,color:C.danger}}>⚠ {err}</p>}
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={handleAdd} disabled={saving} style={{...btnPrimary,flex:1,fontSize:13,padding:"9px 0",opacity:saving?0.5:1}}>{saving?"Adding…":"Add to queue"}</button>
+            <button onClick={()=>{setOpen(false);setQuery("");setSelected(null);setCustomPos("");setErr(null);}} style={{...btnGhost,fontSize:13}}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ShowerLaundryPanel({ records, people, onMarkComplete, onCancel, onManualAdd }) {
   const services = Object.keys(CAPPED_SERVICES);
   return (
@@ -278,16 +359,12 @@ function ShowerLaundryPanel({ records, people, onMarkComplete, onCancel, onManua
                 <summary style={{fontSize:12,color:"#5A7070",cursor:"pointer",userSelect:"none"}}>Show completed ({done.length})</summary>
                 <div style={{marginTop:8}}>
                   {done.map(r => {
-                    const person = people.find(p => p.name === r.name);
                     const av = avColor(r.name);
                     return (
                       <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:8,marginBottom:6,opacity:0.65}}>
                         <div style={{width:30,height:30,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:11,flexShrink:0}}>{initials(r.name)||"?"}</div>
                         <div style={{flex:1}}>
-                          <div style={{display:"flex",alignItems:"center",gap:6}}>
-                            <span style={{fontSize:13}}>{r.name}</span>
-                            {person&&<span style={{fontSize:11,color:"#5A7070"}}>#{person.guest_number}</span>}
-                          </div>
+                          <span style={{fontSize:13}}>{r.name}</span>
                           <p style={{margin:0,fontSize:11,color:"#5A7070"}}>{numLabel} #{r.queue_position}</p>
                         </div>
                         <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:C.successBg,color:C.success,fontWeight:600}}>✓ Done</span>
@@ -297,116 +374,11 @@ function ShowerLaundryPanel({ records, people, onMarkComplete, onCancel, onManua
                 </div>
               </details>
             )}
-            {/* Manual add form */}
             {onManualAdd && <ManualAddToQueue svc={svc} people={people} records={records} numLabel={numLabel} onAdd={onManualAdd}/>}
           </div>
         );
       })}
     </>
-  );
-}
-
-function ManualAddToQueue({ svc, people, records, numLabel, onAdd }) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState(null);
-  const [customPos, setCustomPos] = useState("");
-  const [suggestions, setSuggestions] = useState([]);
-  const [showSug, setShowSug] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState(null);
-  const ref = useRef(null);
-
-  const nextPos = nextAvailablePosition(svc, records);
-
-  useEffect(() => {
-    function h(e) { if (ref.current && !ref.current.contains(e.target)) setShowSug(false); }
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
-
-  function handleQuery(val) {
-    setQuery(val); setSelected(null); setErr(null);
-    if (!val.trim()) { setSuggestions([]); setShowSug(false); return; }
-    const q = val.toLowerCase();
-    const m = people.filter(p => p.name.toLowerCase().includes(q) || String(p.guest_number).includes(q)).slice(0, 6);
-    setSuggestions(m); setShowSug(m.length > 0);
-  }
-
-  function selectPerson(p) {
-    setSelected(p); setQuery(p.name); setSuggestions([]); setShowSug(false); setErr(null);
-  }
-
-  async function handleAdd() {
-    if (!selected) { setErr("Please select a person from the list."); return; }
-    if (selected.flagged) { setErr("This person is flagged and cannot be added."); return; }
-    const pos = customPos !== "" ? parseInt(customPos, 10) : nextPos;
-    if (!pos || pos < 1) { setErr("Please enter a valid position number."); return; }
-    setSaving(true);
-    try {
-      const res = await api("checkin_records", {
-        method: "POST",
-        body: JSON.stringify({ name: selected.name, type: "Guest", service: svc, queue_position: pos, check_in: new Date().toISOString(), check_out: null }),
-        headers: { ...HEADERS, "Prefer": "return=minimal" }
-      });
-      if (!res.ok) throw new Error();
-      onAdd();
-      setOpen(false); setQuery(""); setSelected(null); setCustomPos(""); setErr(null);
-    } catch(_) { setErr("Failed to add. Please try again."); }
-    setSaving(false);
-  }
-
-  return (
-    <div style={{marginTop:12,borderTop:"1px solid #D0E6E5",paddingTop:12}}>
-      {!open ? (
-        <button onClick={()=>setOpen(true)} style={{...btnOutline,width:"100%",fontSize:13,padding:"8px 0"}}>+ Add to {svc} queue</button>
-      ) : (
-        <div>
-          <p style={{margin:"0 0 8px",fontSize:12,fontWeight:600,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.05em"}}>Add to {svc} queue</p>
-          <div style={{position:"relative",marginBottom:8}} ref={ref}>
-            <input
-              placeholder="Search by name or guest #…"
-              value={query}
-              onChange={e => handleQuery(e.target.value)}
-              style={{...inpStyle,borderColor:err?"#C0392B":"#D0E6E5"}}
-            />
-            {showSug && suggestions.length > 0 && (
-              <div style={{position:"absolute",top:"calc(100% + 2px)",left:0,right:0,background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:10,zIndex:20,boxShadow:"0 6px 20px rgba(70,180,191,0.15)",overflow:"hidden"}}>
-                {suggestions.map(p => {
-                  const av = avColor(p.name);
-                  return (
-                    <div key={p.id} onClick={()=>selectPerson(p)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",cursor:"pointer",borderBottom:"1px solid #D0E6E5",background:p.flagged?"#FFF5F5":"#fff"}}
-                      onMouseEnter={e=>e.currentTarget.style.background=p.flagged?"#FFE8E8":"#EAF7F8"}
-                      onMouseLeave={e=>e.currentTarget.style.background=p.flagged?"#FFF5F5":"#fff"}>
-                      <div style={{width:30,height:30,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:11,flexShrink:0}}>{initials(p.name)||"?"}</div>
-                      <div style={{flex:1}}><p style={{margin:0,fontSize:13,fontWeight:600}}>{p.name}</p><p style={{margin:0,fontSize:11,color:"#5A7070"}}>Guest #{p.guest_number}</p></div>
-                      {p.flagged&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600}}>⚑</span>}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-            <div style={{flex:1}}>
-              <input
-                type="number"
-                min="1"
-                placeholder={`${numLabel} # (default: ${nextPos})`}
-                value={customPos}
-                onChange={e=>setCustomPos(e.target.value)}
-                style={{...inpStyle}}
-              />
-            </div>
-          </div>
-          {err && <p style={{margin:"0 0 6px",fontSize:12,color:C.danger}}>⚠ {err}</p>}
-          <div style={{display:"flex",gap:8}}>
-            <button onClick={handleAdd} disabled={saving} style={{...btnPrimary,flex:1,fontSize:13,padding:"9px 0",opacity:saving?0.5:1}}>{saving?"Adding…":"Add to queue"}</button>
-            <button onClick={()=>{setOpen(false);setQuery("");setSelected(null);setCustomPos("");setErr(null);}} style={{...btnGhost,fontSize:13}}>Cancel</button>
-          </div>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -422,42 +394,37 @@ function CheckoutTimeEditor({ records, people, onUpdate }) {
     ? records.filter(r => {
         const p = people.find(x => x.name === r.name);
         return r.name.toLowerCase().includes(q) || (p && String(p.guest_number).includes(q));
-      }).slice(0, 8)
+      }).slice(0,8)
     : [];
 
   async function save(r) {
     if (!editVal) return;
     const newOut = localInputToIso(editVal);
-    if (new Date(newOut) <= new Date(r.check_in)) {
-      setSaveMsg({ id: r.id, type: "error", text: "Check-out must be after check-in." });
-      return;
-    }
+    if (new Date(newOut) <= new Date(r.check_in)) { setSaveMsg({id:r.id,type:"error",text:"Check-out must be after check-in."}); return; }
     setSaving(true);
     try {
-      const res = await api(`checkin_records?id=eq.${r.id}`, { method:"PATCH", body:JSON.stringify({check_out:newOut}), headers:{...HEADERS,"Prefer":"return=minimal"} });
+      const res = await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({check_out:newOut}),headers:{...HEADERS,"Prefer":"return=minimal"}});
       if (!res.ok) throw new Error();
-      setSaveMsg({ id: r.id, type: "ok", text: "Saved!" });
-      setEditingId(null); onUpdate();
-      setTimeout(() => setSaveMsg(null), 2500);
-    } catch (_) { setSaveMsg({ id: r.id, type: "error", text: "Failed to save. Try again." }); }
+      setSaveMsg({id:r.id,type:"ok",text:"Saved!"}); setEditingId(null); onUpdate();
+      setTimeout(()=>setSaveMsg(null),2500);
+    } catch(_) { setSaveMsg({id:r.id,type:"error",text:"Failed to save. Try again."}); }
     setSaving(false);
   }
 
   async function clearCheckout(r) {
     setSaving(true);
     try {
-      const res = await api(`checkin_records?id=eq.${r.id}`, { method:"PATCH", body:JSON.stringify({check_out:null}), headers:{...HEADERS,"Prefer":"return=minimal"} });
+      const res = await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
       if (!res.ok) throw new Error();
-      setSaveMsg({ id: r.id, type: "ok", text: "Check-out cleared." });
-      setEditingId(null); onUpdate();
-      setTimeout(() => setSaveMsg(null), 2500);
-    } catch (_) { setSaveMsg({ id: r.id, type: "error", text: "Failed to clear. Try again." }); }
+      setSaveMsg({id:r.id,type:"ok",text:"Check-out cleared."}); setEditingId(null); onUpdate();
+      setTimeout(()=>setSaveMsg(null),2500);
+    } catch(_) { setSaveMsg({id:r.id,type:"error",text:"Failed to clear. Try again."}); }
     setSaving(false);
   }
 
   return (
     <div>
-      <input placeholder="Search by name or guest #…" value={search} onChange={e=>{setSearch(e.target.value);setEditingId(null);setSaveMsg(null);}} style={{...inpStyle,marginBottom:8}}/>
+      <input placeholder="Search by name…" value={search} onChange={e=>{setSearch(e.target.value);setEditingId(null);setSaveMsg(null);}} style={{...inpStyle,marginBottom:8}}/>
       {q.length>0&&matched.length===0&&<p style={{fontSize:12,color:C.textMuted}}>No records found.</p>}
       {matched.map(r=>{
         const person=people.find(p=>p.name===r.name);
@@ -471,7 +438,6 @@ function CheckoutTimeEditor({ records, people, onUpdate }) {
               <div style={{flex:1,minWidth:0}}>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
                   <span style={{fontWeight:600,fontSize:13}}>{r.name}</span>
-                  {person&&<span style={{fontSize:11,color:C.textMuted}}>#{person.guest_number}</span>}
                   <span style={{fontSize:11,padding:"1px 7px",borderRadius:20,background:C.tealLight,color:C.tealDark}}>{r.service}</span>
                   {!r.check_out&&<span style={{fontSize:11,padding:"1px 7px",borderRadius:20,background:"#EAF7F8",color:"#46b4bf",fontWeight:500}}>Active</span>}
                 </div>
@@ -500,57 +466,77 @@ function CheckoutTimeEditor({ records, people, onUpdate }) {
   );
 }
 
-function PeopleRemover({people,onRemove,onFlag}) {
-  const [query,setQuery]=React.useState("");
-  const [confirm,setConfirm]=React.useState(null);
-  const [flagReason,setFlagReason]=React.useState("");
-  const [flagging,setFlagging]=React.useState(null);
-  const [showQR,setShowQR]=React.useState(null);
-  const matches=query.trim().length>0?people.filter(p=>p.name.toLowerCase().includes(query.toLowerCase())||String(p.guest_number).includes(query)).slice(0,5):[];
+function PeopleRemover({people, onRemove, onFlag}) {
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [confirm, setConfirm] = useState(null);
+  const [flagReason, setFlagReason] = useState("");
+  const [flagging, setFlagging] = useState(null);
+  const [showQR, setShowQR] = useState(null);
+
+  const filtered = people
+    .filter(p => {
+      const q = query.toLowerCase();
+      const matchQ = !q || p.name.toLowerCase().includes(q);
+      const matchF = filter==="all" || (filter==="flagged"&&p.flagged) || (filter==="ok"&&!p.flagged);
+      return matchQ && matchF;
+    })
+    .sort((a,b) => a.name.localeCompare(b.name));
+
   return (
     <div>
-      <input placeholder="Search by name or guest #…" value={query} onChange={e=>{setQuery(e.target.value);setConfirm(null);setFlagging(null);setShowQR(null);}} style={{...inpStyle,marginBottom:8}}/>
-      {matches.map(p=>(
-        <div key={p.id} style={{background:p.flagged?"#FFF5F5":C.white,border:`1px solid ${p.flagged?C.dangerBorder:C.border}`,borderRadius:8,marginBottom:8,overflow:"hidden"}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",flexWrap:"wrap",gap:6}}>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <span style={{fontSize:13,fontWeight:600,color:C.text}}>{p.name}</span>
-              <span style={{fontSize:12,color:C.textMuted}}>#{p.guest_number}</span>
-              {p.flagged&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:C.dangerBg,color:C.danger,fontWeight:600}}>⚑ Flagged</span>}
+      <div style={{display:"flex",gap:8,marginBottom:8}}>
+        <input placeholder="Filter by name…" value={query} onChange={e=>{setQuery(e.target.value);setConfirm(null);setFlagging(null);setShowQR(null);}} style={{...inpStyle,flex:1}}/>
+        <select value={filter} onChange={e=>setFilter(e.target.value)} style={{...inpStyle,width:110}}>
+          <option value="all">All</option>
+          <option value="ok">OK</option>
+          <option value="flagged">Flagged</option>
+        </select>
+      </div>
+      <p style={{margin:"0 0 8px",fontSize:12,color:C.textMuted}}>{filtered.length} {filtered.length===1?"person":"people"}</p>
+      <div style={{maxHeight:360,overflowY:"auto",borderRadius:8,border:`1px solid ${C.border}`}}>
+        {filtered.length===0 && <p style={{fontSize:12,color:C.textMuted,textAlign:"center",padding:"16px 0"}}>No people found.</p>}
+        {filtered.map((p,i) => (
+          <div key={p.id} style={{background:p.flagged?"#FFF5F5":C.white,borderBottom:i<filtered.length-1?`1px solid ${C.border}`:"none",overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 12px",gap:8,flexWrap:"wrap"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
+                <div style={{width:30,height:30,borderRadius:"50%",background:avColor(p.name).bg,color:avColor(p.name).color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:11,flexShrink:0}}>{initials(p.name)||"?"}</div>
+                <span style={{fontSize:13,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+                {p.flagged&&<span style={{fontSize:10,padding:"2px 6px",borderRadius:20,background:C.dangerBg,color:C.danger,fontWeight:600,flexShrink:0}}>⚑</span>}
+              </div>
+              <div style={{display:"flex",gap:5,flexShrink:0}}>
+                <button onClick={()=>setShowQR(showQR===p.id?null:p.id)} style={{...btnGhost,fontSize:11,padding:"4px 8px",color:C.teal,borderColor:C.tealMid}}>QR</button>
+                <button onClick={()=>{setFlagging(flagging===p.id?null:p.id);setConfirm(null);setFlagReason(p.flag_reason||"");}} style={{...btnGhost,fontSize:11,padding:"4px 8px",color:p.flagged?C.teal:C.danger,borderColor:p.flagged?C.border:C.dangerBorder}}>{p.flagged?"Unflag":"Flag"}</button>
+                {confirm===p.id ? (
+                  <>
+                    <button onClick={()=>{onRemove(p);setConfirm(null);}} style={{...btnGhost,color:C.danger,borderColor:C.dangerBorder,fontSize:11,padding:"4px 8px"}}>Confirm</button>
+                    <button onClick={()=>setConfirm(null)} style={{...btnGhost,fontSize:11,padding:"4px 8px"}}>Cancel</button>
+                  </>
+                ) : (
+                  <button onClick={()=>{setConfirm(p.id);setFlagging(null);}} style={{...btnGhost,color:C.danger,borderColor:C.dangerBorder,fontSize:11,padding:"4px 8px"}}>Remove</button>
+                )}
+              </div>
             </div>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              <button onClick={()=>setShowQR(showQR===p.id?null:p.id)} style={{...btnGhost,fontSize:12,color:C.teal,borderColor:C.tealMid}}>QR Code</button>
-              <button onClick={()=>{setFlagging(flagging===p.id?null:p.id);setConfirm(null);setFlagReason(p.flag_reason||"");}} style={{...btnGhost,fontSize:12,color:p.flagged?C.teal:C.danger,borderColor:p.flagged?C.border:C.dangerBorder}}>{p.flagged?"Unflag":"Flag"}</button>
-              {confirm===p.id?(
-                <div style={{display:"flex",gap:6}}>
-                  <button onClick={()=>{onRemove(p);setQuery("");setConfirm(null);}} style={{...btnGhost,color:C.danger,borderColor:C.dangerBorder,fontSize:12}}>Confirm</button>
-                  <button onClick={()=>setConfirm(null)} style={btnGhost}>Cancel</button>
-                </div>
-              ):(
-                <button onClick={()=>{setConfirm(p.id);setFlagging(null);}} style={{...btnGhost,color:C.danger,borderColor:C.dangerBorder}}>Remove</button>
-              )}
-            </div>
+            {showQR===p.id&&<div style={{padding:"14px 12px",borderTop:`1px solid ${C.border}`,background:C.bg}}><QRCodeDisplay guestNumber={p.guest_number}/></div>}
+            {flagging===p.id&&(
+              <div style={{padding:"10px 12px",borderTop:`1px solid ${C.border}`,background:C.bg}}>
+                {p.flagged ? (
+                  <div>
+                    <p style={{margin:"0 0 8px",fontSize:12,color:C.textMuted}}>Current reason: <em>{p.flag_reason||"No reason given"}</em></p>
+                    <button onClick={()=>{onFlag(p,false,"");setFlagging(null);}} style={{...btnOutline,fontSize:12,padding:"6px 14px"}}>Confirm unflag</button>
+                  </div>
+                ) : (
+                  <div>
+                    <input placeholder="Reason for flagging (optional)…" value={flagReason} onChange={e=>setFlagReason(e.target.value)} style={{...inpStyle,marginBottom:8,fontSize:13}}/>
+                    <button onClick={()=>{onFlag(p,true,flagReason);setFlagging(null);setFlagReason("");}} style={{...btnPrimary,fontSize:13,padding:"7px 16px",background:C.danger}}>Confirm flag</button>
+                  </div>
+                )}
+              </div>
+            )}
+            {p.flagged&&p.flag_reason&&flagging!==p.id&&<div style={{padding:"2px 12px 8px",fontSize:11,color:C.danger}}>Reason: {p.flag_reason}</div>}
           </div>
-          {showQR===p.id&&<div style={{padding:"14px 12px",borderTop:`1px solid ${C.border}`,background:C.bg}}><QRCodeDisplay guestNumber={p.guest_number}/></div>}
-          {flagging===p.id&&(
-            <div style={{padding:"10px 12px",borderTop:`1px solid ${C.border}`,background:C.bg}}>
-              {p.flagged?(
-                <div>
-                  <p style={{margin:"0 0 8px",fontSize:12,color:C.textMuted}}>Current reason: <em>{p.flag_reason||"No reason given"}</em></p>
-                  <button onClick={()=>{onFlag(p,false,"");setFlagging(null);}} style={{...btnOutline,fontSize:12,padding:"6px 14px"}}>Confirm unflag</button>
-                </div>
-              ):(
-                <div>
-                  <input placeholder="Reason for flagging (optional)…" value={flagReason} onChange={e=>setFlagReason(e.target.value)} style={{...inpStyle,marginBottom:8,fontSize:13}}/>
-                  <button onClick={()=>{onFlag(p,true,flagReason);setFlagging(null);setFlagReason("");}} style={{...btnPrimary,fontSize:13,padding:"7px 16px",background:C.danger}}>Confirm flag</button>
-                </div>
-              )}
-            </div>
-          )}
-          {p.flagged&&p.flag_reason&&flagging!==p.id&&<div style={{padding:"4px 12px 8px",fontSize:11,color:C.danger}}>Reason: {p.flag_reason}</div>}
-        </div>
-      ))}
-      {query.trim().length>0&&matches.length===0&&<p style={{fontSize:12,color:C.textMuted}}>No matches found.</p>}
+        ))}
+      </div>
     </div>
   );
 }
@@ -570,7 +556,7 @@ function LogRecord({r, av, dur, person, isFlagged, onCheckOut, onDelete, onUpdat
     if (outTime && new Date(outTime) <= new Date(inTime)) { setMsg({type:"error",text:"Check-out must be after check-in."}); return; }
     setSaving(true);
     try {
-      const res = await api(`checkin_records?id=eq.${r.id}`, {method:"PATCH",body:JSON.stringify({[editing]:newVal}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      const res = await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({[editing]:newVal}),headers:{...HEADERS,"Prefer":"return=minimal"}});
       if (!res.ok) throw new Error();
       setMsg({type:"ok",text:"Saved!"}); setEditing(null); onUpdate();
       setTimeout(()=>setMsg(null),2000);
@@ -581,7 +567,7 @@ function LogRecord({r, av, dur, person, isFlagged, onCheckOut, onDelete, onUpdat
   async function clearOut() {
     setSaving(true);
     try {
-      const res = await api(`checkin_records?id=eq.${r.id}`, {method:"PATCH",body:JSON.stringify({check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      const res = await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
       if (!res.ok) throw new Error();
       setEditing(null); onUpdate();
     } catch(_) { setMsg({type:"error",text:"Failed to clear."}); }
@@ -589,7 +575,7 @@ function LogRecord({r, av, dur, person, isFlagged, onCheckOut, onDelete, onUpdat
   }
 
   const isShowerLaundry = NO_DURATION_SERVICES.includes(r.service);
-  const numLabel = r.service === "Showers" ? "Shower" : r.service === "Laundry" ? "Laundry" : "Queue";
+  const numLabel = r.service==="Showers"?"Shower":r.service==="Laundry"?"Laundry":"Queue";
 
   const timeRow = (
     <p style={{margin:0,fontSize:11,color:"#8AA5A5",display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
@@ -612,7 +598,6 @@ function LogRecord({r, av, dur, person, isFlagged, onCheckOut, onDelete, onUpdat
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:2}}>
             <span style={{fontWeight:700,fontSize:14}}>{r.name}</span>
-            {person&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:"#2E8A94",fontWeight:500}}>#{person.guest_number}</span>}
             {isFlagged&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600}}>⚑ Flagged</span>}
             <span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:r.type==="Volunteer"?"#EAF7F8":"#EEEEFB",color:r.type==="Volunteer"?"#2E8A94":"#3A3A8C",fontWeight:500}}>{r.type}</span>
             {r.queue_position&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:20,background:"#FEF7E6",color:"#8A5A00",fontWeight:500}}>{numLabel} #{r.queue_position}</span>}
@@ -624,12 +609,8 @@ function LogRecord({r, av, dur, person, isFlagged, onCheckOut, onDelete, onUpdat
           {r.notes&&<p style={{margin:"4px 0 0",fontSize:12,color:"#5A7070",fontStyle:"italic"}}>{r.notes}</p>}
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0,alignItems:"flex-end"}}>
-          {isShowerLaundry && !r.check_out && (
-            <button onClick={()=>onCheckOut(r.id)} style={{...btnSuccess,fontSize:12,padding:"5px 12px"}}>✓ Done</button>
-          )}
-          {!isShowerLaundry && !r.check_out && (
-            <button onClick={()=>onCheckOut(r.id)} style={{...btnOutline,fontSize:12,padding:"5px 10px"}}>Check out</button>
-          )}
+          {isShowerLaundry && !r.check_out && <button onClick={()=>onCheckOut(r.id)} style={{...btnSuccess,fontSize:12,padding:"5px 12px"}}>✓ Done</button>}
+          {!isShowerLaundry && !r.check_out && <button onClick={()=>onCheckOut(r.id)} style={{...btnOutline,fontSize:12,padding:"5px 10px"}}>Check out</button>}
           <button onClick={()=>onDelete(r.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#8AA5A5",fontSize:18,padding:"0 4px",lineHeight:1}}>×</button>
         </div>
       </div>
@@ -813,7 +794,7 @@ function App() {
       const tag=document.activeElement?.tagName;
       if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT") return;
       if(e.key==="Enter"){
-        const code=scanBuffer.current.trim(); scanBuffer.current="";
+        const code=scanBuffer.current.trim();scanBuffer.current="";
         if(scanTimer.current) clearTimeout(scanTimer.current);
         if(code.length>3) handleScan(code);
         return;
@@ -865,22 +846,17 @@ function App() {
       }catch(_){setErrors({submit:"Failed to register guest."});setSaving(false);return;}
     }else{guestNumber=String(existing.guest_number);}
     const now=new Date().toISOString();
-
-    // Use nextAvailablePosition to fill gaps left by cancelled records
-    const position = form.service && CAPPED_SERVICES[form.service]
-      ? nextAvailablePosition(form.service, records)
-      : null;
-
+    const position=form.service&&CAPPED_SERVICES[form.service]?nextAvailablePosition(form.service,records):null;
     const toInsert=[{name,member_id:form.memberId||null,type:form.type,service:form.service,notes:form.notes||null,queue_position:position,check_in:now,check_out:null}];
     const addOns=[];
     if(form.service==="Day Center"){
       if(form.addShowers&&countToday("Showers")<CAPPED_SERVICES["Showers"]){
-        const showersPos = nextAvailablePosition("Showers", records);
+        const showersPos=nextAvailablePosition("Showers",records);
         toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Showers",notes:form.notes||null,queue_position:showersPos,check_in:now,check_out:null});
         addOns.push({service:"Showers",position:showersPos});
       }
       if(form.addLaundry&&countToday("Laundry")<CAPPED_SERVICES["Laundry"]){
-        const laundryPos = nextAvailablePosition("Laundry", records);
+        const laundryPos=nextAvailablePosition("Laundry",records);
         toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Laundry",notes:form.notes||null,queue_position:laundryPos,check_in:now,check_out:null});
         addOns.push({service:"Laundry",position:laundryPos});
       }
@@ -989,13 +965,8 @@ function App() {
             </div>
 
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
-              <p style={{margin:"0 0 12px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Showers & Laundry queue</p>
+              <p style={{margin:"0 0 12px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Showers & Laundry List</p>
               <ShowerLaundryPanel records={records} people={people} onMarkComplete={markComplete} onCancel={cancelRecord} onManualAdd={loadData}/>
-            </div>
-
-            <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
-              <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Modify check-out times</p>
-              <CheckoutTimeEditor records={records} people={people} onUpdate={loadData}/>
             </div>
 
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:16,marginBottom:16}}>
@@ -1052,7 +1023,7 @@ function App() {
             {!scanResult&&flagAlert&&(
               <div style={{background:"#FFF0F0",border:`2px solid #C0392B`,borderRadius:10,padding:"14px 16px",marginBottom:20}}>
                 <p style={{margin:"0 0 4px",fontSize:15,fontWeight:700,color:"#C0392B"}}>⚑ This person is not allowed on the premises</p>
-                <p style={{margin:"0 0 2px",fontSize:13,color:"#C0392B"}}><strong>{flagAlert.name}</strong> — Guest #{flagAlert.guest_number}</p>
+                <p style={{margin:"0 0 2px",fontSize:13,color:"#C0392B"}}><strong>{flagAlert.name}</strong></p>
                 {flagAlert.flag_reason&&<p style={{margin:0,fontSize:12,color:"#C0392B"}}>Reason: {flagAlert.flag_reason}</p>}
                 <p style={{margin:"8px 0 0",fontSize:12,color:"#5A7070"}}>Please contact a staff member. Check-in has been blocked.</p>
               </div>
@@ -1060,7 +1031,6 @@ function App() {
             {!scanResult&&success&&!flagAlert&&(
               <div style={{background:"#EAF7F8",border:"1.5px solid #C0E8EC",borderRadius:10,padding:"14px 16px",marginBottom:20}}>
                 <p style={{margin:"0 0 4px",fontSize:15,fontWeight:700,color:"#2E8A94"}}>{success.isNew?`Welcome, ${success.name}! You've been registered.`:`Welcome back, ${success.name}!`}</p>
-
                 {success.position&&<p style={{margin:"0 0 2px",fontSize:13,color:"#46b4bf"}}>{success.service}: queue <strong>#{success.position}</strong></p>}
                 {success.addOns&&success.addOns.map(a=>(
                   <p key={a.service} style={{margin:"0 0 2px",fontSize:13,color:"#46b4bf"}}>
@@ -1145,7 +1115,7 @@ function App() {
             ):(
               <>
                 <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
-                  <input placeholder="Search by name or guest #…" value={search} onChange={e=>setSearch(e.target.value)} style={{...inpStyle,flex:1,minWidth:140}}/>
+                  <input placeholder="Search by name…" value={search} onChange={e=>setSearch(e.target.value)} style={{...inpStyle,flex:1,minWidth:140}}/>
                   <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{...inpStyle,width:110}}><option>All</option><option>Guest</option><option>Volunteer</option></select>
                   <select value={filterService} onChange={e=>setFilterService(e.target.value)} style={{...inpStyle,width:150}}><option>All</option>{services.map(s=><option key={s}>{s}</option>)}</select>
                 </div>
