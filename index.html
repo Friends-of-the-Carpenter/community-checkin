@@ -961,7 +961,11 @@ function App() {
                 ))}
               </div>
             )}
-            {errors.submit&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:13,color:"#C0392B"}}>{errors.submit}</div>
+            {errors.submit&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:13,color:"#C0392B"}}>{errors.submit}</div>}
+            <div style={{background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:8,padding:"8px 14px",marginBottom:20,fontSize:12,color:"#2E8A94",display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:16}}>📷</span>
+              <span>Volunteer QR codes are detected automatically — just scan anytime.</span>
+            </div>
             <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Visitor type</p>
             <div style={{display:"flex",gap:10,marginBottom:18}}>
               {["Guest","Volunteer"].map(t=>(
@@ -1000,7 +1004,7 @@ function App() {
               if(!showersAvail&&!laundryAvail) return null;
               return (
                 <div style={{background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:8,padding:"12px 14px",marginBottom:14}}>
-                  <p style={{margin:"0 0 10px",fontSize:12,fontWeight:600,color:"#2E8A94",textTransform:"uppercase",letterSpacing:"0.05em"}}>Check if you would like to take a shower and/or do laundry:</p>
+                  <p style={{margin:"0 0 10px",fontSize:12,fontWeight:600,color:"#2E8A94",textTransform:"uppercase",letterSpacing:"0.05em"}}>Also add to queue for:</p>
                   <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
                     {showersAvail&&(
                       <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:14,color:C.text}}>
