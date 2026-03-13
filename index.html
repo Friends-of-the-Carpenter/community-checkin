@@ -750,16 +750,16 @@ function App() {
       }catch(_){setErrors({submit:"Failed to register guest."});setSaving(false);return;}
     }else{guestNumber=String(existing.guest_number);}
     const now=new Date().toISOString();
-    const position=form.service&&CAPPED_SERVICES[form.service]?countToday(form.service)+1:null;
+    const position=form.service&&CAPPED_SERVICES[form.service]? (records.filter(r => r.service === form.service && r.check_in >= todayISO()).reduce((max, r) => Math.max(max, r.queue_position || 0), 0)) + 1:null;
     const toInsert=[{name,member_id:form.memberId||null,type:form.type,service:form.service,notes:form.notes||null,queue_position:position,check_in:now,check_out:null}];
     const addOns=[];
     if(form.service==="Day Center"){
       if(form.addShowers&&countToday("Showers")<CAPPED_SERVICES["Showers"]){
-        toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Showers",notes:form.notes||null,queue_position:countToday("Showers")+1,check_in:now,check_out:null});
+        toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Showers",notes:form.notes||null,queue_position: (records.filter(r => r.service === "Showers" && r.check_in >= todayISO()).reduce((max, r) => Math.max(max, r.queue_position || 0), 0)) + 1,check_in:now,check_out:null});
         addOns.push({service:"Showers",position:countToday("Showers")+1});
       }
       if(form.addLaundry&&countToday("Laundry")<CAPPED_SERVICES["Laundry"]){
-        toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Laundry",notes:form.notes||null,queue_position:countToday("Laundry")+1,check_in:now,check_out:null});
+        toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Laundry",notes:form.notes||null,queue_position: (records.filter(r => r.service === "Laundry" && r.check_in >= todayISO()).reduce((max, r) => Math.max(max, r.queue_position || 0), 0)) + 1,check_in:now,check_out:null});
         addOns.push({service:"Laundry",position:countToday("Laundry")+1});
       }
     }
