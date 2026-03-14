@@ -876,7 +876,7 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
           if(!showersAvail&&!laundryAvail) return null;
           return (
             <div style={{background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:10,padding:"16px 18px",marginBottom:18}}>
-              <p style={{margin:"0 0 12px",fontSize:14,fontWeight:600,color:"#2E8A94",textTransform:"uppercase",letterSpacing:"0.05em"}}>Also sign up for:</p>
+              <p style={{margin:"0 0 12px",fontSize:14,fontWeight:600,color:"#2E8A94",textTransform:"uppercase",letterSpacing:"0.05em"}}>Check if you would like to take a shower and/or do laundry:</p>
               <div style={{display:"flex",gap:24,flexWrap:"wrap"}}>
                 {showersAvail&&(<label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:16,color:C.text}}><input type="checkbox" checked={form.addShowers} onChange={e=>setForm(f=>({...f,addShowers:e.target.checked}))} style={{width:20,height:20,accentColor:"#46b4bf",cursor:"pointer"}}/><span>Showers</span><span style={{fontSize:14,color:C.textMuted}}>({CAPPED_SERVICES["Showers"]-countToday("Showers")} spots left)</span></label>)}
                 {laundryAvail&&(<label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:16,color:C.text}}><input type="checkbox" checked={form.addLaundry} onChange={e=>setForm(f=>({...f,addLaundry:e.target.checked}))} style={{width:20,height:20,accentColor:"#46b4bf",cursor:"pointer"}}/><span>Laundry</span><span style={{fontSize:14,color:C.textMuted}}>({CAPPED_SERVICES["Laundry"]-countToday("Laundry")} spots left)</span></label>)}
