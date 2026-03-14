@@ -690,7 +690,7 @@ function QueueView({records,people,onMarkComplete,onCancel,onLogout,loadData}) {
 function ServiceButtons({ availableServices, form, setForm, setErrors, countToday }) {
   return (
     <div style={{marginBottom:18,marginTop:14}}>
-      <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Select service</p>
+      <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Reason For Your Visit Today</p>
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:12}}>
         {availableServices.map(s=>{
           const cap=CAPPED_SERVICES[s],used=cap?countToday(s):0,full=cap&&used>=cap,isSelected=form.service===s;
@@ -843,14 +843,14 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
         )}
         {errors.submit&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:10,padding:"12px 16px",marginBottom:20,fontSize:15,color:"#C0392B"}}>{errors.submit}</div>}
 
-        <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Visitor type</p>
+        <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Please Choose</p>
         <div style={{display:"flex",gap:14,marginBottom:22}}>
           {["Guest","Volunteer"].map(t=>(
             <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"14px 0",borderRadius:10,border:form.type===t?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:form.type===t?"#EAF7F8":"#fff",fontWeight:form.type===t?700:400,fontSize:17,cursor:"pointer",color:form.type===t?"#2E8A94":"#5A7070",fontFamily:"inherit"}}>{t}</button>
           ))}
         </div>
 
-        <p style={{margin:"0 0 8px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Name</p>
+        <p style={{margin:"0 0 8px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>NAME — FIRST TIME? JUST ENTER YOUR NAME AND CHECK IN</p>
         <div style={{marginBottom:6,position:"relative"}} ref={suggestRef}>
           <input placeholder="Enter your full name…" value={form.name} onChange={e=>handleNameInput(e.target.value)} style={{...inpStyle,borderColor:errors.name?"#C0392B":"#D0E6E5"}}/>
           {errors.name&&<p style={{margin:"6px 0 0",fontSize:14,color:"#C0392B"}}>{errors.name}</p>}
