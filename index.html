@@ -990,7 +990,7 @@ isFirstLoad.current=false;
     setLoading(false);
   },[]);
 
-  useEffect(()=>{loadData();const t=setInterval(loadData,15000);return()=>clearInterval(t);},[loadData]);
+  useEffect(()=>{loadData();const t=setInterval(loadData,5000);return()=>clearInterval(t);},[loadData]);
   useEffect(()=>{
     function h(e){if(suggestRef.current&&!suggestRef.current.contains(e.target))setShowSuggestions(false);}
     document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
@@ -1319,7 +1319,7 @@ function Root() {
     setLoading(false);
   },[]);
 
-  useEffect(()=>{loadData();const t=setInterval(loadData,15000);return()=>clearInterval(t);},[loadData]);
+  useEffect(()=>{loadData();const t=setInterval(loadData,5000);return()=>clearInterval(t);},[loadData]);
 
   if(IS_ADMIN_MODE) return <AdminApp/>;
   return <PublicApp records={records} people={people} services={services} loading={loading} dbError={dbError} loadData={loadData}/>;
