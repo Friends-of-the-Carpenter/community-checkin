@@ -102,7 +102,7 @@ function LiveClock() {
   useEffect(() => { const t=setInterval(()=>setNow(new Date()),1000); return()=>clearInterval(t); }, []);
   const date = now.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});
   const time = now.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
-  return <p style={{margin:"12px 0 4px",fontSize:18,color:"#fff",fontWeight:600}}>{date} · {time}</p>;
+  return <p style={{margin:"12px 0 4px",fontSize:20,color:"#fff",fontWeight:900}}>{date} | {time}</p>;
 }
 
 function Logo() {
@@ -813,7 +813,6 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
         )}
 
         <div style={{marginBottom:28}}>
-          <h2 style={{margin:"0 0 14px",fontSize:20,fontWeight:700}}>Showers & Laundry</h2>
           <div style={{display:"flex",gap:14}}>
             {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{
               const used=records.filter(r=>r.service===svc&&r.check_in>=todayISO()).length;
@@ -827,12 +826,6 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
             })}
           </div>
         </div>
-
-        <div style={{borderTop:"2px solid #C0E8EC",paddingTop:28,marginBottom:24}}>
-          <h2 style={{margin:"0 0 6px",fontSize:22,fontWeight:700}}>Check in</h2>
-          <p style={{margin:"0 0 20px",fontSize:15,color:"#5A7070"}}>Select your service and enter your name to check in</p>
-        </div>
-
         {flagAlert&&(
           <div style={{background:"#FFF0F0",border:"2px solid #C0392B",borderRadius:12,padding:"18px 20px",marginBottom:24}}>
             <p style={{margin:"0 0 6px",fontSize:18,fontWeight:700,color:"#C0392B"}}>⚑ This person is not allowed on the premises</p>
