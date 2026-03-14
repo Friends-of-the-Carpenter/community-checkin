@@ -740,10 +740,14 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
     const m=people.filter(p=>p.name.toLowerCase().includes(q)||String(p.guest_number).includes(q)).slice(0,6);
     setSuggestions(m);setShowSuggestions(m.length>0);
   }
-  function selectPerson(p){
+ async function selectPerson(p){
     setForm(f=>({...f,name:p.name,guestNumber:String(p.guest_number)}));
     setSuggestions([]);setShowSuggestions(false);setErrors(e=>({...e,name:undefined}));
-    if(p.flagged)setFlagAlert(p);else setFlagAlert(null);
+    if(p.flagged){
+      setFlagAlert(p);
+      await api("checkin_records",{method:"POST",body:JSON.stringify({name:p.name,type:"Guest",service:FLAG_ALERT_SERVICE,notes:p.flag_reason||null,check_in:new Date().toISOString(),check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      await loadData();
+    } else { setFlagAlert(null); }
   }
   function validate(){
     const e={};
@@ -860,7 +864,12 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
 
         <p style={{margin:"0 0 8px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>NAME — FIRST TIME? JUST ENTER YOUR NAME AND CHECK IN</p>
         <div style={{marginBottom:6,position:"relative"}} ref={suggestRef}>
-          <input placeholder="Enter your full name…" value={form.name} onChange={e=>handleNameInput(e.target.value)} style={{...inpStyle,borderColor:errors.name?"#C0392B":"#D0E6E5"}}/>
+          <div style={{position:"relative"}}>
+            <input placeholder="Enter your full name…" value={form.name} onChange={e=>handleNameInput(e.target.value)} style={{...inpStyle,borderColor:errors.name?"#C0392B":"#D0E6E5",paddingRight:form.name?44:16}}/>
+            {form.name&&(
+              <button onClick={()=>{setForm(f=>({...f,name:"",guestNumber:""}));setSuggestions([]);setShowSuggestions(false);setFlagAlert(null);setErrors(e=>({...e,name:undefined}));}} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"#D0E6E5",border:"none",borderRadius:"50%",width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:15,color:"#5A7070",lineHeight:1}}>×</button>
+            )}
+          </div>
           {errors.name&&<p style={{margin:"6px 0 0",fontSize:14,color:"#C0392B"}}>{errors.name}</p>}
           {showSuggestions&&suggestions.length>0&&(
             <div style={{position:"absolute",top:"calc(100% + 2px)",left:0,right:0,background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,zIndex:10,boxShadow:"0 6px 20px rgba(70,180,191,0.15)",overflow:"hidden"}}>
