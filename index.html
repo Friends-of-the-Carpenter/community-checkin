@@ -913,33 +913,9 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
   );
 }
 
-// ── ADMIN LANDING ────────────────────────────────────────────
-function AdminLanding({ onSelect }) {
-  return (
-    <div style={{minHeight:"100vh",background:"#F7FAFA",display:"flex",flexDirection:"column"}}>
-      <div style={{background:"#46b4bf",padding:"28px 24px 22px",textAlign:"center"}}>
-        <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Logo/></div>
-        <LiveClock/>
-      </div>
-      <div style={{padding:"32px 24px",gap:20,maxWidth:500,width:"100%",margin:"0 auto"}}>
-        <div style={{display:"flex",flexDirection:"column",gap:14}}>
-          <button onClick={()=>onSelect("admin")} style={{...btnOutline,width:"100%",padding:"22px 0",fontSize:19,borderRadius:14}}>
-            Admin Login
-          </button>
-          <button onClick={()=>onSelect("queue")} style={{...btnPrimary,width:"100%",padding:"22px 0",fontSize:19,borderRadius:14,background:C.teal}}>
-            Showers & Laundry Login
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── ADMIN APP ────────────────────────────────────────────────
 function AdminApp() {
   const [view,setView]=useState("checkin");
-  const [landing,setLanding]=useState(true);
-  const [pendingPin,setPendingPin]=useState(null);
   const [form,setForm]=useState(emptyForm);
   const [records,setRecords]=useState([]);
   const [services,setServices]=useState([]);
@@ -1094,9 +1070,9 @@ isFirstLoad.current=false;
     const csv=[hdr,...rows].map(r=>r.map(v=>`"${v}"`).join(",")).join("\n");
     const a=document.createElement("a");a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);a.download="checkins.csv";a.click();
   }
-  function tryPin(){
-    if(pendingPin==="admin"&&pinInput===ADMIN_PIN){setAdminAuth(true);setPinError(false);setPinInput("");setPendingPin(null);}
-    else if(pendingPin==="queue"&&pinInput===QUEUE_PIN){setQueueAuth(true);setPinError(false);setPinInput("");setPendingPin(null);}
+function tryPin(){
+    if(showPinModal==="admin"&&pinInput===ADMIN_PIN){setAdminAuth(true);setPinError(false);setPinInput("");setShowPinModal(null);}
+    else if(showPinModal==="queue"&&pinInput===QUEUE_PIN){setQueueAuth(true);setPinError(false);setPinInput("");setShowPinModal(null);}
     else{setPinError(true);setPinInput("");}
   }
   async function addService(){const s=newService.trim();if(!s||services.includes(s)){setNewService("");return;}await api("checkin_services",{method:"POST",body:JSON.stringify({name:s}),headers:{...HEADERS,"Prefer":"return=minimal"}});setNewService("");loadData();}
@@ -1113,28 +1089,7 @@ isFirstLoad.current=false;
   const today=realRecords.filter(r=>r.check_in>=todayISO()).length;
   const gs=realRecords.filter(r=>r.type==="Guest").length;
   const vs=realRecords.filter(r=>r.type==="Volunteer").length;
-
-  if(queueAuth) return <QueueView records={records} people={people} onMarkComplete={markComplete} onCancel={cancelRecord} onLogout={()=>{setQueueAuth(false);setLanding(true);}} loadData={loadData}/>;
-
-  // Landing page
-  if(landing) return <AdminLanding onSelect={mode=>{setPendingPin(mode);setLanding(false);}}/>;
-
-  // PIN entry screen
-  if(pendingPin&&!adminAuth&&!queueAuth) return (
-    <div style={{minHeight:"100vh",background:"#F7FAFA",display:"flex",flexDirection:"column"}}>
-      <div style={{background:"#46b4bf",padding:"28px 24px 22px",textAlign:"center"}}>
-        <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Logo/></div>
-        <LiveClock/>
-      </div>
-      <div style={{padding:"32px 24px",maxWidth:400,width:"100%",margin:"0 auto"}}>
-        <input type="password" placeholder="Enter PIN" value={pinInput} onChange={e=>setPinInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")tryPin();}} style={{...inpStyle,marginBottom:12,fontSize:20,textAlign:"center",letterSpacing:"0.2em"}} autoFocus/>
-        {pinError&&<p style={{margin:"0 0 12px",fontSize:14,color:C.danger}}>Incorrect PIN. Please try again.</p>}
-        <button onClick={tryPin} style={{...btnPrimary,width:"100%",padding:"16px 0",fontSize:18,marginBottom:12}}>Login</button>
-        <button onClick={()=>{setLanding(true);setPendingPin(null);setPinError(false);setPinInput("");}} style={{...btnGhost,width:"100%",fontSize:16,padding:"12px 0"}}>← Back</button>
-      </div>
-    </div>
-  );
-
+  if(queueAuth) return <QueueView records={records} people={people} onMarkComplete={markComplete} onCancel={cancelRecord} onLogout={()=>setQueueAuth(false)} loadData={loadData}/>;
   const Tab=({id,label})=>(
     <button onClick={()=>setView(id)} style={{flex:1,padding:"14px 0",border:"none",background:"transparent",borderBottom:view===id?"3px solid #46b4bf":"3px solid transparent",fontWeight:view===id?700:400,fontSize:16,cursor:"pointer",color:view===id?"#46b4bf":"#5A7070",fontFamily:"inherit",marginBottom:-2}}>
       {label}
@@ -1149,9 +1104,6 @@ isFirstLoad.current=false;
       <div style={{background:"#46b4bf",padding:"28px 24px 22px",textAlign:"center"}}>
         <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Logo/></div>
         <LiveClock/>
-        <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:10,marginTop:16}}>
-          <button onClick={()=>{setLanding(true);setAdminAuth(false);}} style={{...btnGhost,background:"rgba(255,255,255,0.15)",color:"#fff",borderColor:"rgba(255,255,255,0.3)",fontSize:14}}>← Back</button>
-        </div>
       </div>
 
       <div style={{maxWidth:900,margin:"0 auto",padding:"28px 24px 4rem"}}>
