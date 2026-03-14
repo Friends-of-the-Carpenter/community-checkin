@@ -177,7 +177,7 @@ function SimpleBarChart({data,keys,colors,height=200}) {
   const barW=Math.max(10,Math.floor(320/data.length)-4);
   return (
     <div style={{overflowX:"visible"}}>
-      <div style={{display:"flex",alignItems:"flex-end",gap:4,height,minWidth:data.length*((barW*keys.length)+8),paddingBottom:28}}>
+      <div style={{display:"flex",alignItems:"flex-end",gap:4,height,minWidth:data.length*((barW*keys.length)+8),paddingBottom:15}}>
         {data.map((d,i)=>(
           <div key={i} style={{display:"flex",alignItems:"flex-end",gap:2,flexShrink:0}}>
             {keys.map(k=>{
