@@ -43,6 +43,7 @@ const CHART_SERVICES = ["Showers","Laundry","Day Center","Volunteer","Community 
 const CHART_COLORS = { "Showers":"#46b4bf","Laundry":"#2E8A94","Day Center":"#E6A817","Community Partnership":"#7B61C4","Volunteer":"#3A9C6A" };
 const FLAG_ALERT_SERVICE = "FLAG_ALERT";
 const IS_ADMIN_MODE = new URLSearchParams(window.location.search).get("mode") === "admin";
+const IS_QUEUE_MODE = new URLSearchParams(window.location.search).get("mode") === "showerslaundry";
 
 const C = {
   teal:"#46b4bf",tealDark:"#2E8A94",tealLight:"#EAF7F8",tealMid:"#C0E8EC",
@@ -1272,6 +1273,7 @@ function Root() {
   useEffect(()=>{loadData();const t=setInterval(loadData,3000);return()=>clearInterval(t);},[loadData]);
 
   if(IS_ADMIN_MODE) return <AdminApp/>;
+  if(IS_QUEUE_MODE) return <QueueView records={records} people={people} onMarkComplete={async(id)=>{await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}} onCancel={async(id)=>{await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});loadData();}} onLogout={()=>{}} loadData={loadData}/>;
   return <PublicApp records={records} people={people} services={services} loading={loading} dbError={dbError} loadData={loadData}/>;
 }
 
