@@ -1173,28 +1173,6 @@ function AdminApp() {
           </div>
         )}
 
-        {!loading&&(
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:14,marginBottom:18}}>
-            {[["Total",today],["Guests",gs],["Volunteers",vs]].map(([l,v])=>(
-              <div key={l} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:"16px 14px",textAlign:"center"}}>
-                <p style={{margin:0,fontSize:28,fontWeight:700,color:"#46b4bf"}}>{v}</p>
-                <p style={{margin:0,fontSize:13,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{l}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {!loading&&(
-          <div style={{display:"flex",gap:14,marginBottom:24}}>
-            {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{const used=countToday(svc),full=used>=cap;return(
-              <div key={svc} style={{flex:1,background:full?"#FCECEA":"#EAF7F8",border:`1.5px solid ${full?"#F0A9A3":"#C0E8EC"}`,borderRadius:12,padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:15,fontWeight:600,color:full?"#C0392B":"#2E8A94"}}>{svc}</span>
-                <span style={{fontSize:14,fontWeight:500,color:full?"#C0392B":"#46b4bf",background:full?"transparent":"#fff",padding:"4px 14px",borderRadius:20,border:`1px solid ${full?"#F0A9A3":"#C0E8EC"}`}}>{full?"Full":`${cap-used} left`}</span>
-              </div>
-            );})}
-          </div>
-        )}
-
         <div style={{display:"flex",borderBottom:"2px solid #C0E8EC",marginBottom:28}}>
           <Tab id="checkin" label="Check in"/>
           <Tab id="log" label={`Visit log (${realRecords.length})`}/>
