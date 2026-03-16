@@ -819,11 +819,6 @@ const recordsRef2 = useRef([]);
   const peopleRef2 = useRef([]);
   useEffect(()=>{recordsRef2.current=records;},[records]);
   useEffect(()=>{peopleRef2.current=people;},[people]);
-const recordsRef2 = useRef([]);
-  const peopleRef2 = useRef([]);
-  useEffect(()=>{recordsRef2.current=records;},[records]);
-  useEffect(()=>{peopleRef2.current=people;},[people]);
-
   useEffect(()=>{
     async function handleScan(code) {
       if(!code.startsWith(QR_PREFIX)) return;
