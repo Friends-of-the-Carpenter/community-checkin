@@ -1081,7 +1081,49 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
 }
 
   // ── ADMIN APP ────────────────────────────────────────────────
+function AddPersonPanel({ people, onUpdate }) {
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  async function handleAdd() {
+    if (!name.trim()) return;
+    const exists = people.find(p => p.name.toLowerCase() === name.trim().toLowerCase());
+    if (exists) { setMsg({type:"error",text:`${name.trim()} is already in the system.`}); return; }
+    setSaving(true);
+    try {
+      const res = await api("people", { method:"POST", body:JSON.stringify({name:name.trim()}), headers:{...HEADERS,"Prefer":"return=minimal"} });
+      if (!res.ok) throw new Error();
+      setMsg({type:"ok",text:`${name.trim()} has been added to the system.`});
+      setName("");
+      onUpdate();
+      setTimeout(()=>setMsg(null),4000);
+    } catch(_) { setMsg({type:"error",text:"Failed to add person. Try again."}); }
+    setSaving(false);
+  }
+
+  return (
+    <div>
+      <div style={{display:"flex",gap:10}}>
+        <input
+          placeholder="Full name…"
+          value={name}
+          onChange={e=>{setName(e.target.value);setMsg(null);}}
+          onKeyDown={e=>e.key==="Enter"&&handleAdd()}
+          style={{...inpStyle,flex:1}}
+        />
+        <button onClick={handleAdd} disabled={saving||!name.trim()} style={{...btnPrimary,padding:"12px 24px",fontSize:15,opacity:saving||!name.trim()?0.5:1}}>
+          {saving?"Adding…":"Add"}
+        </button>
+      </div>
+      {msg&&<p style={{margin:"10px 0 0",fontSize:14,color:msg.type==="ok"?C.tealDark:C.danger}}>{msg.type==="ok"?"✓ ":"⚠ "}{msg.text}</p>}
+    </div>
+  );
+}
+
+  // ── ADMIN APP ────────────────────────────────────────────────
 function AdminApp() {
+  function AdminApp() {
   const [view,setView]=useState("checkin");
   const [form,setForm]=useState(emptyForm);
   const [records,setRecords]=useState([]);
