@@ -1256,11 +1256,11 @@ function tryPin(){
                 <button onClick={addService} style={{...btnOutline,padding:"10px 20px",fontSize:15}}>Add</button>
               </div>
             </div>
-            <button onClick={exportCSV} style={{...btnOutline,width:"100%",textAlign:"center",padding:13,fontSize:15}}>Export all check-ins as CSV ↓</button>
                 <div style={{borderTop:"2px solid #C0E8EC",marginTop:40,paddingTop:28}}>
           <h2 style={{margin:"0 0 24px",fontSize:22,fontWeight:700}}>Analytics</h2>
           <AnalyticsTab records={records}/>
-        </div>  
+        </div>
+          <button onClick={exportCSV} style={{...btnOutline,width:"100%",textAlign:"center",padding:13,fontSize:15}}>Export all check-ins as CSV ↓</button>
         </div> 
       </div>
     </div>
