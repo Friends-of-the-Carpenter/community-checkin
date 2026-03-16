@@ -509,7 +509,19 @@ function PeopleRemover({people, onRemove, onFlag, onUpdate}) {
               </div>
              <div style={{display:"flex",gap:7,flexShrink:0,flexWrap:"wrap"}}>
                 <button onClick={()=>setShowQR(showQR===p.id?null:p.id)} style={{...btnGhost,fontSize:13,padding:"6px 12px",color:C.teal,borderColor:C.tealMid}}>QR</button>
-                <button onClick={()=>{setFlagging(flagging===p.id?null:p.id);setConfirm(null);setFlagReason(p.flag_reason||"");}} style={{...btnGhost,fontSize:13,padding:"6px 12px",color:p.flagged?C.teal:C.danger,borderColor:p.flagged?C.border:C.dangerBorder}}>{p.flagged?"Unflag":"Flag"}</button>
+                <select
+                  value={p.default_service||""}
+                  onChange={async e=>{
+                    await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({default_service:e.target.value||null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                    onUpdate();
+                  }}
+                  style={{...inpStyle,width:"auto",padding:"4px 8px",fontSize:12,height:32,color:p.default_service?C.tealDark:C.textMuted,borderColor:p.default_service?C.tealMid:C.border}}>
+                  <option value="">Service…</option>
+                  <option value="Volunteer">Volunteer</option>
+                  <option value="Community Partnership">Community Partnership</option>
+                  <option value="Day Center">Day Center</option>
+                </select>
+               <button onClick={()=>{setFlagging(flagging===p.id?null:p.id);setConfirm(null);setFlagReason(p.flag_reason||"");}} style={{...btnGhost,fontSize:13,padding:"6px 12px",color:p.flagged?C.teal:C.danger,borderColor:p.flagged?C.border:C.dangerBorder}}>{p.flagged?"Unflag":"Flag"}</button>
                 {confirm===p.id?(
                   <>
                     <button onClick={()=>{onRemove(p);setConfirm(null);}} style={{...btnGhost,color:C.danger,borderColor:C.dangerBorder,fontSize:13,padding:"6px 12px"}}>Confirm</button>
@@ -794,8 +806,8 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [success, setSuccess] = useState(null);
   const [flagAlert, setFlagAlert] = useState(null);
-  const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [scanResult, setScanResult] = useState(null);
   const suggestRef = useRef(null);
 
   useEffect(() => {
@@ -807,34 +819,50 @@ const recordsRef2 = useRef([]);
   const peopleRef2 = useRef([]);
   useEffect(()=>{recordsRef2.current=records;},[records]);
   useEffect(()=>{peopleRef2.current=people;},[people]);
+const recordsRef2 = useRef([]);
+  const peopleRef2 = useRef([]);
+  useEffect(()=>{recordsRef2.current=records;},[records]);
+  useEffect(()=>{peopleRef2.current=people;},[people]);
 
   useEffect(()=>{
     async function handleScan(code) {
       if(!code.startsWith(QR_PREFIX)) return;
       const guestNum=code.slice(QR_PREFIX.length);
       const person=peopleRef2.current.find(p=>String(p.guest_number)===guestNum);
-      if(!person){setErrors({submit:`No volunteer found with ID ${guestNum}`});return;}
+      if(!person){ setScanResult({action:"error",message:`No volunteer found with ID ${guestNum}`}); return; }
       if(person.flagged){
         setFlagAlert(person);
+        setScanResult({action:"error",message:`${person.name} is flagged and cannot check in.`});
         await api("checkin_records",{method:"POST",body:JSON.stringify({name:person.name,type:"Guest",service:FLAG_ALERT_SERVICE,notes:person.flag_reason||null,check_in:new Date().toISOString(),check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
         await loadData();
         return;
       }
-      const activeRecord=recordsRef2.current.find(r=>r.name===person.name&&r.service==="Volunteer"&&r.check_in>=todayISO()&&!r.check_out);
+      const svcToUse=person.default_service||"Volunteer";
+      const activeRecord=recordsRef2.current.find(r=>r.name===person.name&&r.service===svcToUse&&r.check_in>=todayISO()&&!r.check_out);
       if(activeRecord){
-        await api(`checkin_records?id=eq.${activeRecord.id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+        const now=new Date().toISOString();
+        await api(`checkin_records?id=eq.${activeRecord.id}`,{method:"PATCH",body:JSON.stringify({check_out:now}),headers:{...HEADERS,"Prefer":"return=minimal"}});
         const p2=peopleRef2.current.find(p=>p.name===person.name);
         if(p2?.locker){await api(`people?id=eq.${p2.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});}
         await loadData();
-        setSuccess({name:person.name,guestNumber:guestNum,service:"Volunteer",position:null,isNew:false,addOns:[],checkedOut:true});
-        setTimeout(()=>setSuccess(null),7000);
+        setScanResult({action:"checkout",name:person.name,guestNumber:guestNum,duration:duration(activeRecord.check_in,now,"Volunteer")});
       } else {
         await api("checkin_records",{method:"POST",body:JSON.stringify({name:person.name,type:"Volunteer",service:"Volunteer",check_in:new Date().toISOString(),check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
         await loadData();
-        setSuccess({name:person.name,guestNumber:guestNum,service:"Volunteer",position:null,isNew:false,addOns:[]});
-        setTimeout(()=>setSuccess(null),7000);
+        setScanResult({action:"checkin",name:person.name,guestNumber:guestNum});
       }
     }
+    const scanBuffer={current:""};
+    const scanTimer={current:null};
+    function onKeyDown(e){
+      const tag=document.activeElement?.tagName;
+      if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT") return;
+      if(e.key==="Enter"){const code=scanBuffer.current.trim();scanBuffer.current="";if(scanTimer.current)clearTimeout(scanTimer.current);if(code.length>3)handleScan(code);return;}
+      if(e.key.length===1){if(scanTimer.current)clearTimeout(scanTimer.current);scanBuffer.current+=e.key;scanTimer.current=setTimeout(()=>{scanBuffer.current="";},SCANNER_TIMEOUT_MS);}
+    }
+    document.addEventListener("keydown",onKeyDown);
+    return()=>document.removeEventListener("keydown",onKeyDown);
+  },[loadData]);
     const scanBuffer={current:""};
     const scanTimer={current:null};
     function onKeyDown(e){
@@ -973,6 +1001,7 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
         )}
 
         {/* Toggle buttons */}
+        {scanResult&&<ScanToast result={scanResult} onDone={()=>setScanResult(null)}/>}
         <div style={{display:"flex",gap:14,marginBottom:28}}>
           <button onClick={()=>setPubView(pubView==="checkin"?null:"checkin")} style={{flex:1,padding:"28px 0",borderRadius:14,border:pubView==="checkin"?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:pubView==="checkin"?"#EAF7F8":"#fff",fontWeight:700,fontSize:22,cursor:"pointer",color:pubView==="checkin"?"#2E8A94":"#5A7070",fontFamily:"inherit",transition:"all 0.15s ease"}}>
             {pubView==="checkin"?"▲ Check in":"▼ Check in"}
@@ -1173,10 +1202,15 @@ isFirstLoad.current=false;
       const person=peopleRef.current.find(p=>String(p.guest_number)===guestNum);
       if(!person){setScanResult({action:"error",message:`No volunteer found with ID ${guestNum}`});return;}
       if(person.flagged){setScanResult({action:"error",message:`${person.name} is flagged and cannot check in.`});return;}
-      const activeRecord=recordsRef.current.find(r=>r.name===person.name&&r.service==="Volunteer"&&r.check_in>=todayISO()&&!r.check_out);
+      const svcToUse=person.default_service||"Volunteer";
+      const activeRecord=recordsRef.current.find(r=>r.name===person.name&&r.service===svcToUse&&r.check_in>=todayISO()&&!r.check_out);
       if(activeRecord){
         const now=new Date().toISOString();
-        await api(`checkin_records?id=eq.${activeRecord.id}`,{method:"PATCH",body:JSON.stringify({check_out:now}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+        const svcToUse=person.default_service||"Volunteer";
+        const typeToUse=svcToUse==="Volunteer"?"Volunteer":"Guest";
+        const svcToUse=person.default_service||"Volunteer";
+        const typeToUse=svcToUse==="Volunteer"?"Volunteer":"Guest";
+        await api("checkin_records",{method:"POST",body:JSON.stringify({name:person.name,type:typeToUse,service:svcToUse,check_in:new Date().toISOString(),check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
         setScanResult({action:"checkout",name:person.name,guestNumber:guestNum,duration:duration(activeRecord.check_in,now,"Volunteer")});
       } else {
         await api("checkin_records",{method:"POST",body:JSON.stringify({name:person.name,type:"Volunteer",service:"Volunteer",check_in:new Date().toISOString(),check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
