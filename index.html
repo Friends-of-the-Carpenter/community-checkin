@@ -477,7 +477,7 @@ function CheckoutTimeEditor({ records, people, onUpdate }) {
   );
 }
 
-function PeopleRemover({people, onRemove, onFlag}) {
+function PeopleRemover({people, onRemove, onFlag, onUpdate}) {
   const [query,setQuery]=useState("");
   const [filter,setFilter]=useState("all");
   const [confirm,setConfirm]=useState(null);
@@ -507,8 +507,20 @@ function PeopleRemover({people, onRemove, onFlag}) {
                 <span style={{fontSize:15,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
                 {p.flagged&&<span style={{fontSize:12,padding:"2px 8px",borderRadius:20,background:C.dangerBg,color:C.danger,fontWeight:600,flexShrink:0}}>⚑</span>}
               </div>
-              <div style={{display:"flex",gap:7,flexShrink:0}}>
+              <div style={{display:"flex",gap:7,flexShrink:0,flexWrap:"wrap"}}>
                 <button onClick={()=>setShowQR(showQR===p.id?null:p.id)} style={{...btnGhost,fontSize:13,padding:"6px 12px",color:C.teal,borderColor:C.tealMid}}>QR</button>
+                <select
+                  value={p.locker&&p.locker_date===new Date().toISOString().slice(0,10)?p.locker:""}
+                 onChange={async e=>{
+                    const todayStr=new Date().toISOString().slice(0,10);
+                    const val=e.target.value;
+                    await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify(val?{locker:val,locker_date:todayStr}:{locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                    onUpdate();
+                  }}
+                  style={{...inpStyle,width:"auto",padding:"4px 8px",fontSize:12,height:32,color:p.locker&&p.locker_date===new Date().toISOString().slice(0,10)?C.tealDark:C.textMuted,borderColor:p.locker&&p.locker_date===new Date().toISOString().slice(0,10)?C.tealMid:C.border}}>
+                  <option value="">Locker…</option>
+                  {[...Array.from({length:20},(_,i)=>String(i+1)),"Bin A","Bin B"].map(l=><option key={l} value={l}>{l==="Bin A"||l==="Bin B"?l:"#"+l}</option>)}
+                </select>
                 <button onClick={()=>{setFlagging(flagging===p.id?null:p.id);setConfirm(null);setFlagReason(p.flag_reason||"");}} style={{...btnGhost,fontSize:13,padding:"6px 12px",color:p.flagged?C.teal:C.danger,borderColor:p.flagged?C.border:C.dangerBorder}}>{p.flagged?"Unflag":"Flag"}</button>
                 {confirm===p.id?(
                   <>
@@ -1232,7 +1244,7 @@ function tryPin(){
             </div>
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
               <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Manage people</p>
-              <PeopleRemover people={people} onRemove={async(p)=>{await api(`people?id=eq.${p.id}`,{method:"DELETE"});loadData();}} onFlag={flagPerson}/>
+              <PeopleRemover people={people} onRemove={async(p)=>{await api(`people?id=eq.${p.id}`,{method:"DELETE"});loadData();}} onFlag={flagPerson} onUpdate={loadData}/>
             </div>
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
               <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service types</p>
