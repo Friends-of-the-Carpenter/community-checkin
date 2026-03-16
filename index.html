@@ -1248,7 +1248,7 @@ function tryPin(){
           </div>
         )}
         {view==="analytics"&&<AnalyticsTab records={records}/>}
-          <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Locker & Bin Availability</p>
+         <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Locker & Bin Availability</p>
             <div style={{marginBottom:22}}>
               <div style={{display:"grid",gridTemplateColumns:"repeat(5,minmax(0,1fr))",gap:8,marginBottom:10}}>
                 {Array.from({length:20},(_,i)=>String(i+1)).map(l=>{
@@ -1257,7 +1257,20 @@ function tryPin(){
                   return (
                     <div key={l} style={{border:`1.5px solid ${occupant?"#F0A9A3":"#C0E8EC"}`,borderRadius:10,padding:"8px 10px",background:occupant?"#FFF5F5":"#EAF7F8",textAlign:"center"}}>
                       <p style={{margin:"0 0 2px",fontSize:13,fontWeight:700,color:occupant?C.danger:C.tealDark}}>#{l}</p>
-                      <p style={{margin:0,fontSize:11,color:occupant?C.danger:C.tealDark,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{occupant?occupant.name:"Open"}</p>
+                      <p style={{margin:"0 0 4px",fontSize:11,color:occupant?C.danger:C.tealDark,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{occupant?occupant.name:"Open"}</p>
+                      <select
+                        value={occupant?.name||""}
+                        onChange={async e=>{
+                          const todayStr=new Date().toISOString().slice(0,10);
+                          const val=e.target.value;
+                          if(occupant) await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                          if(val){const p=people.find(x=>x.name===val);if(p) await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:l,locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});}
+                          loadData();
+                        }}
+                        style={{...inpStyle,padding:"2px 4px",fontSize:11,height:26,borderColor:occupant?C.dangerBorder:C.tealMid}}>
+                        <option value="">{occupant?"Clear…":"Assign…"}</option>
+                        {people.filter(p=>!p.locker||p.locker_date!==new Date().toISOString().slice(0,10)).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+                      </select>
                     </div>
                   );
                 })}
@@ -1267,9 +1280,24 @@ function tryPin(){
                   const todayStr=new Date().toISOString().slice(0,10);
                   const occupant=people.find(p=>p.locker===l&&p.locker_date===todayStr);
                   return (
-                    <div key={l} style={{border:`1.5px solid ${occupant?"#F0A9A3":"#C0E8EC"}`,borderRadius:10,padding:"10px 14px",background:occupant?"#FFF5F5":"#EAF7F8",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <span style={{fontSize:14,fontWeight:700,color:occupant?C.danger:C.tealDark}}>{l}</span>
-                      <span style={{fontSize:13,color:occupant?C.danger:C.tealDark,fontWeight:500}}>{occupant?occupant.name:"Open"}</span>
+                    <div key={l} style={{border:`1.5px solid ${occupant?"#F0A9A3":"#C0E8EC"}`,borderRadius:10,padding:"10px 14px",background:occupant?"#FFF5F5":"#EAF7F8"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                        <span style={{fontSize:14,fontWeight:700,color:occupant?C.danger:C.tealDark}}>{l}</span>
+                        <span style={{fontSize:13,color:occupant?C.danger:C.tealDark,fontWeight:500}}>{occupant?occupant.name:"Open"}</span>
+                      </div>
+                      <select
+                        value={occupant?.name||""}
+                        onChange={async e=>{
+                          const todayStr=new Date().toISOString().slice(0,10);
+                          const val=e.target.value;
+                          if(occupant) await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                          if(val){const p=people.find(x=>x.name===val);if(p) await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:l,locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});}
+                          loadData();
+                        }}
+                        style={{...inpStyle,padding:"4px 8px",fontSize:12,height:30,borderColor:occupant?C.dangerBorder:C.tealMid}}>
+                        <option value="">{occupant?"Clear…":"Assign…"}</option>
+                        {people.filter(p=>!p.locker||p.locker_date!==new Date().toISOString().slice(0,10)).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+                      </select>
                     </div>
                   );
                 })}
