@@ -932,6 +932,39 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
         )}
 
         {/* Toggle buttons */}
+        {/* QR Scanner button */}
+        <button onClick={()=>setShowScanner(true)} style={{...btnGhost,width:"100%",padding:"14px 0",fontSize:16,marginBottom:14,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+          📷 Scan Volunteer QR Code
+        </button>
+        {showScanner&&<QRScanner onScan={async code=>{
+              setShowScanner(false);
+              if(!code.startsWith(QR_PREFIX)) return;
+              const guestNum=code.slice(QR_PREFIX.length);
+              const person=people.find(p=>String(p.guest_number)===guestNum);
+              if(!person){setErrors({submit:`No volunteer found with ID ${guestNum}`});return;}
+              if(person.flagged){
+                setFlagAlert(person);
+                await api("checkin_records",{method:"POST",body:JSON.stringify({name:person.name,type:"Guest",service:FLAG_ALERT_SERVICE,notes:person.flag_reason||null,check_in:new Date().toISOString(),check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                await loadData();
+                return;
+              }
+              const activeRecord=records.find(r=>r.name===person.name&&r.service==="Volunteer"&&r.check_in>=todayISO()&&!r.check_out);
+              if(activeRecord){
+                await api(`checkin_records?id=eq.${activeRecord.id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                const person2=people.find(p=>p.name===person.name);
+                if(person2?.locker){await api(`people?id=eq.${person2.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});}
+                await loadData();
+                setSuccess({name:person.name,guestNumber:guestNum,service:"Volunteer",position:null,isNew:false,addOns:[],checkedOut:true});
+                setTimeout(()=>setSuccess(null),7000);
+              } else {
+                await api("checkin_records",{method:"POST",body:JSON.stringify({name:person.name,type:"Volunteer",service:"Volunteer",check_in:new Date().toISOString(),check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                await loadData();
+                setSuccess({name:person.name,guestNumber:guestNum,service:"Volunteer",position:null,isNew:false,addOns:[]});
+                setTimeout(()=>setSuccess(null),7000);
+              }
+            }} onClose={()=>setShowScanner(false)}/>}
+
+        {/* Toggle buttons */}
         <div style={{display:"flex",gap:14,marginBottom:28}}>
           <button onClick={()=>setPubView(pubView==="checkin"?null:"checkin")} style={{flex:1,padding:"28px 0",borderRadius:14,border:pubView==="checkin"?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:pubView==="checkin"?"#EAF7F8":"#fff",fontWeight:700,fontSize:22,cursor:"pointer",color:pubView==="checkin"?"#2E8A94":"#5A7070",fontFamily:"inherit",transition:"all 0.15s ease"}}>
             {pubView==="checkin"?"▲ Check in":"▼ Check in"}
