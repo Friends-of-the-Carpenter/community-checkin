@@ -796,6 +796,7 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
   const [flagAlert, setFlagAlert] = useState(null);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
   const suggestRef = useRef(null);
 
   useEffect(() => {
