@@ -1262,7 +1262,7 @@ function tryPin(){
           <div style={{display:"flex",borderBottom:"2px solid #C0E8EC",marginBottom:28}}>
           <Tab id="analytics" label="Analytics"/>
           </div> 
-           <div>
+        <div>
       <div style={{display:"flex",gap:8,marginBottom:24,flexWrap:"wrap"}}>
         {ranges.map(r=><button key={r.id} onClick={()=>setRange(r.id)} style={{...btnGhost,fontSize:14,background:range===r.id?"#46b4bf":"transparent",color:range===r.id?"#fff":"#5A7070",borderColor:range===r.id?"#46b4bf":"#D0E6E5",padding:"8px 16px"}}>{r.label}</button>)}
       </div>
@@ -1294,6 +1294,7 @@ function tryPin(){
         </>
       )}
     </div>
+        {view==="analytics"&&<AnalyticsTab records={records}/>}
       </div>
     </div>
   );
