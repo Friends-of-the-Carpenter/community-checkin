@@ -1136,8 +1136,10 @@ isFirstLoad.current=false;
   useEffect(()=>{loadData();const t=setInterval(loadData,3000);return()=>clearInterval(t);},[loadData]);
   useEffect(()=>{
     function h(e){if(suggestRef.current&&!suggestRef.current.contains(e.target))setShowSuggestions(false);}
-    document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
+document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
   },[]);
+
+  useEffect(()=>{
     const scanBuffer={current:""};
     const scanTimer={current:null};
     function onKeyDown(e){
