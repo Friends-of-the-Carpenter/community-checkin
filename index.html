@@ -813,7 +813,17 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
     setSaving(false);
   }
 
-  async function markComplete(id){await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}
+  async function markComplete(id){
+    await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+    const record=recordsRef.current.find(r=>r.id===id);
+    if(record){
+      const person=peopleRef.current.find(p=>p.name===record.name);
+      if(person?.locker){
+        await api(`people?id=eq.${person.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      }
+    }
+    loadData();
+  }
   async function cancelRecord(id){await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});loadData();}
 
   const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_SERVICES[s]);
@@ -1072,7 +1082,17 @@ isFirstLoad.current=false;
   }
 
   async function markComplete(id){await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}
-  async function checkOut(id){await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}
+  async function checkOut(id){
+    await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+    const record=recordsRef.current.find(r=>r.id===id);
+    if(record){
+      const person=peopleRef.current.find(p=>p.name===record.name);
+      if(person?.locker){
+        await api(`people?id=eq.${person.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      }
+    }
+    loadData();
+  }
   async function cancelRecord(id){await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});loadData();}
   async function deleteRecord(id){await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});loadData();}
   async function flagPerson(p,flagged,reason){await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({flagged,flag_reason:reason||null}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}
