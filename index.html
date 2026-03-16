@@ -555,7 +555,48 @@ function PeopleRemover({people, onRemove, onFlag, onUpdate}) {
     </div>
   );
 }
+function TypeServiceEditor({ r, onSave, onCancel }) {
+  const [type, setType] = useState(r.type);
+  const [service, setService] = useState(r.service);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
 
+  async function save() {
+    setSaving(true);
+    try {
+      const res = await api(`checkin_records?id=eq.${r.id}`, {
+        method:"PATCH",
+        body:JSON.stringify({type, service}),
+        headers:{...HEADERS,"Prefer":"return=minimal"}
+      });
+      if (!res.ok) throw new Error();
+      onSave();
+    } catch(_) { setMsg("Failed to save. Try again."); }
+    setSaving(false);
+  }
+
+  return (
+    <div>
+      <p style={{margin:"0 0 10px",fontSize:14,color:C.textMuted}}>Edit type & service</p>
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+        <select value={type} onChange={e=>setType(e.target.value)} style={{...inpStyle,width:"auto",flex:1}}>
+          <option value="Guest">Guest</option>
+          <option value="Volunteer">Volunteer</option>
+        </select>
+        <select value={service} onChange={e=>setService(e.target.value)} style={{...inpStyle,width:"auto",flex:1}}>
+          <option value="Day Center">Day Center</option>
+          <option value="Volunteer">Volunteer</option>
+          <option value="Community Partnership">Community Partnership</option>
+          <option value="Showers">Showers</option>
+          <option value="Laundry">Laundry</option>
+        </select>
+        <button onClick={save} disabled={saving} style={{...btnPrimary,padding:"11px 20px",fontSize:15,opacity:saving?0.5:1}}>{saving?"Saving…":"Save"}</button>
+        <button onClick={onCancel} style={{...btnGhost,fontSize:14}}>Cancel</button>
+      </div>
+      {msg&&<p style={{margin:"8px 0 0",fontSize:13,color:C.danger}}>⚠ {msg}</p>}
+    </div>
+  );
+}
 function LogRecord({r, av, dur, person, isFlagged, onCheckOut, onDelete, onUpdate}) {
   const [editing,setEditing]=useState(null);
   const [editVal,setEditVal]=useState("");
@@ -605,7 +646,10 @@ function LogRecord({r, av, dur, person, isFlagged, onCheckOut, onDelete, onUpdat
             {r.queue_position&&<span style={{fontSize:13,padding:"2px 10px",borderRadius:20,background:"#FEF7E6",color:"#8A5A00",fontWeight:500}}>{numLabel} #{r.queue_position}</span>}
             {!r.check_out&&<span style={{fontSize:13,padding:"2px 10px",borderRadius:20,background:"#EAF7F8",color:"#46b4bf",fontWeight:500}}>Active</span>}
           </div>
-          <p style={{margin:"2px 0 4px",fontSize:14,color:"#5A7070",fontWeight:500}}>{r.service}</p>
+          <p style={{margin:"2px 0 4px",fontSize:14,color:"#5A7070",fontWeight:500}}>
+            {r.service}
+            {editing!=="type_service"&&<button onClick={()=>{setEditing("type_service");setMsg(null);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.teal,textDecoration:"underline dotted",fontFamily:"inherit",marginLeft:8}}>edit</button>}
+          </p>
           {timeRow}
           {msg&&<p style={{margin:"5px 0 0",fontSize:13,color:msg.type==="ok"?C.tealDark:C.danger}}>{msg.type==="ok"?"✓ ":"⚠ "}{msg.text}</p>}
           {r.notes&&<p style={{margin:"5px 0 0",fontSize:14,color:"#5A7070",fontStyle:"italic"}}>{r.notes}</p>}
@@ -632,13 +676,19 @@ function LogRecord({r, av, dur, person, isFlagged, onCheckOut, onDelete, onUpdat
       </div>
       {editing&&(
         <div style={{padding:"12px 18px",borderTop:`1px solid ${C.border}`,background:C.bg}}>
-          <p style={{margin:"0 0 8px",fontSize:14,color:C.textMuted}}>Edit {editing==="check_in"?"check-in":"check-out"} time</p>
-          <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
-            <input type="datetime-local" value={editVal} onChange={e=>setEditVal(e.target.value)} style={{...inpStyle,width:"auto",flex:1,minWidth:200}}/>
-            <button onClick={save} disabled={saving||!editVal} style={{...btnPrimary,padding:"11px 20px",fontSize:15,opacity:saving||!editVal?0.5:1}}>{saving?"Saving…":"Save"}</button>
-            {editing==="check_out"&&r.check_out&&<button onClick={clearOut} disabled={saving} style={{...btnGhost,fontSize:14,color:C.danger,borderColor:C.dangerBorder}}>Clear</button>}
-            <button onClick={()=>setEditing(null)} style={{...btnGhost,fontSize:14}}>Cancel</button>
-          </div>
+          {editing==="type_service"?(
+            <TypeServiceEditor r={r} onSave={()=>{setEditing(null);onUpdate();}} onCancel={()=>setEditing(null)}/>
+          ):(
+            <>
+              <p style={{margin:"0 0 8px",fontSize:14,color:C.textMuted}}>Edit {editing==="check_in"?"check-in":"check-out"} time</p>
+              <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+                <input type="datetime-local" value={editVal} onChange={e=>setEditVal(e.target.value)} style={{...inpStyle,width:"auto",flex:1,minWidth:200}}/>
+                <button onClick={save} disabled={saving||!editVal} style={{...btnPrimary,padding:"11px 20px",fontSize:15,opacity:saving||!editVal?0.5:1}}>{saving?"Saving…":"Save"}</button>
+                {editing==="check_out"&&r.check_out&&<button onClick={clearOut} disabled={saving} style={{...btnGhost,fontSize:14,color:C.danger,borderColor:C.dangerBorder}}>Clear</button>}
+                <button onClick={()=>setEditing(null)} style={{...btnGhost,fontSize:14}}>Cancel</button>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
