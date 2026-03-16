@@ -1130,7 +1130,11 @@ function tryPin(){
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
             <p style={{margin:0,fontWeight:700,fontSize:18}}>Admin panel</p>
           </div>
-          
+          <div style={{display:"flex",borderBottom:"2px solid #C0E8EC",marginBottom:28}}>
+          <Tab id="checkin" label="Check in"/>
+          <Tab id="log" label={`Visit log (${realRecords.length})`}/>
+          <Tab id="analytics" label="Analytics"/>
+          </div>
             <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service capacity today</p>
             <div style={{display:"flex",gap:14,marginBottom:22}}>
               {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{const used=countToday(svc),pct=Math.round(used/cap*100);return(
@@ -1161,12 +1165,6 @@ function tryPin(){
             </div>
             <button onClick={exportCSV} style={{...btnOutline,width:"100%",textAlign:"center",padding:13,fontSize:15}}>Export all check-ins as CSV ↓</button>
           </div>
-
-        <div style={{display:"flex",borderBottom:"2px solid #C0E8EC",marginBottom:28}}>
-          <Tab id="checkin" label="Check in"/>
-          <Tab id="log" label={`Visit log (${realRecords.length})`}/>
-          <Tab id="analytics" label="Analytics"/>
-        </div>
 
         {view==="checkin"&&(
           <div>
