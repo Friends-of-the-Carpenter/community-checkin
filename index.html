@@ -749,8 +749,80 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
   },[]);
 
   function countToday(s){return records.filter(r=>r.service===s&&r.check_in>=todayISO()).length;}
+function CheckOutPanel({ records, people, loadData }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [matches, setMatches] = useState([]);
+  const [checking, setChecking] = useState(null);
+  const [done, setDone] = useState(null);
 
-  function handleNameInput(val){
+  function search(val) {
+    setQuery(val); setDone(null);
+    if (!val.trim()) { setMatches([]); return; }
+    const q = val.toLowerCase();
+    const activeRecords = records.filter(r =>
+      r.name.toLowerCase().includes(q) &&
+      r.check_in >= todayISO() &&
+      !r.check_out &&
+      r.service !== FLAG_ALERT_SERVICE
+    );
+    setMatches(activeRecords);
+  }
+
+  async function handleCheckOut(r) {
+    setChecking(r.id);
+    await api(`checkin_records?id=eq.${r.id}`, {method:"PATCH", body:JSON.stringify({check_out:new Date().toISOString()}), headers:{...HEADERS,"Prefer":"return=minimal"}});
+    const person=people.find(p=>p.name===r.name);
+    if(person?.locker){
+      await api(`people?id=eq.${person.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+    }
+    await loadData();
+    setDone(r.name);
+    setChecking(null);
+    setMatches([]);
+    setQuery("");
+    setTimeout(()=>setDone(null),4000);
+  }
+
+  return (
+    <div style={{marginTop:24}}>
+      {!open ? (
+        <button onClick={()=>setOpen(true)} style={{...btnGhost,width:"100%",padding:"14px 0",fontSize:16,textAlign:"center"}}>
+          Need to check out?
+        </button>
+      ) : (
+        <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:24,marginTop:8}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <p style={{margin:0,fontSize:17,fontWeight:700}}>Check out</p>
+            <button onClick={()=>{setOpen(false);setQuery("");setMatches([]);setDone(null);}} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:C.textLight}}>×</button>
+          </div>
+          {done&&(
+            <div style={{background:C.successBg,border:`1.5px solid ${C.successBorder}`,borderRadius:10,padding:"12px 16px",marginBottom:16}}>
+              <p style={{margin:0,fontSize:15,fontWeight:600,color:C.success}}>✓ {done} checked out successfully!</p>
+            </div>
+          )}
+          <input placeholder="Search your name…" value={query} onChange={e=>search(e.target.value)} style={{...inpStyle,marginBottom:12}}/>
+          {query.trim()&&matches.length===0&&<p style={{fontSize:14,color:C.textMuted,textAlign:"center",padding:"8px 0"}}>No active check-ins found for that name.</p>}
+          {matches.map(r=>{
+            const av=avColor(r.name);
+            return (
+              <div key={r.id} style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:"#EAF7F8",borderRadius:10,marginBottom:10,border:"1px solid #C0E8EC"}}>
+                <div style={{width:44,height:44,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:15,flexShrink:0}}>{initials(r.name)||"?"}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <span style={{fontWeight:600,fontSize:16}}>{r.name}</span>
+                  <p style={{margin:"2px 0 0",fontSize:13,color:C.textMuted}}>{r.service} · In: {fmt(r.check_in)}</p>
+                </div>
+                <button onClick={()=>handleCheckOut(r)} disabled={checking===r.id} style={{...btnOutline,fontSize:14,padding:"8px 16px",opacity:checking===r.id?0.5:1,flexShrink:0}}>
+                  {checking===r.id?"…":"Check out"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}  function handleNameInput(val){
     setForm(f=>({...f,name:val,guestNumber:""}));setErrors(e=>({...e,name:undefined}));setFlagAlert(null);
     if(!val.trim()){setSuggestions([]);setShowSuggestions(false);return;}
     const q=val.toLowerCase();
@@ -932,9 +1004,11 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
         <div style={{marginBottom:26}}>
           <textarea placeholder="Notes (optional)" value={form.notes} onChange={ev=>setForm(f=>({...f,notes:ev.target.value}))} rows={3} style={{...inpStyle,resize:"vertical"}}/>
         </div>
-        <button onClick={submit} disabled={saving||!!flagAlert} style={{...btnPrimary,width:"100%",padding:16,fontSize:18,opacity:(saving||!!flagAlert)?0.5:1,cursor:flagAlert?"not-allowed":"pointer"}}>
+<button onClick={submit} disabled={saving||!!flagAlert} style={{...btnPrimary,width:"100%",padding:16,fontSize:18,opacity:(saving||!!flagAlert)?0.5:1,cursor:flagAlert?"not-allowed":"pointer"}}>
           {saving?"Saving…":"Check in"}
         </button>
+
+        <CheckOutPanel records={records} people={people} loadData={loadData}/>
       </div>
     </div>
   );
