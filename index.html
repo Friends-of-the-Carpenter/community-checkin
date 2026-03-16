@@ -731,9 +731,64 @@ function ServiceButtons({ availableServices, form, setForm, setErrors, countToda
     </div>
   );
 }
+// ── CHECK OUT PANEL ──────────────────────────────────────────
+function CheckOutPanel({ records, people, loadData }) {
+  const [checking, setChecking] = useState(null);
+  const [done, setDone] = useState(null);
+
+  const activeToday = records
+    .filter(r => r.check_in >= todayISO() && !r.check_out && r.service !== FLAG_ALERT_SERVICE)
+    .sort((a,b) => a.name.localeCompare(b.name));
+
+  async function handleCheckOut(r) {
+    setChecking(r.id);
+    await api(`checkin_records?id=eq.${r.id}`, {method:"PATCH", body:JSON.stringify({check_out:new Date().toISOString()}), headers:{...HEADERS,"Prefer":"return=minimal"}});
+    const person=people.find(p=>p.name===r.name);
+    if(person?.locker){
+      await api(`people?id=eq.${person.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+    }
+    await loadData();
+    setDone(r.name);
+    setChecking(null);
+    setTimeout(()=>setDone(null),4000);
+  }
+
+  return (
+    <div>
+      {done&&(
+        <div style={{background:C.successBg,border:`1.5px solid ${C.successBorder}`,borderRadius:10,padding:"12px 16px",marginBottom:16}}>
+          <p style={{margin:0,fontSize:15,fontWeight:600,color:C.success}}>✓ {done} checked out successfully!</p>
+        </div>
+      )}
+      {activeToday.length===0
+        ? <p style={{fontSize:15,color:C.textMuted,textAlign:"center",padding:"24px 0"}}>No active check-ins right now.</p>
+        : (
+          <div style={{maxHeight:420,overflowY:"auto",borderRadius:12,border:`1px solid ${C.border}`}}>
+            {activeToday.map((r,i)=>{
+              const av=avColor(r.name);
+              return (
+                <div key={r.id} style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:checking===r.id?"#EAF7F8":"#fff",borderBottom:i<activeToday.length-1?`1px solid ${C.border}`:"none"}}>
+                  <div style={{width:44,height:44,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:15,flexShrink:0}}>{initials(r.name)||"?"}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <span style={{fontWeight:600,fontSize:16}}>{r.name}</span>
+                    <p style={{margin:"2px 0 0",fontSize:13,color:C.textMuted}}>{r.service} · In: {fmt(r.check_in)}</p>
+                  </div>
+                  <button onClick={()=>handleCheckOut(r)} disabled={!!checking} style={{...btnOutline,fontSize:14,padding:"8px 16px",opacity:checking?0.5:1,flexShrink:0}}>
+                    {checking===r.id?"…":"Check out"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )
+      }
+    </div>
+  );
+}
+
 // ── PUBLIC APP ───────────────────────────────────────────────
 function PublicApp({ records, people, services, loading, dbError, loadData }) {
-  const [pubView, setPubView] = useState("checkin");
+  const [pubView, setPubView] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -750,68 +805,7 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
   }, []);
 
   function countToday(s) { return records.filter(r => r.service === s && r.check_in >= todayISO()).length; }
-function CheckOutPanel({ records, people, loadData }) {
-  const [query, setQuery] = useState("");
-  const [matches, setMatches] = useState([]);
-  const [checking, setChecking] = useState(null);
-  const [done, setDone] = useState(null);
 
-  function search(val) {
-    setQuery(val); setDone(null);
-    if (!val.trim()) { setMatches([]); return; }
-    const q = val.toLowerCase();
-    const activeRecords = records.filter(r =>
-      r.name.toLowerCase().includes(q) &&
-      r.check_in >= todayISO() &&
-      !r.check_out &&
-      r.service !== FLAG_ALERT_SERVICE
-    );
-    setMatches(activeRecords);
-  }
-
-  async function handleCheckOut(r) {
-    setChecking(r.id);
-    await api(`checkin_records?id=eq.${r.id}`, {method:"PATCH", body:JSON.stringify({check_out:new Date().toISOString()}), headers:{...HEADERS,"Prefer":"return=minimal"}});
-    const person=people.find(p=>p.name===r.name);
-    if(person?.locker){
-      await api(`people?id=eq.${person.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-    }
-    await loadData();
-    setDone(r.name);
-    setChecking(null);
-    setMatches([]);
-    setQuery("");
-    setTimeout(()=>setDone(null),4000);
-  }
-
-  return (
-    <div>
-      {done&&(
-        <div style={{background:C.successBg,border:`1.5px solid ${C.successBorder}`,borderRadius:10,padding:"12px 16px",marginBottom:16}}>
-          <p style={{margin:0,fontSize:15,fontWeight:600,color:C.success}}>✓ {done} checked out successfully!</p>
-        </div>
-      )}
-      <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Search your name</p>
-      <input placeholder="Enter your full name…" value={query} onChange={e=>search(e.target.value)} style={{...inpStyle,marginBottom:16}}/>
-      {query.trim()&&matches.length===0&&<p style={{fontSize:14,color:C.textMuted,textAlign:"center",padding:"8px 0"}}>No active check-ins found for that name.</p>}
-      {matches.map(r=>{
-        const av=avColor(r.name);
-        return (
-          <div key={r.id} style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:"#EAF7F8",borderRadius:10,marginBottom:10,border:"1px solid #C0E8EC"}}>
-            <div style={{width:44,height:44,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:15,flexShrink:0}}>{initials(r.name)||"?"}</div>
-            <div style={{flex:1,minWidth:0}}>
-              <span style={{fontWeight:600,fontSize:16}}>{r.name}</span>
-              <p style={{margin:"2px 0 0",fontSize:13,color:C.textMuted}}>{r.service} · In: {fmt(r.check_in)}</p>
-            </div>
-            <button onClick={()=>handleCheckOut(r)} disabled={checking===r.id} style={{...btnOutline,fontSize:14,padding:"8px 16px",opacity:checking===r.id?0.5:1,flexShrink:0}}>
-              {checking===r.id?"…":"Check out"}
-            </button>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
   function handleNameInput(val) {
     setForm(f => ({ ...f, name: val, guestNumber: "" })); setErrors(e => ({ ...e, name: undefined })); setFlagAlert(null);
     if (!val.trim()) { setSuggestions([]); setShowSuggestions(false); return; }
@@ -890,10 +884,10 @@ function CheckOutPanel({ records, people, loadData }) {
         <LiveClock/>
       </div>
 
-      {/* Stats + availability — always visible */}
-      <div style={{maxWidth:900,margin:"0 auto",padding:"28px 24px 0"}}>
+      <div style={{maxWidth:900,margin:"0 auto",padding:"28px 24px 4rem"}}>
         {dbError&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:10,padding:"12px 16px",marginBottom:20,fontSize:15,color:"#C0392B"}}>{dbError}</div>}
 
+        {/* Stats */}
         {!loading&&(
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:14,marginBottom:24}}>
             {[["Today",todayCount],["Guests",guestCount],["Volunteers",volCount]].map(([l,v])=>(
@@ -905,7 +899,8 @@ function CheckOutPanel({ records, people, loadData }) {
           </div>
         )}
 
-        <div style={{marginBottom:24}}>
+        {/* Availability */}
+        <div style={{marginBottom:28}}>
           <div style={{display:"flex",gap:14}}>
             {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{
               const used=records.filter(r=>r.service===svc&&r.check_in>=todayISO()).length;
@@ -920,18 +915,19 @@ function CheckOutPanel({ records, people, loadData }) {
           </div>
         </div>
 
-        {/* Tabs */}
-        <div style={{display:"flex",borderBottom:"2px solid #C0E8EC",marginBottom:28}}>
-          <button onClick={()=>setPubView("checkin")} style={{flex:1,padding:"16px 0",border:"none",background:"transparent",borderBottom:pubView==="checkin"?"3px solid #46b4bf":"3px solid transparent",fontWeight:pubView==="checkin"?700:400,fontSize:17,cursor:"pointer",color:pubView==="checkin"?"#46b4bf":"#5A7070",fontFamily:"inherit",marginBottom:-2}}>Check in</button>
-          <button onClick={()=>setPubView("checkout")} style={{flex:1,padding:"16px 0",border:"none",background:"transparent",borderBottom:pubView==="checkout"?"3px solid #46b4bf":"3px solid transparent",fontWeight:pubView==="checkout"?700:400,fontSize:17,cursor:"pointer",color:pubView==="checkout"?"#46b4bf":"#5A7070",fontFamily:"inherit",marginBottom:-2}}>Check out</button>
+        {/* Toggle buttons */}
+        <div style={{display:"flex",gap:14,marginBottom:28}}>
+          <button onClick={()=>setPubView(pubView==="checkin"?null:"checkin")} style={{flex:1,padding:"18px 0",borderRadius:12,border:pubView==="checkin"?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:pubView==="checkin"?"#EAF7F8":"#fff",fontWeight:700,fontSize:18,cursor:"pointer",color:pubView==="checkin"?"#2E8A94":"#5A7070",fontFamily:"inherit",transition:"all 0.15s ease"}}>
+            {pubView==="checkin"?"▲ Check in":"▼ Check in"}
+          </button>
+          <button onClick={()=>setPubView(pubView==="checkout"?null:"checkout")} style={{flex:1,padding:"18px 0",borderRadius:12,border:pubView==="checkout"?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:pubView==="checkout"?"#EAF7F8":"#fff",fontWeight:700,fontSize:18,cursor:"pointer",color:pubView==="checkout"?"#2E8A94":"#5A7070",fontFamily:"inherit",transition:"all 0.15s ease"}}>
+            {pubView==="checkout"?"▲ Check out":"▼ Check out"}
+          </button>
         </div>
-      </div>
 
-      <div style={{maxWidth:900,margin:"0 auto",padding:"0 24px 4rem"}}>
-
-        {/* CHECK IN TAB */}
+        {/* CHECK IN FORM */}
         {pubView==="checkin"&&(
-          <div>
+          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:24,marginBottom:16}}>
             {flagAlert&&(
               <div style={{background:"#FFF0F0",border:"2px solid #C0392B",borderRadius:12,padding:"18px 20px",marginBottom:24}}>
                 <p style={{margin:"0 0 6px",fontSize:18,fontWeight:700,color:"#C0392B"}}>⚑ This person is not allowed on the premises</p>
@@ -1005,15 +1001,17 @@ function CheckOutPanel({ records, people, loadData }) {
           </div>
         )}
 
-        {/* CHECK OUT TAB */}
+        {/* CHECK OUT PANEL */}
         {pubView==="checkout"&&(
-          <CheckOutPanel records={records} people={people} loadData={loadData}/>
+          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:24}}>
+            <CheckOutPanel records={records} people={people} loadData={loadData}/>
+          </div>
         )}
       </div>
     </div>
   );
 }
-// ── ADMIN APP ────────────────────────────────────────────────
+  // ── ADMIN APP ────────────────────────────────────────────────
 function AdminApp() {
   const [view,setView]=useState("checkin");
   const [form,setForm]=useState(emptyForm);
