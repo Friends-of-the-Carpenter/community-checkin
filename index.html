@@ -804,7 +804,40 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, []);
-
+useEffect(()=>{
+    async function handleScan(code) {
+      if(!code.startsWith(QR_PREFIX)) return;
+      const guestNum=code.slice(QR_PREFIX.length);
+      const person=people.find(p=>String(p.guest_number)===guestNum);
+      if(!person){setErrors({submit:`No volunteer found with ID ${guestNum}`});return;}
+      if(person.flagged){
+        setFlagAlert(person);
+        await api("checkin_records",{method:"POST",body:JSON.stringify({name:person.name,type:"Guest",service:FLAG_ALERT_SERVICE,notes:person.flag_reason||null,check_in:new Date().toISOString(),check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+        await loadData();
+        return;
+      }
+      const activeRecord=records.find(r=>r.name===person.name&&r.service==="Volunteer"&&r.check_in>=todayISO()&&!r.check_out);
+      if(activeRecord){
+        await api(`checkin_records?id=eq.${activeRecord.id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+        const p2=people.find(p=>p.name===person.name);
+        if(p2?.locker){await api(`people?id=eq.${p2.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});}
+        await loadData();
+        setSuccess({name:person.name,guestNumber:guestNum,service:"Volunteer",position:null,isNew:false,addOns:[],checkedOut:true});
+        setTimeout(()=>setSuccess(null),7000);
+      } else {
+        await api("checkin_records",{method:"POST",body:JSON.stringify({name:person.name,type:"Volunteer",service:"Volunteer",check_in:new Date().toISOString(),check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+        await loadData();
+        setSuccess({name:person.name,guestNumber:guestNum,service:"Volunteer",position:null,isNew:false,addOns:[]});
+        setTimeout(()=>setSuccess(null),7000);
+      }
+    }
+    const scanBuffer={current:""};
+    const scanTimer={current:null};
+    function onKeyDown(e){
+      const tag=document.activeElement?.tagName;
+      if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT") return;
+      if(e.key==="Enter"){const code=scanBuffer.current.trim();scanBuffer.current="";if(scanTimer.current)clearTimeout(scanTimer.current);if(code.length>3)handleScan(code);return;}
+      if(e.key.length===1){if(scanTimer.current)clearTimeout(scanTimer.current);scanBuffer.current+=e.key;scanTimer.current=setTimeout(()=>{scanBuffer.current="";},SCANNER_
   function countToday(s) { return records.filter(r => r.service === s && r.check_in >= todayISO()).length; }
 
   function handleNameInput(val) {
