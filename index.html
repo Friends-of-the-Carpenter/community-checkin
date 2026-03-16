@@ -1269,7 +1269,12 @@ function tryPin(){
                         }}
                         style={{...inpStyle,padding:"2px 4px",fontSize:11,height:26,borderColor:occupant?C.dangerBorder:C.tealMid}}>
                         <option value="">{occupant?"Clear…":"Assign…"}</option>
-                        {people.filter(p=>!p.locker||p.locker_date!==new Date().toISOString().slice(0,10)).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+                        {people.filter(p=>{
+  const todayStr=new Date().toISOString().slice(0,10);
+  const checkedInToday=records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE);
+  const noLocker=!p.locker||p.locker_date!==todayStr;
+  return checkedInToday&&noLocker;
+}).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
                       </select>
                     </div>
                   );
@@ -1296,7 +1301,12 @@ function tryPin(){
                         }}
                         style={{...inpStyle,padding:"4px 8px",fontSize:12,height:30,borderColor:occupant?C.dangerBorder:C.tealMid}}>
                         <option value="">{occupant?"Clear…":"Assign…"}</option>
-                        {people.filter(p=>!p.locker||p.locker_date!==new Date().toISOString().slice(0,10)).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+                        {people.filter(p=>{
+  const todayStr=new Date().toISOString().slice(0,10);
+  const checkedInToday=records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE);
+  const noLocker=!p.locker||p.locker_date!==todayStr;
+  return checkedInToday&&noLocker;
+}).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
                       </select>
                     </div>
                   );
