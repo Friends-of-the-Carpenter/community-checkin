@@ -920,10 +920,10 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
 
         {/* Toggle buttons */}
         <div style={{display:"flex",gap:14,marginBottom:28}}>
-          <button onClick={()=>setPubView(pubView==="checkin"?null:"checkin")} style={{flex:1,padding:"18px 0",borderRadius:12,border:pubView==="checkin"?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:pubView==="checkin"?"#EAF7F8":"#fff",fontWeight:700,fontSize:18,cursor:"pointer",color:pubView==="checkin"?"#2E8A94":"#5A7070",fontFamily:"inherit",transition:"all 0.15s ease"}}>
+          <button onClick={()=>setPubView(pubView==="checkin"?null:"checkin")} style={{flex:1,padding:"28px 0",borderRadius:14,border:pubView==="checkin"?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:pubView==="checkin"?"#EAF7F8":"#fff",fontWeight:700,fontSize:22,cursor:"pointer",color:pubView==="checkin"?"#2E8A94":"#5A7070",fontFamily:"inherit",transition:"all 0.15s ease"}}>
             {pubView==="checkin"?"▲ Check in":"▼ Check in"}
           </button>
-          <button onClick={()=>setPubView(pubView==="checkout"?null:"checkout")} style={{flex:1,padding:"18px 0",borderRadius:12,border:pubView==="checkout"?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:pubView==="checkout"?"#EAF7F8":"#fff",fontWeight:700,fontSize:18,cursor:"pointer",color:pubView==="checkout"?"#2E8A94":"#5A7070",fontFamily:"inherit",transition:"all 0.15s ease"}}>
+          <button onClick={()=>setPubView(pubView==="checkout"?null:"checkout")} style={{flex:1,padding:"28px 0",borderRadius:14,border:pubView==="checkout"?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:pubView==="checkout"?"#EAF7F8":"#fff",fontWeight:700,fontSize:22,cursor:"pointer",color:pubView==="checkout"?"#2E8A94":"#5A7070",fontFamily:"inherit",transition:"all 0.15s ease"}}>
             {pubView==="checkout"?"▲ Check out":"▼ Check out"}
           </button>
         </div>
