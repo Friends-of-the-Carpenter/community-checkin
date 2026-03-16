@@ -743,6 +743,7 @@ function ServiceButtons({ availableServices, form, setForm, setErrors, countToda
     </div>
   );
 }
+
 // ── CHECK OUT PANEL ──────────────────────────────────────────
 function CheckOutPanel({ records, people, loadData }) {
   const [checking, setChecking] = useState(null);
@@ -806,19 +807,22 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [success, setSuccess] = useState(null);
   const [flagAlert, setFlagAlert] = useState(null);
+  const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const suggestRef = useRef(null);
+  const recordsRef2 = useRef([]);
+  const peopleRef2 = useRef([]);
+
+  useEffect(()=>{recordsRef2.current=records;},[records]);
+  useEffect(()=>{peopleRef2.current=people;},[people]);
 
   useEffect(() => {
     function h(e) { if (suggestRef.current && !suggestRef.current.contains(e.target)) setShowSuggestions(false); }
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, []);
-const recordsRef2 = useRef([]);
-  const peopleRef2 = useRef([]);
-  useEffect(()=>{recordsRef2.current=records;},[records]);
-  useEffect(()=>{peopleRef2.current=people;},[people]);
+
   useEffect(()=>{
     async function handleScan(code) {
       if(!code.startsWith(QR_PREFIX)) return;
@@ -859,34 +863,7 @@ const recordsRef2 = useRef([]);
     document.addEventListener("keydown",onKeyDown);
     return()=>document.removeEventListener("keydown",onKeyDown);
   },[loadData]);
-      } else {
-        await api("checkin_records",{method:"POST",body:JSON.stringify({name:person.name,type:"Volunteer",service:"Volunteer",check_in:new Date().toISOString(),check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-        await loadData();
-        setScanResult({action:"checkin",name:person.name,guestNumber:guestNum});
-      }
-    }
-    const scanBuffer={current:""};
-    const scanTimer={current:null};
-    function onKeyDown(e){
-      const tag=document.activeElement?.tagName;
-      if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT") return;
-      if(e.key==="Enter"){const code=scanBuffer.current.trim();scanBuffer.current="";if(scanTimer.current)clearTimeout(scanTimer.current);if(code.length>3)handleScan(code);return;}
-      if(e.key.length===1){if(scanTimer.current)clearTimeout(scanTimer.current);scanBuffer.current+=e.key;scanTimer.current=setTimeout(()=>{scanBuffer.current="";},SCANNER_TIMEOUT_MS);}
-    }
-    document.addEventListener("keydown",onKeyDown);
-    return()=>document.removeEventListener("keydown",onKeyDown);
-  },[loadData]);
-    const scanBuffer={current:""};
-    const scanTimer={current:null};
-    function onKeyDown(e){
-      const tag=document.activeElement?.tagName;
-      if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT") return;
-      if(e.key==="Enter"){const code=scanBuffer.current.trim();scanBuffer.current="";if(scanTimer.current)clearTimeout(scanTimer.current);if(code.length>3)handleScan(code);return;}
-      if(e.key.length===1){if(scanTimer.current)clearTimeout(scanTimer.current);scanBuffer.current+=e.key;scanTimer.current=setTimeout(()=>{scanBuffer.current="";},SCANNER_TIMEOUT_MS);}
-    }
-    document.addEventListener("keydown",onKeyDown);
-    return()=>document.removeEventListener("keydown",onKeyDown);
-  },[loadData]);
+
   function countToday(s) { return records.filter(r => r.service === s && r.check_in >= todayISO()).length; }
 
   function handleNameInput(val) {
@@ -926,7 +903,6 @@ const recordsRef2 = useRef([]);
       await loadData();
       return;
     }
-    // Check for duplicate active check-in today
     const alreadyCheckedIn = records.some(r =>
       r.name.toLowerCase() === name.toLowerCase() &&
       r.check_in >= todayISO() &&
@@ -934,10 +910,7 @@ const recordsRef2 = useRef([]);
       r.service === form.service &&
       r.service !== FLAG_ALERT_SERVICE
     );
-    if (alreadyCheckedIn) {
-      setErrors({ submit: `${name} is already checked in for ${form.service} today.` });
-      return;
-    }
+    if (alreadyCheckedIn) { setErrors({ submit: `${name} is already checked in for ${form.service} today.` }); return; }
     setSaving(true);
     let guestNumber = gNum;
     const existing = person;
@@ -968,7 +941,7 @@ const recordsRef2 = useRef([]);
   }
 
   const serviceOrder=["Day Center","Volunteer","Community Partnership"];
-const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_SERVICES[s]).sort((a,b)=>{const ai=serviceOrder.indexOf(a),bi=serviceOrder.indexOf(b);if(ai===-1&&bi===-1)return 0;if(ai===-1)return 1;if(bi===-1)return-1;return ai-bi;});
+  const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_SERVICES[s]).sort((a,b)=>{const ai=serviceOrder.indexOf(a),bi=serviceOrder.indexOf(b);if(ai===-1&&bi===-1)return 0;if(ai===-1)return 1;if(bi===-1)return-1;return ai-bi;});
   const todayCount = records.filter(r => r.check_in >= todayISO() && r.service !== FLAG_ALERT_SERVICE).length;
   const guestCount = records.filter(r => r.type === "Guest" && r.service !== FLAG_ALERT_SERVICE).length;
   const volCount = records.filter(r => r.type === "Volunteer" && r.service !== FLAG_ALERT_SERVICE).length;
@@ -983,7 +956,6 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
       <div style={{maxWidth:900,margin:"0 auto",padding:"28px 24px 4rem"}}>
         {dbError&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:10,padding:"12px 16px",marginBottom:20,fontSize:15,color:"#C0392B"}}>{dbError}</div>}
 
-        {/* Stats */}
         {!loading&&(
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:14,marginBottom:24}}>
             {[["Today",todayCount],["Guests",guestCount],["Volunteers",volCount]].map(([l,v])=>(
@@ -995,26 +967,25 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
           </div>
         )}
 
-        {/* Availability */}
-{Object.values(CAPPED_SERVICES_DAYS)[0].includes(new Date().getDay())&&(
-        <div style={{marginBottom:28}}>
-          <div style={{display:"flex",gap:14}}>
-            {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{
-              const used=records.filter(r=>r.service===svc&&r.check_in>=todayISO()).length;
-              const full=used>=cap,avail=cap-used;
-              return (
-                <div key={svc} style={{flex:1,background:full?"#FCECEA":"#EAF7F8",border:`1.5px solid ${full?"#F0A9A3":"#C0E8EC"}`,borderRadius:12,padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <span style={{fontSize:15,fontWeight:600,color:full?"#C0392B":"#2E8A94"}}>{svc}</span>
-                  <span style={{fontSize:14,fontWeight:500,color:full?"#C0392B":"#46b4bf",background:full?"transparent":"#fff",padding:"4px 14px",borderRadius:20,border:`1px solid ${full?"#F0A9A3":"#C0E8EC"}`}}>{full?"Full":`${avail} left`}</span>
-                </div>
-              );
-            })}
-        </div>
-        </div>
+        {Object.values(CAPPED_SERVICES_DAYS)[0].includes(new Date().getDay())&&(
+          <div style={{marginBottom:28}}>
+            <div style={{display:"flex",gap:14}}>
+              {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{
+                const used=records.filter(r=>r.service===svc&&r.check_in>=todayISO()).length;
+                const full=used>=cap,avail=cap-used;
+                return (
+                  <div key={svc} style={{flex:1,background:full?"#FCECEA":"#EAF7F8",border:`1.5px solid ${full?"#F0A9A3":"#C0E8EC"}`,borderRadius:12,padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontSize:15,fontWeight:600,color:full?"#C0392B":"#2E8A94"}}>{svc}</span>
+                    <span style={{fontSize:14,fontWeight:500,color:full?"#C0392B":"#46b4bf",background:full?"transparent":"#fff",padding:"4px 14px",borderRadius:20,border:`1px solid ${full?"#F0A9A3":"#C0E8EC"}`}}>{full?"Full":`${avail} left`}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
 
-        {/* Toggle buttons */}
         {scanResult&&<ScanToast result={scanResult} onDone={()=>setScanResult(null)}/>}
+
         <div style={{display:"flex",gap:14,marginBottom:28}}>
           <button onClick={()=>setPubView(pubView==="checkin"?null:"checkin")} style={{flex:1,padding:"28px 0",borderRadius:14,border:pubView==="checkin"?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:pubView==="checkin"?"#EAF7F8":"#fff",fontWeight:700,fontSize:22,cursor:"pointer",color:pubView==="checkin"?"#2E8A94":"#5A7070",fontFamily:"inherit",transition:"all 0.15s ease"}}>
             {pubView==="checkin"?"▲ Check in":"▼ Check in"}
@@ -1024,7 +995,6 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
           </button>
         </div>
 
-        {/* CHECK IN FORM */}
         {pubView==="checkin"&&(
           <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:24,marginBottom:16}}>
             {flagAlert&&(
@@ -1100,7 +1070,6 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
           </div>
         )}
 
-        {/* CHECK OUT PANEL */}
         {pubView==="checkout"&&(
           <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:24}}>
             <CheckOutPanel records={records} people={people} loadData={loadData}/>
@@ -1110,45 +1079,7 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
     </div>
   );
 }
-  function AddPersonPanel({ people, onUpdate }) {
-  const [name, setName] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState(null);
 
-  async function handleAdd() {
-    if (!name.trim()) return;
-    const exists = people.find(p => p.name.toLowerCase() === name.trim().toLowerCase());
-    if (exists) { setMsg({type:"error",text:`${name.trim()} is already in the system.`}); return; }
-    setSaving(true);
-    try {
-      const res = await api("people", { method:"POST", body:JSON.stringify({name:name.trim()}), headers:{...HEADERS,"Prefer":"return=minimal"} });
-      if (!res.ok) throw new Error();
-      setMsg({type:"ok",text:`${name.trim()} has been added to the system.`});
-      setName("");
-      onUpdate();
-      setTimeout(()=>setMsg(null),4000);
-    } catch(_) { setMsg({type:"error",text:"Failed to add person. Try again."}); }
-    setSaving(false);
-  }
-
-  return (
-    <div>
-      <div style={{display:"flex",gap:10}}>
-        <input
-          placeholder="Full name…"
-          value={name}
-          onChange={e=>{setName(e.target.value);setMsg(null);}}
-          onKeyDown={e=>e.key==="Enter"&&handleAdd()}
-          style={{...inpStyle,flex:1}}
-        />
-        <button onClick={handleAdd} disabled={saving||!name.trim()} style={{...btnPrimary,padding:"12px 24px",fontSize:15,opacity:saving||!name.trim()?0.5:1}}>
-          {saving?"Adding…":"Add"}
-        </button>
-      </div>
-      {msg&&<p style={{margin:"10px 0 0",fontSize:14,color:msg.type==="ok"?C.tealDark:C.danger}}>{msg.type==="ok"?"✓ ":"⚠ "}{msg.text}</p>}
-    </div>
-  );
-}
   // ── ADMIN APP ────────────────────────────────────────────────
 function AdminApp() {
   const [view,setView]=useState("checkin");
