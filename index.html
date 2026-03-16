@@ -900,6 +900,7 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
         )}
 
         {/* Availability */}
+{Object.values(CAPPED_SERVICES_DAYS)[0].includes(new Date().getDay())&&(
         <div style={{marginBottom:28}}>
           <div style={{display:"flex",gap:14}}>
             {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{
@@ -912,8 +913,9 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
                 </div>
               );
             })}
-          </div>
         </div>
+        </div>
+        )}
 
         {/* Toggle buttons */}
         <div style={{display:"flex",gap:14,marginBottom:28}}>
@@ -1008,6 +1010,45 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+  function AddPersonPanel({ people, onUpdate }) {
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  async function handleAdd() {
+    if (!name.trim()) return;
+    const exists = people.find(p => p.name.toLowerCase() === name.trim().toLowerCase());
+    if (exists) { setMsg({type:"error",text:`${name.trim()} is already in the system.`}); return; }
+    setSaving(true);
+    try {
+      const res = await api("people", { method:"POST", body:JSON.stringify({name:name.trim()}), headers:{...HEADERS,"Prefer":"return=minimal"} });
+      if (!res.ok) throw new Error();
+      setMsg({type:"ok",text:`${name.trim()} has been added to the system.`});
+      setName("");
+      onUpdate();
+      setTimeout(()=>setMsg(null),4000);
+    } catch(_) { setMsg({type:"error",text:"Failed to add person. Try again."}); }
+    setSaving(false);
+  }
+
+  return (
+    <div>
+      <div style={{display:"flex",gap:10}}>
+        <input
+          placeholder="Full name…"
+          value={name}
+          onChange={e=>{setName(e.target.value);setMsg(null);}}
+          onKeyDown={e=>e.key==="Enter"&&handleAdd()}
+          style={{...inpStyle,flex:1}}
+        />
+        <button onClick={handleAdd} disabled={saving||!name.trim()} style={{...btnPrimary,padding:"12px 24px",fontSize:15,opacity:saving||!name.trim()?0.5:1}}>
+          {saving?"Adding…":"Add"}
+        </button>
+      </div>
+      {msg&&<p style={{margin:"10px 0 0",fontSize:14,color:msg.type==="ok"?C.tealDark:C.danger}}>{msg.type==="ok"?"✓ ":"⚠ "}{msg.text}</p>}
     </div>
   );
 }
@@ -1385,7 +1426,7 @@ function tryPin(){
                 })}
               </div>
             </div>
-            <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service capacity today</p>
+            {isServiceAvailableToday("Showers")&&<><p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service capacity today</p>
             <div style={{display:"flex",gap:14,marginBottom:22}}>
               {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{const used=countToday(svc),pct=Math.round(used/cap*100);return(
                 <div key={svc} style={{flex:1,background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:10,padding:"14px 18px"}}>
@@ -1398,6 +1439,11 @@ function tryPin(){
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
               <p style={{margin:"0 0 14px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Showers & Laundry queue</p>
               <ShowerLaundryPanel records={records} people={people} onMarkComplete={markComplete} onCancel={cancelRecord} onManualAdd={loadData}/>
+            </div>
+            </>}
+<div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
+              <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Add person to system</p>
+              <AddPersonPanel people={people} onUpdate={loadData}/>
             </div>
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
               <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Manage people</p>
