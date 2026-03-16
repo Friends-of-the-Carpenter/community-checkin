@@ -1246,7 +1246,8 @@ function tryPin(){
     </button>
   );
 
-  const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_SERVICES[s]);
+  const serviceOrder=["Day Center","Volunteer","Community Partnership"];
+const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_SERVICES[s]).sort((a,b)=>{const ai=serviceOrder.indexOf(a),bi=serviceOrder.indexOf(b);if(ai===-1&&bi===-1)return 0;if(ai===-1)return 1;if(bi===-1)return-1;return ai-bi;});
 
   return (
     <div style={{minHeight:"100vh",background:"#F7FAFA"}}>
