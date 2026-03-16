@@ -843,6 +843,18 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
       await loadData();
       return;
     }
+    // Check for duplicate active check-in today
+    const alreadyCheckedIn = records.some(r =>
+      r.name.toLowerCase() === name.toLowerCase() &&
+      r.check_in >= todayISO() &&
+      !r.check_out &&
+      r.service === form.service &&
+      r.service !== FLAG_ALERT_SERVICE
+    );
+    if (alreadyCheckedIn) {
+      setErrors({ submit: `${name} is already checked in for ${form.service} today.` });
+      return;
+    }
     setSaving(true);
     let guestNumber = gNum;
     const existing = person;
