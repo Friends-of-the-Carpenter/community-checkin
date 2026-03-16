@@ -916,7 +916,101 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
     </div>
   );
 }
+function LockerManager({ people, onUpdate }) {
+  const [query, setQuery] = useState("");
+  const [saving, setSaving] = useState(null);
+  const [msg, setMsg] = useState(null);
+  const todayStr = new Date().toISOString().slice(0, 10);
 
+  const lockers = [...Array.from({length:20},(_,i)=>String(i+1)), "Bin A", "Bin B"];
+
+  const todayAssignments = {};
+  people.forEach(p => {
+    if (p.locker && p.locker_date === todayStr) todayAssignments[p.locker] = p;
+  });
+
+  const filtered = people
+    .filter(p => !query.trim() || p.name.toLowerCase().includes(query.toLowerCase()))
+    .sort((a,b) => a.name.localeCompare(b.name));
+
+  async function assign(person, locker) {
+    setSaving(`${person.id}-${locker}`);
+    const isUnassigning = person.locker === locker && person.locker_date === todayStr;
+    try {
+      const res = await api(`people?id=eq.${person.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(isUnassigning ? {locker:null,locker_date:null} : {locker,locker_date:todayStr}),
+        headers: {...HEADERS, "Prefer": "return=minimal"}
+      });
+      if (!res.ok) throw new Error();
+      setMsg(isUnassigning ? `${person.name} unassigned.` : `${person.name} → ${locker==="Bin A"||locker==="Bin B"?locker:"Locker "+locker}`);
+      setTimeout(() => setMsg(null), 3000);
+      onUpdate();
+    } catch(_) { setMsg("Failed to save. Try again."); }
+    setSaving(null);
+  }
+
+  const currentUser = (locker) => todayAssignments[locker];
+
+  return (
+    <div>
+      <input placeholder="Search by name…" value={query} onChange={e=>setQuery(e.target.value)} style={{...inpStyle,marginBottom:16}}/>
+      {msg&&<p style={{margin:"0 0 12px",fontSize:14,color:C.tealDark}}>✓ {msg}</p>}
+
+      <p style={{margin:"0 0 10px",fontSize:14,fontWeight:600,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.05em"}}>Lockers 1–20</p>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:8,marginBottom:20}}>
+        {Array.from({length:20},(_,i)=>String(i+1)).map(l=>{
+          const occupant=currentUser(l);
+          return (
+            <div key={l} style={{border:`1.5px solid ${occupant?"#46b4bf":"#D0E6E5"}`,borderRadius:10,padding:"8px 10px",background:occupant?"#EAF7F8":"#fff"}}>
+              <p style={{margin:"0 0 4px",fontSize:13,fontWeight:700,color:occupant?"#2E8A94":C.textMuted}}>#{l}</p>
+              {occupant
+                ? <p style={{margin:"0 0 6px",fontSize:12,color:"#1D2B2B",fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{occupant.name}</p>
+                : <p style={{margin:"0 0 6px",fontSize:12,color:C.textLight}}>Empty</p>
+              }
+              {filtered.length>0&&(
+                <select value={occupant?.name||""} onChange={e=>{
+                  const p=people.find(x=>x.name===e.target.value);
+                  if(p) assign(p,l);
+                }} style={{...inpStyle,padding:"4px 6px",fontSize:12,height:28}}>
+                  <option value="">Assign…</option>
+                  {filtered.map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+                </select>
+              )}
+              {occupant&&<button onClick={()=>assign(occupant,l)} disabled={saving===`${occupant.id}-${l}`} style={{...btnGhost,width:"100%",marginTop:4,fontSize:11,padding:"3px 0",color:C.danger,borderColor:C.dangerBorder}}>{saving===`${occupant.id}-${l}`?"…":"Clear"}</button>}
+            </div>
+          );
+        })}
+      </div>
+
+      <p style={{margin:"0 0 10px",fontSize:14,fontWeight:600,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.05em"}}>Bins</p>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}}>
+        {["Bin A","Bin B"].map(l=>{
+          const occupant=currentUser(l);
+          return (
+            <div key={l} style={{border:`1.5px solid ${occupant?"#46b4bf":"#D0E6E5"}`,borderRadius:10,padding:"12px 14px",background:occupant?"#EAF7F8":"#fff"}}>
+              <p style={{margin:"0 0 4px",fontSize:14,fontWeight:700,color:occupant?"#2E8A94":C.textMuted}}>{l}</p>
+              {occupant
+                ? <p style={{margin:"0 0 8px",fontSize:13,color:"#1D2B2B",fontWeight:500}}>{occupant.name}</p>
+                : <p style={{margin:"0 0 8px",fontSize:13,color:C.textLight}}>Empty</p>
+              }
+              {filtered.length>0&&(
+                <select value={occupant?.name||""} onChange={e=>{
+                  const p=people.find(x=>x.name===e.target.value);
+                  if(p) assign(p,l);
+                }} style={{...inpStyle,padding:"4px 8px",fontSize:13,height:32}}>
+                  <option value="">Assign…</option>
+                  {filtered.map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+                </select>
+              )}
+              {occupant&&<button onClick={()=>assign(occupant,l)} disabled={saving===`${occupant.id}-${l}`} style={{...btnGhost,width:"100%",marginTop:6,fontSize:12,padding:"4px 0",color:C.danger,borderColor:C.dangerBorder}}>{saving===`${occupant.id}-${l}`?"…":"Clear"}</button>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 // ── ADMIN APP ────────────────────────────────────────────────
 function AdminApp() {
   const [view,setView]=useState("checkin");
@@ -1131,6 +1225,10 @@ function tryPin(){
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
               <p style={{margin:"0 0 14px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Showers & Laundry queue</p>
               <ShowerLaundryPanel records={records} people={people} onMarkComplete={markComplete} onCancel={cancelRecord} onManualAdd={loadData}/>
+            </div>
+            <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
+              <p style={{margin:"0 0 14px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Lockers & Bins</p>
+              <LockerManager people={people} onUpdate={loadData}/>
             </div>
             <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
               <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Manage people</p>
