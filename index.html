@@ -1135,6 +1135,101 @@ function tryPin(){
           <Tab id="log" label={`Visit log (${realRecords.length})`}/>
           <Tab id="analytics" label="Analytics"/>
           </div>
+                  {view==="checkin"&&(
+          <div>
+            {scanResult&&<ScanToast result={scanResult} onDone={()=>setScanResult(null)}/>}
+            {!scanResult&&flagAlert&&(
+              <div style={{background:"#FFF0F0",border:"2px solid #C0392B",borderRadius:12,padding:"18px 20px",marginBottom:24}}>
+                <p style={{margin:"0 0 6px",fontSize:18,fontWeight:700,color:"#C0392B"}}>⚑ This person is not allowed on the premises</p>
+                <p style={{margin:"0 0 4px",fontSize:15,color:"#C0392B"}}><strong>{flagAlert.name}</strong></p>
+                {flagAlert.flag_reason&&<p style={{margin:0,fontSize:14,color:"#C0392B"}}>Reason: {flagAlert.flag_reason}</p>}
+                <p style={{margin:"10px 0 0",fontSize:14,color:"#5A7070"}}>Please contact a staff member. Check-in has been blocked.</p>
+              </div>
+            )}
+            {!scanResult&&success&&!flagAlert&&(
+              <div style={{background:"#EAF7F8",border:"1.5px solid #C0E8EC",borderRadius:12,padding:"18px 20px",marginBottom:24}}>
+                <p style={{margin:"0 0 6px",fontSize:18,fontWeight:700,color:"#2E8A94"}}>{success.isNew?`Welcome, ${success.name}! You've been registered.`:`Welcome back, ${success.name}!`}</p>
+                {success.position&&<p style={{margin:"0 0 4px",fontSize:15,color:"#46b4bf"}}>{success.service}: queue <strong>#{success.position}</strong></p>}
+                {success.addOns&&success.addOns.map(a=>(<p key={a.service} style={{margin:"0 0 4px",fontSize:15,color:"#46b4bf"}}>{a.service==="Showers"?"Shower":"Laundry"} #<strong>{a.position}</strong></p>))}
+              </div>
+            )}
+            {errors.submit&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:10,padding:"12px 16px",marginBottom:20,fontSize:15,color:"#C0392B"}}>{errors.submit}</div>}
+
+            <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Please Choose</p>
+            <div style={{display:"flex",gap:14,marginBottom:22}}>
+              {["Guest","Volunteer"].map(t=>(
+                <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"14px 0",borderRadius:10,border:form.type===t?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:form.type===t?"#EAF7F8":"#fff",fontWeight:form.type===t?700:400,fontSize:17,cursor:"pointer",color:form.type===t?"#2E8A94":"#5A7070",fontFamily:"inherit"}}>{t}</button>
+              ))}
+            </div>
+
+            <p style={{margin:"0 0 8px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Name — First time? Just enter your name and check in</p>
+            <div style={{marginBottom:6,position:"relative"}} ref={suggestRef}>
+              <div style={{position:"relative"}}>
+                <input placeholder="Enter your full name…" value={form.name} onChange={e=>handleNameInput(e.target.value)} style={{...inpStyle,borderColor:errors.name?"#C0392B":"#D0E6E5",paddingRight:form.name?44:16}}/>
+                {form.name&&(<button onClick={()=>{setForm(f=>({...f,name:"",guestNumber:""}));setSuggestions([]);setShowSuggestions(false);setFlagAlert(null);setErrors(e=>({...e,name:undefined}));}} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"#D0E6E5",border:"none",borderRadius:"50%",width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:15,color:"#5A7070",lineHeight:1}}>×</button>
+                )}
+            </div>
+              {errors.name&&<p style={{margin:"6px 0 0",fontSize:14,color:"#C0392B"}}>{errors.name}</p>}
+              {showSuggestions&&suggestions.length>0&&(
+                <div style={{position:"absolute",top:"calc(100% + 2px)",left:0,right:0,background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,zIndex:10,boxShadow:"0 6px 20px rgba(70,180,191,0.15)",overflow:"hidden"}}>
+                  {suggestions.map(p=>{const av=avColor(p.name);return(
+                    <div key={p.id} onClick={()=>selectPerson(p)} style={{display:"flex",alignItems:"center",gap:12,padding:"13px 16px",cursor:"pointer",borderBottom:"1px solid #D0E6E5",background:p.flagged?"#FFF5F5":"#fff"}} onMouseEnter={e=>e.currentTarget.style.background=p.flagged?"#FFE8E8":"#EAF7F8"} onMouseLeave={e=>e.currentTarget.style.background=p.flagged?"#FFF5F5":"#fff"}>
+                      <div style={{width:40,height:40,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:14,flexShrink:0}}>{initials(p.name)||"?"}</div>
+                      <div style={{flex:1}}><p style={{margin:0,fontSize:16,fontWeight:600}}>{p.name}</p></div>
+                      {p.flagged&&<span style={{fontSize:13,padding:"3px 10px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600,flexShrink:0}}>⚑ Flagged</span>}
+                    </div>
+                  );})}
+                </div>
+              )}
+            </div>
+
+            <ServiceButtons availableServices={availableServices} form={form} setForm={setForm} setErrors={setErrors} countToday={countToday}/>
+            {errors.service&&<p style={{margin:"-8px 0 10px",fontSize:14,color:"#C0392B"}}>{errors.service}</p>}
+
+            {form.service==="Day Center"&&(()=>{
+              const showersAvail=isServiceAvailableToday("Showers")&&countToday("Showers")<(CAPPED_SERVICES["Showers"]||Infinity);
+              const laundryAvail=isServiceAvailableToday("Laundry")&&countToday("Laundry")<(CAPPED_SERVICES["Laundry"]||Infinity);
+              if(!showersAvail&&!laundryAvail) return null;
+              return (
+                <div style={{background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:10,padding:"16px 18px",marginBottom:18}}>
+                  <p style={{margin:"0 0 12px",fontSize:14,fontWeight:600,color:"#2E8A94",textTransform:"uppercase",letterSpacing:"0.05em"}}>CHECK IF YOU WOULD LIKE TO TAKE A SHOWER AND/OR DO LAUNDRY:</p>
+                  <div style={{display:"flex",gap:24,flexWrap:"wrap"}}>
+                    {showersAvail&&(<label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:16,color:C.text}}><input type="checkbox" checked={form.addShowers} onChange={e=>setForm(f=>({...f,addShowers:e.target.checked}))} style={{width:20,height:20,accentColor:"#46b4bf",cursor:"pointer"}}/><span>Showers</span><span style={{fontSize:14,color:C.textMuted}}>({CAPPED_SERVICES["Showers"]-countToday("Showers")} spots left)</span></label>)}
+                    {laundryAvail&&(<label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:16,color:C.text}}><input type="checkbox" checked={form.addLaundry} onChange={e=>setForm(f=>({...f,addLaundry:e.target.checked}))} style={{width:20,height:20,accentColor:"#46b4bf",cursor:"pointer"}}/><span>Laundry</span><span style={{fontSize:14,color:C.textMuted}}>({CAPPED_SERVICES["Laundry"]-countToday("Laundry")} spots left)</span></label>)}
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div style={{marginBottom:26}}>
+              <textarea placeholder="Notes (optional)" value={form.notes} onChange={ev=>setForm(f=>({...f,notes:ev.target.value}))} rows={3} style={{...inpStyle,resize:"vertical"}}/>
+            </div>
+            <button onClick={submit} disabled={saving||!!flagAlert} style={{...btnPrimary,width:"100%",padding:16,fontSize:18,opacity:(saving||!!flagAlert)?0.5:1,cursor:flagAlert?"not-allowed":"pointer"}}>
+              {saving?"Saving…":"Check in"}
+            </button>
+          </div>
+        )}
+
+        {view==="log"&&(
+          <div>
+            <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+              <input placeholder="Search by name…" value={search} onChange={e=>setSearch(e.target.value)} style={{...inpStyle,flex:1,minWidth:160}}/>
+              <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{...inpStyle,width:130}}><option>All</option><option>Guest</option><option>Volunteer</option></select>
+              <select value={filterService} onChange={e=>setFilterService(e.target.value)} style={{...inpStyle,width:170}}><option>All</option>{services.map(s=><option key={s}>{s}</option>)}</select>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <p style={{margin:0,fontSize:14,color:"#5A7070"}}>{people.length} people in directory</p>
+              <button onClick={loadData} style={{...btnGhost,fontSize:14}}>Refresh ↻</button>
+            </div>
+            {loading?<p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>Loading…</p>
+            :filtered.length===0?<p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>No records found.</p>
+            :filtered.map(r=>{
+              const av=avColor(r.name),dur=duration(r.check_in,r.check_out,r.service),person=people.find(p=>p.name===r.name),isFlagged=person?.flagged;
+              return <LogRecord key={r.id} r={r} av={av} dur={dur} person={person} isFlagged={isFlagged} onCheckOut={checkOut} onDelete={deleteRecord} onUpdate={loadData}/>;
+            })}
+          </div>
+        )}
+        {view==="analytics"&&<AnalyticsTab records={records}/>}
             <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service capacity today</p>
             <div style={{display:"flex",gap:14,marginBottom:22}}>
               {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{const used=countToday(svc),pct=Math.round(used/cap*100);return(
