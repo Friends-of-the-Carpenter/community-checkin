@@ -355,7 +355,12 @@ function AssignQueueNumber({ r, numLabel, onUpdate }) {
 
   return (
     <div style={{display:"flex",gap:6,alignItems:"center",marginTop:4}}>
-      <input type="number" min="1" placeholder={`${numLabel} #`} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>e.key==="Enter"&&save()} style={{...inpStyle,padding:"4px 8px",fontSize:13,width:90,height:30}}/>
+      <select value={val} onChange={e=>setVal(e.target.value)} style={{...inpStyle,padding:"4px 8px",fontSize:13,width:90,height:30}}>
+        <option value="">#{numLabel==="Shower"?"Shower":"Laundry"}</option>
+        {Array.from({length:CAPPED_SERVICES[r.service]||20},(_,i)=>i+1).map(n=>(
+          <option key={n} value={n}>#{n}</option>
+        ))}
+      </select>
       <button onClick={save} disabled={saving||!val} style={{...btnSuccess,padding:"4px 12px",fontSize:12,opacity:saving||!val?0.5:1}}>{saving?"…":"Assign"}</button>
       {r.queue_position&&<button onClick={()=>setEditing(false)} style={{...btnGhost,fontSize:12,padding:"4px 8px"}}>Cancel</button>}
     </div>
