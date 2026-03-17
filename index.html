@@ -1184,6 +1184,7 @@ function AddPersonPanel({ people, onUpdate }) {
   const [search,setSearch]=useState("");
   const [filterType,setFilterType]=useState("All");
   const [filterService,setFilterService]=useState("All");
+  const [filterDate,setFilterDate]=useState("today");
   const [errors,setErrors]=useState({});
   const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState(false);
@@ -1345,8 +1346,9 @@ function tryPin(){
   async function addService(){const s=newService.trim();if(!s||services.includes(s)){setNewService("");return;}await api("checkin_services",{method:"POST",body:JSON.stringify({name:s}),headers:{...HEADERS,"Prefer":"return=minimal"}});setNewService("");loadData();}
   async function removeService(s){await api(`checkin_services?name=eq.${encodeURIComponent(s)}`,{method:"DELETE"});loadData();}
 
-  const filtered=records.filter(r=>{
+const filtered=records.filter(r=>{
     if(r.service===FLAG_ALERT_SERVICE) return false;
+    if(filterDate==="today"&&r.check_in<todayISO()) return false;
     const q=search.toLowerCase(),person=people.find(p=>p.name===r.name),gn=person?String(person.guest_number):"";
     const m=!q||r.name.toLowerCase().includes(q)||gn.includes(q)||(r.member_id||"").toLowerCase().includes(q);
     return m&&(filterType==="All"||r.type===filterType)&&(filterService==="All"||r.service===filterService);
@@ -1462,10 +1464,11 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
 
         {view==="log"&&(
           <div>
-            <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+<div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
               <input placeholder="Search by name…" value={search} onChange={e=>setSearch(e.target.value)} style={{...inpStyle,flex:1,minWidth:160}}/>
               <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{...inpStyle,width:130}}><option>All</option><option>Guest</option><option>Volunteer</option></select>
               <select value={filterService} onChange={e=>setFilterService(e.target.value)} style={{...inpStyle,width:170}}><option>All</option>{services.map(s=><option key={s}>{s}</option>)}</select>
+              <select value={filterDate} onChange={e=>setFilterDate(e.target.value)} style={{...inpStyle,width:130}}><option value="today">Today</option><option value="all">All time</option></select>
             </div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
               <p style={{margin:0,fontSize:14,color:"#5A7070"}}>{people.length} people in directory</p>
