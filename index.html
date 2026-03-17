@@ -1683,21 +1683,6 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
                 })}
               </div>
             </div>
-            {isServiceAvailableToday("Showers")&&<><p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service capacity today</p>
-            <div style={{display:"flex",gap:14,marginBottom:22}}>
-              {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{const used=countToday(svc),pct=Math.round(used/cap*100);return(
-                <div key={svc} style={{flex:1,background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:10,padding:"14px 18px"}}>
-                  <p style={{margin:"0 0 4px",fontSize:14,fontWeight:600,color:"#2E8A94"}}>{svc}</p>
-                  <p style={{margin:"0 0 10px",fontSize:15,color:used>=cap?"#C0392B":"#5A7070"}}>{used}/{cap} spots used</p>
-                  <div style={{height:8,borderRadius:4,background:"#C0E8EC"}}><div style={{height:8,borderRadius:4,width:`${pct}%`,background:used>=cap?"#C0392B":used/cap>0.8?"#E6A817":"#46b4bf",transition:"width 0.3s"}}/></div>
-                </div>
-              );})}
-            </div>
-            <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
-              <p style={{margin:"0 0 14px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Showers & Laundry queue</p>
-              <ShowerLaundryPanel records={records} people={people} onMarkComplete={markComplete} onCancel={cancelRecord} onManualAdd={loadData}/>
-            </div>
-            </>}
 <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
               <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Add person to system</p>
               <AddPersonPanel people={people} onUpdate={loadData}/>
