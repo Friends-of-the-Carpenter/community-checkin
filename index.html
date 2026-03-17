@@ -1534,7 +1534,8 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
           </div>
         )}
 {view==="log"&&(
-  {isServiceAvailableToday("Showers")&&(
+          <div>
+            {isServiceAvailableToday("Showers")&&(
               <div style={{display:"flex",gap:14,marginBottom:20}}>
                 {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{
                   const queue=records.filter(r=>r.service===svc&&r.check_in>=todayISO());
@@ -1561,7 +1562,6 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
                 })}
               </div>
             )}
-          <div>
             {/* Service tabs */}
             <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
               {["All","Day Center","Showers","Laundry","Volunteer","Community Partnership","Drop-in"].map(tab=>(
