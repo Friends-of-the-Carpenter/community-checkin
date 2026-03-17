@@ -618,6 +618,51 @@ function TypeServiceEditor({ r, onSave, onCancel }) {
     </div>
   );
 }
+  function PersonServiceTag({ r, onCheckOut, onDelete, onUpdate }) {
+  const [editingPos, setEditingPos] = useState(false);
+  const [posVal, setPosVal] = useState(r.queue_position||"");
+  const [saving, setSaving] = useState(false);
+  const isShowerLaundry = NO_DURATION_SERVICES.includes(r.service);
+  const numLabel = r.service==="Showers"?"Shower":r.service==="Laundry"?"Laundry":"";
+
+  async function savePos() {
+    setSaving(true);
+    try {
+      await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({queue_position:parseInt(posVal)||null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      setEditingPos(false); onUpdate();
+    } catch(_){}
+    setSaving(false);
+  }
+
+  return (
+    <div style={{background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:10,padding:"8px 12px",fontSize:13}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+        <span style={{fontWeight:600,color:C.tealDark}}>{r.service}</span>
+        {r.queue_position&&!editingPos&&(
+          <button onClick={()=>{setEditingPos(true);setPosVal(r.queue_position);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.teal,textDecoration:"underline dotted",fontFamily:"inherit",padding:0}}>
+            {numLabel} #{r.queue_position}
+          </button>
+        )}
+        {isShowerLaundry&&!r.queue_position&&!editingPos&&(
+          <button onClick={()=>setEditingPos(true)} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.teal,textDecoration:"underline dotted",fontFamily:"inherit",padding:0}}>+ set #</button>
+        )}
+        {!r.check_out&&<span style={{fontSize:12,padding:"1px 8px",borderRadius:20,background:"#fff",color:C.teal,border:`1px solid ${C.tealMid}`}}>Active</span>}
+        {r.check_out&&isShowerLaundry&&<span style={{fontSize:12,padding:"1px 8px",borderRadius:20,background:C.successBg,color:C.success,fontWeight:600}}>✓ Done</span>}
+        {!r.check_out&&isShowerLaundry&&<button onClick={()=>onCheckOut(r.id)} style={{...btnSuccess,fontSize:12,padding:"3px 10px"}}>✓ Done</button>}
+        {!r.check_out&&!isShowerLaundry&&<button onClick={()=>onCheckOut(r.id)} style={{...btnOutline,fontSize:12,padding:"3px 10px"}}>Check out</button>}
+        <button onClick={()=>onDelete(r.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#8AA5A5",fontSize:16,padding:"0 2px",lineHeight:1}}>×</button>
+      </div>
+      {editingPos&&(
+        <div style={{display:"flex",gap:6,alignItems:"center",marginTop:6}}>
+          <input type="number" min="1" value={posVal} onChange={e=>setPosVal(e.target.value)} style={{...inpStyle,padding:"4px 8px",fontSize:13,width:80,height:28}}/>
+          <button onClick={savePos} disabled={saving} style={{...btnPrimary,padding:"4px 12px",fontSize:12,opacity:saving?0.5:1}}>Save</button>
+          <button onClick={()=>setEditingPos(false)} style={{...btnGhost,fontSize:12,padding:"4px 10px"}}>Cancel</button>
+        </div>
+      )}
+      <p style={{margin:"4px 0 0",fontSize:12,color:C.textLight}}>In: {fmt(r.check_in)}{r.check_out?` · Out: ${fmt(r.check_out)}`:""}</p>
+    </div>
+  );
+}
 function LogRecord({r, av, dur, person, isFlagged, onCheckOut, onDelete, onUpdate}) {
   const [editing,setEditing]=useState(null);
   const [editVal,setEditVal]=useState("");
@@ -1206,6 +1251,7 @@ function AddPersonPanel({ people, onUpdate }) {
   const [filterType,setFilterType]=useState("All");
   const [filterService,setFilterService]=useState("All");
   const [filterDate,setFilterDate]=useState("today");
+  const [logTab,setLogTab]=useState("All");
   const [errors,setErrors]=useState({});
   const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState(false);
@@ -1369,10 +1415,7 @@ function tryPin(){
 
 const filtered=records.filter(r=>{
     if(r.service===FLAG_ALERT_SERVICE) return false;
-    if(filterDate==="today"&&r.check_in<todayISO()) return false;
-    const q=search.toLowerCase(),person=people.find(p=>p.name===r.name),gn=person?String(person.guest_number):"";
-    const m=!q||r.name.toLowerCase().includes(q)||gn.includes(q)||(r.member_id||"").toLowerCase().includes(q);
-    return m&&(filterType==="All"||r.type===filterType)&&(filterService==="All"||r.service===filterService);
+    return true;
   });
 
   const realRecords=records.filter(r=>r.service!==FLAG_ALERT_SERVICE);
@@ -1482,13 +1525,17 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
             </button>
           </div>
         )}
-
-        {view==="log"&&(
+{view==="log"&&(
           <div>
-<div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+            {/* Service tabs */}
+            <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+              {["All","Day Center","Showers","Laundry","Volunteer","Community Partnership","Drop-in"].map(tab=>(
+                <button key={tab} onClick={()=>setLogTab(tab)} style={{...btnGhost,fontSize:13,padding:"7px 14px",background:logTab===tab?"#46b4bf":"transparent",color:logTab===tab?"#fff":"#5A7070",borderColor:logTab===tab?"#46b4bf":"#D0E6E5"}}>{tab}</button>
+              ))}
+            </div>
+            {/* Search and date filter */}
+            <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
               <input placeholder="Search by name…" value={search} onChange={e=>setSearch(e.target.value)} style={{...inpStyle,flex:1,minWidth:160}}/>
-              <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{...inpStyle,width:130}}><option>All</option><option>Guest</option><option>Volunteer</option></select>
-              <select value={filterService} onChange={e=>setFilterService(e.target.value)} style={{...inpStyle,width:170}}><option>All</option>{services.map(s=><option key={s}>{s}</option>)}</select>
               <select value={filterDate} onChange={e=>setFilterDate(e.target.value)} style={{...inpStyle,width:130}}><option value="today">Today</option><option value="all">All time</option></select>
             </div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
@@ -1496,11 +1543,43 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
               <button onClick={loadData} style={{...btnGhost,fontSize:14}}>Refresh ↻</button>
             </div>
             {loading?<p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>Loading…</p>
-            :filtered.length===0?<p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>No records found.</p>
-            :filtered.map(r=>{
-              const av=avColor(r.name),dur=duration(r.check_in,r.check_out,r.service),person=people.find(p=>p.name===r.name),isFlagged=person?.flagged;
-              return <LogRecord key={r.id} r={r} av={av} dur={dur} person={person} isFlagged={isFlagged} onCheckOut={checkOut} onDelete={deleteRecord} onUpdate={loadData}/>;
-            })}
+            :(()=>{
+              // Group records by person
+              const dateFiltered=filtered.filter(r=>filterDate==="today"?r.check_in>=todayISO():true);
+              const byName={};
+              dateFiltered.forEach(r=>{
+                if(!byName[r.name]) byName[r.name]={name:r.name,records:[]};
+                byName[r.name].records.push(r);
+              });
+              const grouped=Object.values(byName).filter(g=>{
+                if(logTab==="All") return true;
+                return g.records.some(r=>r.service===logTab);
+              }).filter(g=>!search.trim()||g.name.toLowerCase().includes(search.toLowerCase()));
+              if(grouped.length===0) return <p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>No records found.</p>;
+              return grouped.map(g=>{
+                const person=people.find(p=>p.name===g.name);
+                const isFlagged=person?.flagged;
+                const av=avColor(g.name);
+                return (
+                  <div key={g.name} style={{background:isFlagged?"#FFF5F5":"#fff",border:`1.5px solid ${isFlagged?"#F0A9A3":"#D0E6E5"}`,borderRadius:14,marginBottom:12,overflow:"hidden"}}>
+                    <div style={{padding:"14px 18px",display:"flex",alignItems:"center",gap:14}}>
+                      <div style={{width:46,height:46,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:16,flexShrink:0}}>{initials(g.name)||"?"}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:6}}>
+                          <span style={{fontWeight:700,fontSize:16}}>{g.name}</span>
+                          {isFlagged&&<span style={{fontSize:13,padding:"2px 10px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600}}>⚑ Flagged</span>}
+                        </div>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                          {g.records.filter(r=>r.service!==FLAG_ALERT_SERVICE).map(r=>(
+                            <PersonServiceTag key={r.id} r={r} onCheckOut={checkOut} onDelete={deleteRecord} onUpdate={loadData}/>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              });
+            })()}
           </div>
         )}
         {view==="analytics"&&<AnalyticsTab records={records}/>}
