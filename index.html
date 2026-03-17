@@ -1579,12 +1579,19 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
               </div>
               {loading?<p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>Loading…</p>
               :(()=>{
-                const dateFiltered=filtered.filter(r=>filterDate==="today"?r.check_in>=todayISO():true);
-                const byName={};
-                dateFiltered.forEach(r=>{
-                  if(!byName[r.name]) byName[r.name]={name:r.name,records:[]};
+                const dateFiltered=records.filter(r=>{
+                if(r.service===FLAG_ALERT_SERVICE) return false;
+                if(filterDate==="today"&&r.check_in<todayISO()) return false;
+                if(search.trim()&&!r.name.toLowerCase().includes(search.toLowerCase())) return false;
+                return true;
+              });
+              const byName={};
+              dateFiltered.forEach(r=>{
+                if(!byName[r.name]) byName[r.name]={name:r.name,records:[]};
+                if(!byName[r.name].records.find(x=>x.id===r.id)){
                   byName[r.name].records.push(r);
-                });
+                }
+              });
                 const grouped=Object.values(byName).filter(g=>{
                   if(logTab==="All") return true;
                   return g.records.some(r=>r.service===logTab);
