@@ -916,10 +916,11 @@ function LogRecord({r, av, dur, person, isFlagged, onCheckOut, onDelete, onUpdat
 }
 
 function AnalyticsTab({records}) {
-  const [range,setRange]=useState("7days");
+  const [range,setRange]=useState("today");
   function getFiltered() {
     const now=new Date(); let cutoff;
-    if(range==="7days"){cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-6);}
+    if(range==="today"){cutoff=new Date(now);cutoff.setHours(0,0,0,0);}
+    else if(range==="7days"){cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-6);}
     else if(range==="30days"){cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-29);}
     else if(range==="month"){cutoff=new Date(now.getFullYear(),now.getMonth(),1);}
     else if(range==="quarter"){const q=Math.floor(now.getMonth()/3);cutoff=new Date(now.getFullYear(),q*3,1);}
@@ -936,7 +937,7 @@ function AnalyticsTab({records}) {
   const chartData=groupBy(filtered);
   const volHours=getVolHours(filtered);
   const totals={};CHART_SERVICES.forEach(s=>{totals[s]=filtered.filter(r=>r.service===s).length;});
-  const ranges=[{id:"7days",label:"7 days"},{id:"30days",label:"30 days"},{id:"month",label:"This month"},{id:"quarter",label:"This quarter"},{id:"year",label:"This year"},{id:"all",label:"All time"}];
+  const ranges=[{id:"today",label:"Today"},{id:"7days",label:"7 days"},{id:"30days",label:"30 days"},{id:"month",label:"This month"},{id:"quarter",label:"This quarter"},{id:"year",label:"This year"},{id:"all",label:"All time"}];
   return (    <div>
       <div style={{display:"flex",gap:8,marginBottom:24,flexWrap:"wrap"}}>
         {ranges.map(r=><button key={r.id} onClick={()=>setRange(r.id)} style={{...btnGhost,fontSize:14,background:range===r.id?"#46b4bf":"transparent",color:range===r.id?"#fff":"#5A7070",borderColor:range===r.id?"#46b4bf":"#D0E6E5",padding:"8px 16px"}}>{r.label}</button>)}
