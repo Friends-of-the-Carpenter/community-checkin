@@ -1385,7 +1385,7 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
           </div>
           <div style={{display:"flex",borderBottom:"2px solid #C0E8EC",marginBottom:28}}>
           <Tab id="checkin" label="Check in"/>
-          <Tab id="log" label={`Visit log (${realRecords.length})`}/>
+          <Tab id="log" label={`Visit log (${realRecords.filter(r=>r.check_in>=todayISO()).length})`}/>
           </div>
                   {view==="checkin"&&(
           <div>
