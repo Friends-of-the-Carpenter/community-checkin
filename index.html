@@ -665,6 +665,47 @@ function TypeServiceEditor({ r, onSave, onCancel }) {
   const [editingPos, setEditingPos] = useState(false);
   const [posVal, setPosVal] = useState(r.queue_position||"");
   const [saving, setSaving] = useState(false);
+  const [editingTime, setEditingTime] = useState(null);
+  const [timeVal, setTimeVal] = useState("");
+  const [timeMsg, setTimeMsg] = useState(null);
+  const [editingService, setEditingService] = useState(false);
+  const [editSvc, setEditSvc] = useState(r.service);
+  const [editType, setEditType] = useState(r.type);
+
+  async function saveService() {
+    setSaving(true);
+    try {
+      const res=await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({service:editSvc,type:editType}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      if(!res.ok) throw new Error();
+      setEditingService(false); onUpdate();
+    } catch(_){}
+    setSaving(false);
+  }
+
+  async function saveTime() {
+    const newVal=localInputToIso(timeVal);
+    const inTime=editingTime==="check_in"?newVal:r.check_in;
+    const outTime=editingTime==="check_out"?newVal:r.check_out;
+    if(outTime&&new Date(outTime)<=new Date(inTime)){setTimeMsg({type:"error",text:"Check-out must be after check-in."});return;}
+    setSaving(true);
+    try {
+      const res=await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({[editingTime]:newVal}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      if(!res.ok) throw new Error();
+      setTimeMsg({type:"ok",text:"Saved!"}); setEditingTime(null); onUpdate();
+      setTimeout(()=>setTimeMsg(null),2000);
+    } catch(_){setTimeMsg({type:"error",text:"Failed to save."});}
+    setSaving(false);
+  }
+
+  async function clearTime() {
+    setSaving(true);
+    try {
+      const res=await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      if(!res.ok) throw new Error();
+      setEditingTime(null); onUpdate();
+    } catch(_){setTimeMsg({type:"error",text:"Failed to clear."});}
+    setSaving(false);
+  }
   const isShowerLaundry = NO_DURATION_SERVICES.includes(r.service);
   const numLabel = r.service==="Showers"?"Shower":r.service==="Laundry"?"Laundry":"";
 
@@ -681,6 +722,7 @@ function TypeServiceEditor({ r, onSave, onCancel }) {
     <div style={{background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:10,padding:"8px 12px",fontSize:13}}>
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
         <span style={{fontWeight:600,color:C.tealDark}}>{r.service}</span>
+        {!editingService&&<button onClick={()=>setEditingService(true)} style={{background:"none",border:"none",cursor:"pointer",fontSize:11,color:C.teal,textDecoration:"underline dotted",fontFamily:"inherit",padding:0,marginLeft:4}}>edit</button>}
         {r.queue_position&&!editingPos&&(
           <button onClick={()=>{setEditingPos(true);setPosVal(r.queue_position);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.teal,textDecoration:"underline dotted",fontFamily:"inherit",padding:0}}>
             {numLabel} #{r.queue_position}
@@ -702,7 +744,42 @@ function TypeServiceEditor({ r, onSave, onCancel }) {
           <button onClick={()=>setEditingPos(false)} style={{...btnGhost,fontSize:12,padding:"4px 10px"}}>Cancel</button>
         </div>
       )}
-      <p style={{margin:"4px 0 0",fontSize:12,color:C.textLight}}>In: {fmt(r.check_in)}{r.check_out?` · Out: ${fmt(r.check_out)}`:""}</p>
+      {editingService&&(
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginTop:6}}>
+          <select value={editSvc} onChange={e=>setEditSvc(e.target.value)} style={{...inpStyle,padding:"4px 8px",fontSize:12,width:"auto",flex:1,height:30}}>
+            <option value="Day Center">Day Center</option>
+            <option value="Volunteer">Volunteer</option>
+            <option value="Community Partnership">Community Partnership</option>
+            <option value="Showers">Showers</option>
+            <option value="Laundry">Laundry</option>
+            <option value="Drop-in">Drop-in</option>
+          </select>
+          <select value={editType} onChange={e=>setEditType(e.target.value)} style={{...inpStyle,padding:"4px 8px",fontSize:12,width:"auto",height:30}}>
+            <option value="Guest">Guest</option>
+            <option value="Volunteer">Volunteer</option>
+          </select>
+          <button onClick={saveService} disabled={saving} style={{...btnPrimary,padding:"4px 12px",fontSize:12,opacity:saving?0.5:1}}>{saving?"…":"Save"}</button>
+          <button onClick={()=>setEditingService(false)} style={{...btnGhost,fontSize:12,padding:"4px 8px"}}>Cancel</button>
+        </div>
+      )}
+      {editingTime?(
+        <div style={{marginTop:6}}>
+          <p style={{margin:"0 0 4px",fontSize:12,color:C.textMuted}}>Edit {editingTime==="check_in"?"check-in":"check-out"} time</p>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+            <input type="datetime-local" value={timeVal} onChange={e=>setTimeVal(e.target.value)} style={{...inpStyle,padding:"4px 8px",fontSize:12,width:"auto",flex:1,minWidth:180,height:30}}/>
+            <button onClick={saveTime} disabled={saving||!timeVal} style={{...btnPrimary,padding:"4px 12px",fontSize:12,opacity:saving||!timeVal?0.5:1}}>Save</button>
+            {editingTime==="check_out"&&r.check_out&&<button onClick={clearTime} disabled={saving} style={{...btnGhost,fontSize:12,padding:"4px 8px",color:C.danger,borderColor:C.dangerBorder}}>Clear</button>}
+            <button onClick={()=>setEditingTime(null)} style={{...btnGhost,fontSize:12,padding:"4px 8px"}}>Cancel</button>
+          </div>
+          {timeMsg&&<p style={{margin:"4px 0 0",fontSize:12,color:timeMsg.type==="ok"?C.tealDark:C.danger}}>{timeMsg.type==="ok"?"✓ ":"⚠ "}{timeMsg.text}</p>}
+        </div>
+      ):(
+        <p style={{margin:"4px 0 0",fontSize:12,color:C.textLight}}>
+          <button onClick={()=>{setEditingTime("check_in");setTimeVal(isoToLocalInput(r.check_in));}} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:12,color:C.teal,textDecoration:"underline dotted",fontFamily:"inherit"}}>In: {fmt(r.check_in)}</button>
+          {r.check_out&&<><span> · </span><button onClick={()=>{setEditingTime("check_out");setTimeVal(isoToLocalInput(r.check_out));}} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:12,color:C.teal,textDecoration:"underline dotted",fontFamily:"inherit"}}>Out: {fmt(r.check_out)}</button></>}
+          {!r.check_out&&<><span> · </span><button onClick={()=>{setEditingTime("check_out");setTimeVal("");}} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:12,color:C.teal,textDecoration:"underline dotted",fontFamily:"inherit"}}>+ set check-out</button></>}
+        </p>
+      )}
     </div>
   );
 }
