@@ -1019,8 +1019,8 @@ function CheckOutPanel({ records, people, loadData }) {
   const [checking, setChecking] = useState(null);
   const [done, setDone] = useState(null);
 
-  const activeToday = records
-    .filter(r => r.check_in >= todayISO() && !r.check_out && r.service !== FLAG_ALERT_SERVICE)
+const activeToday = records
+    .filter(r => r.check_in >= todayISO() && !r.check_out && r.service !== FLAG_ALERT_SERVICE && !NO_DURATION_SERVICES.includes(r.service))
     .sort((a,b) => a.name.localeCompare(b.name));
 
   async function handleCheckOut(r) {
