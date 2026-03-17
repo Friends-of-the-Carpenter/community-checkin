@@ -337,7 +337,12 @@ function ShowerLaundryPanel({ records, people, onMarkComplete, onCancel, onManua
     <>
       {services.map(svc => {
         const cap=CAPPED_SERVICES[svc];
-        const queue=records.filter(r=>r.service===svc&&r.check_in>=todayISO()).sort((a,b)=>(a.queue_position||0)-(b.queue_position||0));
+        const queue=records.filter(r=>r.service===svc&&r.check_in>=todayISO()).sort((a,b)=>{
+          if(!a.queue_position&&!b.queue_position) return 0;
+          if(!a.queue_position) return 1;
+          if(!b.queue_position) return -1;
+          return a.queue_position-b.queue_position;
+        });
         const active=queue.filter(r=>!r.check_out);
         const done=queue.filter(r=>r.check_out);
         const used=queue.length;
@@ -370,7 +375,7 @@ function ShowerLaundryPanel({ records, people, onMarkComplete, onCancel, onManua
                   <div style={{width:44,height:44,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:15,flexShrink:0}}>{initials(r.name)||"?"}</div>
                   <div style={{flex:1,minWidth:0}}>
                     <span style={{fontWeight:600,fontSize:16}}>{r.name}</span>
-                    <p style={{margin:"2px 0 0",fontSize:13,color:"#5A7070"}}>{numLabel} #{r.queue_position} · In: {fmt(r.check_in)}</p>
+                    <p style={{margin:"2px 0 0",fontSize:13,color:"#5A7070"}}>{r.queue_position?`${numLabel} #${r.queue_position}`:numLabel+" # unassigned"} · In: {fmt(r.check_in)}</p>
                   </div>
                   <button onClick={()=>onMarkComplete(r.id)} style={{...btnSuccess,flexShrink:0}}>✓ Done</button>
                   <button onClick={()=>onCancel(r.id)} style={{...btnGhost,fontSize:14,color:C.danger,borderColor:C.dangerBorder,flexShrink:0}}>Cancel</button>
@@ -1041,12 +1046,12 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
       } catch (_) { setErrors({ submit: "Failed to register guest." }); setSaving(false); return; }
     } else { guestNumber = String(existing.guest_number); }
     const now = new Date().toISOString();
-    const position = form.service && CAPPED_SERVICES[form.service] ? nextAvailablePosition(form.service, records) : null;
+    const position=form.service&&CAPPED_SERVICES[form.service]&&form.service!=="Laundry"?nextAvailablePosition(form.service,records):null;
     const toInsert = [{ name, member_id: form.memberId || null, type: form.type, service: form.service, notes: form.notes || null, queue_position: position, check_in: now, check_out: null }];
     const addOns = [];
     if (form.service === "Day Center") {
       if (form.addShowers && countToday("Showers") < CAPPED_SERVICES["Showers"]) { const p = nextAvailablePosition("Showers", records); toInsert.push({ name, member_id: form.memberId || null, type: form.type, service: "Showers", notes: form.notes || null, queue_position: p, check_in: now, check_out: null }); addOns.push({ service: "Showers", position: p }); }
-      if (form.addLaundry && countToday("Laundry") < CAPPED_SERVICES["Laundry"]) { const p = nextAvailablePosition("Laundry", records); toInsert.push({ name, member_id: form.memberId || null, type: form.type, service: "Laundry", notes: form.notes || null, queue_position: p, check_in: now, check_out: null }); addOns.push({ service: "Laundry", position: p }); }
+      if (form.addLaundry && countToday("Laundry") < CAPPED_SERVICES["Laundry"]) { toInsert.push({ name, member_id: form.memberId || null, type: form.type, service: "Laundry", notes: form.notes || null, queue_position: null, check_in: now, check_out: null }); addOns.push({ service: "Laundry", position: null }); }
     }
     try {
       const res = await api("checkin_records", { method: "POST", body: JSON.stringify(toInsert.length === 1 ? toInsert[0] : toInsert), headers: { ...HEADERS, "Prefer": "return=representation" } });
@@ -1365,7 +1370,7 @@ useEffect(()=>{
       }catch(_){setErrors({submit:"Failed to register guest."});setSaving(false);return;}
     }else{guestNumber=String(existing.guest_number);}
     const now=new Date().toISOString();
-    const position=form.service&&CAPPED_SERVICES[form.service]?nextAvailablePosition(form.service,records):null;
+    const position=form.service&&CAPPED_SERVICES[form.service]&&form.service!=="Laundry"?nextAvailablePosition(form.service,records):null;
     const toInsert=[{name,member_id:form.memberId||null,type:form.type,service:form.service,notes:form.notes||null,queue_position:position,check_in:now,check_out:null}];
     const addOns=[];
     if(form.service==="Day Center"){
