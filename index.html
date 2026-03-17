@@ -1535,6 +1535,33 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
         )}
 {view==="log"&&(
           <div>
+             {isServiceAvailableToday("Showers")&&(
+              <div style={{display:"flex",gap:14,marginBottom:20}}>
+                {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{
+                  const queue=records.filter(r=>r.service===svc&&r.check_in>=todayISO());
+                  const active=queue.filter(r=>!r.check_out);
+                  const done=queue.filter(r=>r.check_out);
+                  const used=queue.length;
+                  const full=used>=cap;
+                  return (
+                    <div key={svc} style={{flex:1,background:"#fff",border:`1.5px solid ${full?"#F0A9A3":"#C0E8EC"}`,borderRadius:12,padding:"14px 18px"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                        <span style={{fontSize:15,fontWeight:700,color:C.tealDark}}>{svc}</span>
+                        <span style={{fontSize:13,fontWeight:600,padding:"3px 12px",borderRadius:20,background:full?"#FCECEA":"#EAF7F8",color:full?"#C0392B":"#46b4bf"}}>{full?"Full":`${cap-used} left`}</span>
+                      </div>
+                      <div style={{display:"flex",gap:16}}>
+                        {[["Total",used],["Waiting",active.length],["Done",done.length]].map(([l,v])=>(
+                          <div key={l} style={{textAlign:"center"}}>
+                            <p style={{margin:0,fontSize:22,fontWeight:700,color:"#46b4bf"}}>{v}</p>
+                            <p style={{margin:0,fontSize:11,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{l}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             {/* Service tabs */}
             <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
               {["All","Day Center","Showers","Laundry","Volunteer","Community Partnership","Drop-in"].map(tab=>(
