@@ -766,7 +766,7 @@ function TypeServiceEditor({ r, onSave, onCancel }) {
           <button onClick={()=>setEditingPos(true)} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.teal,textDecoration:"underline dotted",fontFamily:"inherit",padding:0}}>+ set #</button>
         )}
         {!r.check_out&&<span style={{fontSize:12,padding:"1px 8px",borderRadius:20,background:"#fff",color:C.teal,border:`1px solid ${C.tealMid}`}}>Active</span>}
-        {r.check_out&&isShowerLaundry&&<span style={{fontSize:12,padding:"1px 8px",borderRadius:20,background:C.successBg,color:C.success,fontWeight:600}}>✓ Done</span>}
+        {r.locker_used&&<span style={{fontSize:12,padding:"1px 8px",borderRadius:20,background:"#FEF7E6",color:"#8A5A00",fontWeight:500}}>🔑 Locker {r.locker_used}</span>}
         {!r.check_out&&isShowerLaundry&&<button onClick={()=>onCheckOut(r.id)} style={{...btnSuccess,fontSize:12,padding:"3px 10px"}}>✓ Done</button>}
         {!r.check_out&&!isShowerLaundry&&<button onClick={()=>onCheckOut(r.id)} style={{...btnOutline,fontSize:12,padding:"3px 10px"}}>Check out</button>}
         <button onClick={()=>onDelete(r.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#8AA5A5",fontSize:16,padding:"0 2px",lineHeight:1}}>×</button>
@@ -1022,11 +1022,11 @@ function CheckOutPanel({ records, people, loadData }) {
 const activeToday = records
     .filter(r => r.check_in >= todayISO() && !r.check_out && r.service !== FLAG_ALERT_SERVICE && !NO_DURATION_SERVICES.includes(r.service))
     .sort((a,b) => a.name.localeCompare(b.name));
-
-  async function handleCheckOut(r) {
+async function handleCheckOut(r) {
     setChecking(r.id);
-    await api(`checkin_records?id=eq.${r.id}`, {method:"PATCH", body:JSON.stringify({check_out:new Date().toISOString()}), headers:{...HEADERS,"Prefer":"return=minimal"}});
     const person=people.find(p=>p.name===r.name);
+    const lockerUsed=person?.locker&&person?.locker_date===new Date().toISOString().slice(0,10)?person.locker:null;
+    await api(`checkin_records?id=eq.${r.id}`, {method:"PATCH", body:JSON.stringify({check_out:new Date().toISOString(),locker_used:lockerUsed}), headers:{...HEADERS,"Prefer":"return=minimal"}});
     if(person?.locker){
       await api(`people?id=eq.${person.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
     }
@@ -1440,6 +1440,13 @@ function AddPersonPanel({ people, onUpdate }) {
       if(!rRes.ok||!sRes.ok||!pRes.ok) throw new Error();
       const [rData,sData,pData]=await Promise.all([rRes.json(),sRes.json(),pRes.json()]);
       setRecords(rData);setServices(sData.map(s=>s.name));setPeople(pData);setDbError(null);
+      // Clear locker_used from records older than today
+      const staleLockers=rData.filter(r=>r.locker_used&&r.check_in<todayISO());
+      if(staleLockers.length>0){
+        await Promise.all(staleLockers.map(r=>
+          api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({locker_used:null}),headers:{...HEADERS,"Prefer":"return=minimal"}})
+        ));
+      }
       const newAlerts=rData.filter(r=>r.service===FLAG_ALERT_SERVICE&&!r.check_out&&r.check_in>=todayISO()&&!seenAlertIds.current.has(r.id));
       if(newAlerts.length>0){
       newAlerts.forEach(a=>seenAlertIds.current.add(a.id));
@@ -1542,13 +1549,12 @@ useEffect(()=>{
 
   async function markComplete(id){await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}
   async function checkOut(id){
-    await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
     const record=recordsRef.current.find(r=>r.id===id);
-    if(record){
-      const person=peopleRef.current.find(p=>p.name===record.name);
-      if(person?.locker){
-        await api(`people?id=eq.${person.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-      }
+    const person=record?peopleRef.current.find(p=>p.name===record.name):null;
+    const lockerUsed=person?.locker&&person?.locker_date===new Date().toISOString().slice(0,10)?person.locker:null;
+    await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString(),locker_used:lockerUsed}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+    if(person?.locker){
+      await api(`people?id=eq.${person.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
     }
     loadData();
   }
