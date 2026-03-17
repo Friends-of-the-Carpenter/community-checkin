@@ -1534,155 +1534,159 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
           </div>
         )}
 {view==="log"&&(
-          <div>
-             {isServiceAvailableToday("Showers")&&(
-              <div style={{display:"flex",gap:14,marginBottom:20}}>
-                {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{
-                  const queue=records.filter(r=>r.service===svc&&r.check_in>=todayISO());
-                  const active=queue.filter(r=>!r.check_out);
-                  const done=queue.filter(r=>r.check_out);
-                  const used=queue.length;
-                  const full=used>=cap;
-                  return (
-                    <div key={svc} style={{flex:1,background:"#fff",border:`1.5px solid ${full?"#F0A9A3":"#C0E8EC"}`,borderRadius:12,padding:"14px 18px"}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                        <span style={{fontSize:15,fontWeight:700,color:C.tealDark}}>{svc}</span>
-                        <span style={{fontSize:13,fontWeight:600,padding:"3px 12px",borderRadius:20,background:full?"#FCECEA":"#EAF7F8",color:full?"#C0392B":"#46b4bf"}}>{full?"Full":`${cap-used} left`}</span>
-                      </div>
-                      <div style={{display:"flex",gap:16}}>
-                        {[["Total",used],["Waiting",active.length],["Done",done.length]].map(([l,v])=>(
-                          <div key={l} style={{textAlign:"center"}}>
-                            <p style={{margin:0,fontSize:22,fontWeight:700,color:"#46b4bf"}}>{v}</p>
-                            <p style={{margin:0,fontSize:11,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{l}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            {/* Service tabs */}
-            <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
-              {["All","Day Center","Showers","Laundry","Volunteer","Community Partnership","Drop-in"].map(tab=>(
-                <button key={tab} onClick={()=>setLogTab(tab)} style={{...btnGhost,fontSize:13,padding:"7px 14px",background:logTab===tab?"#46b4bf":"transparent",color:logTab===tab?"#fff":"#5A7070",borderColor:logTab===tab?"#46b4bf":"#D0E6E5"}}>{tab}</button>
-              ))}
-            </div>
-            {/* Search and date filter */}
-            <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
-              <input placeholder="Search by name…" value={search} onChange={e=>setSearch(e.target.value)} style={{...inpStyle,flex:1,minWidth:160}}/>
-              <select value={filterDate} onChange={e=>setFilterDate(e.target.value)} style={{...inpStyle,width:130}}><option value="today">Today</option><option value="all">All time</option></select>
-            </div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-              <p style={{margin:0,fontSize:14,color:"#5A7070"}}>{people.length} people in directory</p>
-              <button onClick={loadData} style={{...btnGhost,fontSize:14}}>Refresh ↻</button>
-            </div>
-            {loading?<p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>Loading…</p>
-            :(()=>{
-              // Group records by person
-              const dateFiltered=filtered.filter(r=>filterDate==="today"?r.check_in>=todayISO():true);
-              const byName={};
-              dateFiltered.forEach(r=>{
-                if(!byName[r.name]) byName[r.name]={name:r.name,records:[]};
-                byName[r.name].records.push(r);
-              });
-              const grouped=Object.values(byName).filter(g=>{
-                if(logTab==="All") return true;
-                return g.records.some(r=>r.service===logTab);
-              }).filter(g=>!search.trim()||g.name.toLowerCase().includes(search.toLowerCase()));
-              if(grouped.length===0) return <p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>No records found.</p>;
-              return grouped.map(g=>{
-                const person=people.find(p=>p.name===g.name);
-                const isFlagged=person?.flagged;
-                const av=avColor(g.name);
-                return (
-                  <div key={g.name} style={{background:isFlagged?"#FFF5F5":"#fff",border:`1.5px solid ${isFlagged?"#F0A9A3":"#D0E6E5"}`,borderRadius:14,marginBottom:12,overflow:"hidden"}}>
-                    <div style={{padding:"14px 18px",display:"flex",alignItems:"center",gap:14}}>
-                      <div style={{width:46,height:46,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:16,flexShrink:0}}>{initials(g.name)||"?"}</div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:6}}>
-                          <span style={{fontWeight:700,fontSize:16}}>{g.name}</span>
-                          {isFlagged&&<span style={{fontSize:13,padding:"2px 10px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600}}>⚑ Flagged</span>}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 320px",gap:20,alignItems:"start"}}>
+            {/* LEFT COLUMN — visit log */}
+            <div>
+              {isServiceAvailableToday("Showers")&&(
+                <div style={{display:"flex",gap:14,marginBottom:20}}>
+                  {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{
+                    const queue=records.filter(r=>r.service===svc&&r.check_in>=todayISO());
+                    const active=queue.filter(r=>!r.check_out);
+                    const done=queue.filter(r=>r.check_out);
+                    const used=queue.length;
+                    const full=used>=cap;
+                    return (
+                      <div key={svc} style={{flex:1,background:"#fff",border:`1.5px solid ${full?"#F0A9A3":"#C0E8EC"}`,borderRadius:12,padding:"14px 18px"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                          <span style={{fontSize:15,fontWeight:700,color:C.tealDark}}>{svc}</span>
+                          <span style={{fontSize:13,fontWeight:600,padding:"3px 12px",borderRadius:20,background:full?"#FCECEA":"#EAF7F8",color:full?"#C0392B":"#46b4bf"}}>{full?"Full":`${cap-used} left`}</span>
                         </div>
-                        <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                          {g.records.filter(r=>r.service!==FLAG_ALERT_SERVICE).map(r=>(
-                            <PersonServiceTag key={r.id} r={r} onCheckOut={checkOut} onDelete={deleteRecord} onUpdate={loadData}/>
+                        <div style={{display:"flex",gap:16}}>
+                          {[["Total",used],["Waiting",active.length],["Done",done.length]].map(([l,v])=>(
+                            <div key={l} style={{textAlign:"center"}}>
+                              <p style={{margin:0,fontSize:22,fontWeight:700,color:"#46b4bf"}}>{v}</p>
+                              <p style={{margin:0,fontSize:11,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{l}</p>
+                            </div>
                           ))}
                         </div>
                       </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+                {["All","Day Center","Showers","Laundry","Volunteer","Community Partnership","Drop-in"].map(tab=>(
+                  <button key={tab} onClick={()=>setLogTab(tab)} style={{...btnGhost,fontSize:13,padding:"7px 14px",background:logTab===tab?"#46b4bf":"transparent",color:logTab===tab?"#fff":"#5A7070",borderColor:logTab===tab?"#46b4bf":"#D0E6E5"}}>{tab}</button>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+                <input placeholder="Search by name…" value={search} onChange={e=>setSearch(e.target.value)} style={{...inpStyle,flex:1,minWidth:160}}/>
+                <select value={filterDate} onChange={e=>setFilterDate(e.target.value)} style={{...inpStyle,width:130}}><option value="today">Today</option><option value="all">All time</option></select>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                <p style={{margin:0,fontSize:14,color:"#5A7070"}}>{people.length} people in directory</p>
+                <button onClick={loadData} style={{...btnGhost,fontSize:14}}>Refresh ↻</button>
+              </div>
+              {loading?<p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>Loading…</p>
+              :(()=>{
+                const dateFiltered=filtered.filter(r=>filterDate==="today"?r.check_in>=todayISO():true);
+                const byName={};
+                dateFiltered.forEach(r=>{
+                  if(!byName[r.name]) byName[r.name]={name:r.name,records:[]};
+                  byName[r.name].records.push(r);
+                });
+                const grouped=Object.values(byName).filter(g=>{
+                  if(logTab==="All") return true;
+                  return g.records.some(r=>r.service===logTab);
+                }).filter(g=>!search.trim()||g.name.toLowerCase().includes(search.toLowerCase()));
+                if(grouped.length===0) return <p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>No records found.</p>;
+                return grouped.map(g=>{
+                  const person=people.find(p=>p.name===g.name);
+                  const isFlagged=person?.flagged;
+                  const av=avColor(g.name);
+                  return (
+                    <div key={g.name} style={{background:isFlagged?"#FFF5F5":"#fff",border:`1.5px solid ${isFlagged?"#F0A9A3":"#D0E6E5"}`,borderRadius:14,marginBottom:12,overflow:"hidden"}}>
+                      <div style={{padding:"14px 18px",display:"flex",alignItems:"center",gap:14}}>
+                        <div style={{width:46,height:46,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:16,flexShrink:0}}>{initials(g.name)||"?"}</div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:6}}>
+                            <span style={{fontWeight:700,fontSize:16}}>{g.name}</span>
+                            {isFlagged&&<span style={{fontSize:13,padding:"2px 10px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600}}>⚑ Flagged</span>}
+                          </div>
+                          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                            {g.records.filter(r=>r.service!==FLAG_ALERT_SERVICE).map(r=>(
+                              <PersonServiceTag key={r.id} r={r} onCheckOut={checkOut} onDelete={deleteRecord} onUpdate={loadData}/>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                );
-              });
-            })()}
+                  );
+                });
+              })()}
+            </div>
+
+            {/* RIGHT COLUMN — lockers */}
+            <div>
+              <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Locker & Bin Availability</p>
+              <div style={{marginBottom:22}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:6,marginBottom:10}}>
+                  {Array.from({length:20},(_,i)=>String(i+1)).map(l=>{
+                    const todayStr=new Date().toISOString().slice(0,10);
+                    const occupant=people.find(p=>p.locker===l&&p.locker_date===todayStr);
+                    return (
+                      <div key={l} style={{border:`1.5px solid ${occupant?"#F0A9A3":"#C0E8EC"}`,borderRadius:10,padding:"6px 8px",background:occupant?"#FFF5F5":"#EAF7F8",textAlign:"center"}}>
+                        <p style={{margin:"0 0 2px",fontSize:12,fontWeight:700,color:occupant?C.danger:C.tealDark}}>#{l}</p>
+                        <p style={{margin:"0 0 4px",fontSize:10,color:occupant?C.danger:C.tealDark,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{occupant?occupant.name:"Open"}</p>
+                        <select
+                          value={occupant?.name||""}
+                          onChange={async e=>{
+                            const todayStr=new Date().toISOString().slice(0,10);
+                            const val=e.target.value;
+                            if(occupant) await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                            if(val){const p=people.find(x=>x.name===val);if(p) await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:l,locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});}
+                            loadData();
+                          }}
+                          style={{...inpStyle,padding:"2px 2px",fontSize:10,height:24,borderColor:occupant?C.dangerBorder:C.tealMid}}>
+                          <option value="">{occupant?"Clear…":"Assign…"}</option>
+                          {people.filter(p=>{
+                            const todayStr=new Date().toISOString().slice(0,10);
+                            const checkedInToday=records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE);
+                            const noLocker=!p.locker||p.locker_date!==todayStr;
+                            return checkedInToday&&noLocker;
+                          }).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}}>
+                  {["Bin A","Bin B"].map(l=>{
+                    const todayStr=new Date().toISOString().slice(0,10);
+                    const occupant=people.find(p=>p.locker===l&&p.locker_date===todayStr);
+                    return (
+                      <div key={l} style={{border:`1.5px solid ${occupant?"#F0A9A3":"#C0E8EC"}`,borderRadius:10,padding:"10px 14px",background:occupant?"#FFF5F5":"#EAF7F8"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                          <span style={{fontSize:14,fontWeight:700,color:occupant?C.danger:C.tealDark}}>{l}</span>
+                          <span style={{fontSize:13,color:occupant?C.danger:C.tealDark,fontWeight:500}}>{occupant?occupant.name:"Open"}</span>
+                        </div>
+                        <select
+                          value={occupant?.name||""}
+                          onChange={async e=>{
+                            const todayStr=new Date().toISOString().slice(0,10);
+                            const val=e.target.value;
+                            if(occupant) await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                            if(val){const p=people.find(x=>x.name===val);if(p) await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:l,locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});}
+                            loadData();
+                          }}
+                          style={{...inpStyle,padding:"4px 8px",fontSize:12,height:30,borderColor:occupant?C.dangerBorder:C.tealMid}}>
+                          <option value="">{occupant?"Clear…":"Assign…"}</option>
+                          {people.filter(p=>{
+                            const todayStr=new Date().toISOString().slice(0,10);
+                            const checkedInToday=records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE);
+                            const noLocker=!p.locker||p.locker_date!==todayStr;
+                            return checkedInToday&&noLocker;
+                          }).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
         )}
         {view==="analytics"&&<AnalyticsTab records={records}/>}
-         <p style={{margin:"20px 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Locker & Bin Availability</p>
-            <div style={{marginBottom:22}}>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(5,minmax(0,1fr))",gap:8,marginBottom:10}}>
-                {Array.from({length:20},(_,i)=>String(i+1)).map(l=>{
-                  const todayStr=new Date().toISOString().slice(0,10);
-                  const occupant=people.find(p=>p.locker===l&&p.locker_date===todayStr);
-                  return (
-                    <div key={l} style={{border:`1.5px solid ${occupant?"#F0A9A3":"#C0E8EC"}`,borderRadius:10,padding:"8px 10px",background:occupant?"#FFF5F5":"#EAF7F8",textAlign:"center"}}>
-                      <p style={{margin:"0 0 2px",fontSize:13,fontWeight:700,color:occupant?C.danger:C.tealDark}}>#{l}</p>
-                      <p style={{margin:"0 0 4px",fontSize:11,color:occupant?C.danger:C.tealDark,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{occupant?occupant.name:"Open"}</p>
-                      <select
-                        value={occupant?.name||""}
-                        onChange={async e=>{
-                          const todayStr=new Date().toISOString().slice(0,10);
-                          const val=e.target.value;
-                          if(occupant) await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-                          if(val){const p=people.find(x=>x.name===val);if(p) await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:l,locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});}
-                          loadData();
-                        }}
-                        style={{...inpStyle,padding:"2px 4px",fontSize:11,height:26,borderColor:occupant?C.dangerBorder:C.tealMid}}>
-                        <option value="">{occupant?"Clear…":"Assign…"}</option>
-                        {people.filter(p=>{
-  const todayStr=new Date().toISOString().slice(0,10);
-  const checkedInToday=records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE);
-  const noLocker=!p.locker||p.locker_date!==todayStr;
-  return checkedInToday&&noLocker;
-}).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
-                      </select>
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}}>
-                {["Bin A","Bin B"].map(l=>{
-                  const todayStr=new Date().toISOString().slice(0,10);
-                  const occupant=people.find(p=>p.locker===l&&p.locker_date===todayStr);
-                  return (
-                    <div key={l} style={{border:`1.5px solid ${occupant?"#F0A9A3":"#C0E8EC"}`,borderRadius:10,padding:"10px 14px",background:occupant?"#FFF5F5":"#EAF7F8"}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                        <span style={{fontSize:14,fontWeight:700,color:occupant?C.danger:C.tealDark}}>{l}</span>
-                        <span style={{fontSize:13,color:occupant?C.danger:C.tealDark,fontWeight:500}}>{occupant?occupant.name:"Open"}</span>
-                      </div>
-                      <select
-                        value={occupant?.name||""}
-                        onChange={async e=>{
-                          const todayStr=new Date().toISOString().slice(0,10);
-                          const val=e.target.value;
-                          if(occupant) await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-                          if(val){const p=people.find(x=>x.name===val);if(p) await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:l,locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});}
-                          loadData();
-                        }}
-                        style={{...inpStyle,padding:"4px 8px",fontSize:12,height:30,borderColor:occupant?C.dangerBorder:C.tealMid}}>
-                        <option value="">{occupant?"Clear…":"Assign…"}</option>
-                        {people.filter(p=>{
-  const todayStr=new Date().toISOString().slice(0,10);
-  const checkedInToday=records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE);
-  const noLocker=!p.locker||p.locker_date!==todayStr;
-  return checkedInToday&&noLocker;
-}).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
-                      </select>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
 <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
               <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Add person to system</p>
               <AddPersonPanel people={people} onUpdate={loadData}/>
