@@ -126,7 +126,7 @@ function QRCodeDisplay({ guestNumber }) {
     const img=divRef.current.querySelector("img"),canvas=divRef.current.querySelector("canvas");
     const src=img?img.src:canvas?canvas.toDataURL("image/png"):null;
     if (!src) return;
-    const a=document.createElement("a");a.href=src;a.download=`volunteer-${guestNumber}-qr.png`;a.click();
+    const a=document.createElement("a");a.href=src;a.download=`-${guestNumber}-qr.png`;a.click();
   }
   return (
     <div style={{textAlign:"center"}}>
@@ -145,7 +145,7 @@ function ScanToast({ result, onDone }) {
       <p style={{margin:"0 0 4px",fontSize:19,fontWeight:700,color:isError?"#C0392B":isCheckOut?"#8A5A00":"#2E8A94"}}>
         {isError?"⚠ Not found":isCheckOut?"👋 Checked out":"✓ Checked in"}
       </p>
-      {!isError&&<p style={{margin:0,fontSize:16,color:"#1D2B2B"}}><strong>{result.name}</strong> — Volunteer #{result.guestNumber}</p>}
+      {!isError&&<p style={{margin:0,fontSize:16,color:"#1D2B2B"}}><strong>{result.name}</strong> —  #{result.guestNumber}</p>}
       {isError&&<p style={{margin:0,fontSize:15,color:"#C0392B"}}>{result.message}</p>}
       {!isError&&isCheckOut&&result.duration&&<p style={{margin:"6px 0 0",fontSize:14,color:"#8A5A00"}}>Duration: {result.duration}</p>}
     </div>
@@ -202,7 +202,7 @@ function SimpleBarChart({data,keys,colors,height=200}) {
 }
 
 function SimpleLineChart({data,height=200}) {
-  if(!data||data.length===0) return <p style={{textAlign:"center",color:"#5A7070",fontSize:15,padding:"1rem 0"}}>No completed volunteer check-outs for this period.</p>;
+  if(!data||data.length===0) return <p style={{textAlign:"center",color:"#5A7070",fontSize:15,padding:"1rem 0"}}>No completed  check-outs for this period.</p>;
   const maxVal=Math.max(1,...data.map(d=>d.hours));
   const w=600,h=height-30,pad=10;
   const pts=data.map((d,i)=>({x:pad+(i/Math.max(data.length-1,1))*(w-pad*2),y:h-(d.hours/maxVal)*(h-pad*2)-pad,d}));
@@ -1012,7 +1012,7 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
   }
 
   const serviceOrder=["Day Center","Community Partnership","Drop-in"];
-  const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_SERVICES[s]).sort((a,b)=>{const ai=serviceOrder.indexOf(a),bi=serviceOrder.indexOf(b);if(ai===-1&&bi===-1)return 0;if(ai===-1)return 1;if(bi===-1)return-1;return ai-bi;});
+  const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_SERVICES[s]&&s!=="Volunteer").sort((a,b)=>{const ai=serviceOrder.indexOf(a),bi=serviceOrder.indexOf(b);if(ai===-1&&bi===-1)return 0;if(ai===-1)return 1;if(bi===-1)return-1;return ai-bi;});
   const todayCount = records.filter(r => r.check_in >= todayISO() && r.service !== FLAG_ALERT_SERVICE).length;
   const guestCount = records.filter(r => r.type === "Guest" && r.service !== FLAG_ALERT_SERVICE).length;
   const volCount = records.filter(r => r.type === "Volunteer" && r.service !== FLAG_ALERT_SERVICE).length;
@@ -1387,7 +1387,7 @@ const filtered=records.filter(r=>{
   );
 
   const serviceOrder=["Day Center","Community Partnership","Drop-in"];
-const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_SERVICES[s]).sort((a,b)=>{const ai=serviceOrder.indexOf(a),bi=serviceOrder.indexOf(b);if(ai===-1&&bi===-1)return 0;if(ai===-1)return 1;if(bi===-1)return-1;return ai-bi;});
+const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_SERVICES[s]&&s!=="Volunteer").sort((a,b)=>{const ai=serviceOrder.indexOf(a),bi=serviceOrder.indexOf(b);if(ai===-1&&bi===-1)return 0;if(ai===-1)return 1;if(bi===-1)return-1;return ai-bi;});
 
   return (
     <div style={{minHeight:"100vh",background:"#F7FAFA"}}>
@@ -1430,9 +1430,9 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
 
             <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Please Choose</p>
             <div style={{display:"flex",gap:14,marginBottom:22}}>
-              {["Guest","Volunteer"].map(t=>(
-                <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"14px 0",borderRadius:10,border:form.type===t?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:form.type===t?"#EAF7F8":"#fff",fontWeight:form.type===t?700:400,fontSize:17,cursor:"pointer",color:form.type===t?"#2E8A94":"#5A7070",fontFamily:"inherit"}}>{t}</button>
-              ))}
+            {["Guest","Volunteer"].map(t=>(
+              <button key={t} onClick={()=>setForm(f=>({...f,type:t,service:t==="Volunteer"?"Volunteer":f.service==="Volunteer"?"":f.service}))} style={{flex:1,padding:"14px 0",borderRadius:10,border:form.type===t?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:form.type===t?"#EAF7F8":"#fff",fontWeight:form.type===t?700:400,fontSize:17,cursor:"pointer",color:form.type===t?"#2E8A94":"#5A7070",fontFamily:"inherit"}}>{t}</button>
+            ))}
             </div>
 
             <p style={{margin:"0 0 8px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Name — First time? Just enter your name and check in</p>
@@ -1456,8 +1456,8 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
               )}
             </div>
 
-            <ServiceButtons availableServices={availableServices} form={form} setForm={setForm} setErrors={setErrors} countToday={countToday}/>
-            {errors.service&&<p style={{margin:"-8px 0 10px",fontSize:14,color:"#C0392B"}}>{errors.service}</p>}
+            {form.type!=="Volunteer"&&<ServiceButtons availableServices={availableServices} form={form} setForm={setForm} setErrors={setErrors} countToday={countToday}/>}
+            {form.type!=="Volunteer"&&errors.service&&<p style={{margin:"-8px 0 10px",fontSize:14,color:"#C0392B"}}>{errors.service}</p>}
 
             {form.service==="Day Center"&&(()=>{
               const showersAvail=isServiceAvailableToday("Showers")&&countToday("Showers")<(CAPPED_SERVICES["Showers"]||Infinity);
