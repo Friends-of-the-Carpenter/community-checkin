@@ -205,7 +205,16 @@ function SimpleBarChart({data,keys,colors,height=200}) {
 }
 
 function SimpleLineChart({data,height=200}) {
-  if(!data||data.length===0) return <p style={{textAlign:"center",color:"#5A7070",fontSize:15,padding:"1rem 0"}}>No completed  check-outs for this period.</p>;
+  if(!data||data.length===0) return <p style={{textAlign:"center",color:"#5A7070",fontSize:15,padding:"1rem 0"}}>No completed volunteer check-outs for this period.</p>;
+  if(data.length===1){
+    const fmtH=hrs=>{const hh=Math.floor(hrs),mm=Math.round((hrs%1)*60);return mm>0?`${hh}h ${mm}m`:`${hh}h`;};
+    return (
+      <div style={{textAlign:"center",padding:"20px 0"}}>
+        <p style={{margin:0,fontSize:36,fontWeight:700,color:CHART_COLORS["Volunteer"]}}>{fmtH(data[0].hours)}</p>
+        <p style={{margin:"6px 0 0",fontSize:14,color:"#5A7070"}}>{data[0].date}</p>
+      </div>
+    );
+  }
   const maxVal=Math.max(1,...data.map(d=>d.hours));
   const w=600,h=height-30,pad=10;
   const pts=data.map((d,i)=>({x:pad+(i/Math.max(data.length-1,1))*(w-pad*2),y:h-(d.hours/maxVal)*(h-pad*2)-pad,d}));
