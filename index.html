@@ -661,6 +661,40 @@ function TypeServiceEditor({ r, onSave, onCancel }) {
     </div>
   );
 }
+  function GroupNameEditor({ name, records, onUpdate }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(name);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  async function save() {
+    if(!val.trim()||val.trim()===name){setEditing(false);return;}
+    setSaving(true);
+    try {
+      // Update all records for this person
+      await Promise.all(records.map(r=>
+        api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({name:val.trim()}),headers:{...HEADERS,"Prefer":"return=minimal"}})
+      ));
+      // Update people table
+      await api(`people?name=eq.${encodeURIComponent(name)}`,{method:"PATCH",body:JSON.stringify({name:val.trim()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      setEditing(false); onUpdate();
+    } catch(_){setMsg("Failed to save.");}
+    setSaving(false);
+  }
+
+  if(!editing) return (
+    <button onClick={()=>setEditing(true)} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.teal,textDecoration:"underline dotted",fontFamily:"inherit",padding:0}}>Edit name</button>
+  );
+
+  return (
+    <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+      <input value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>e.key==="Enter"&&save()} style={{...inpStyle,padding:"4px 10px",fontSize:13,width:180,height:30}} autoFocus/>
+      <button onClick={save} disabled={saving||!val.trim()} style={{...btnPrimary,padding:"4px 12px",fontSize:12,opacity:saving||!val.trim()?0.5:1}}>{saving?"…":"Save"}</button>
+      <button onClick={()=>setEditing(false)} style={{...btnGhost,fontSize:12,padding:"4px 8px"}}>Cancel</button>
+      {msg&&<span style={{fontSize:12,color:C.danger}}>⚠ {msg}</span>}
+    </div>
+  );
+}
   function PersonServiceTag({ r, onCheckOut, onDelete, onUpdate }) {
   const [editingPos, setEditingPos] = useState(false);
   const [posVal, setPosVal] = useState(r.queue_position||"");
@@ -1738,9 +1772,10 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
                         <div style={{width:46,height:46,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:16,flexShrink:0}}>{initials(g.name)||"?"}</div>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:6}}>
-                            <span style={{fontWeight:700,fontSize:16}}>{g.name}</span>
-                            {isFlagged&&<span style={{fontSize:13,padding:"2px 10px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600}}>⚑ Flagged</span>}
-                          </div>
+                          <span style={{fontWeight:700,fontSize:16}}>{g.name}</span>
+                          {isFlagged&&<span style={{fontSize:13,padding:"2px 10px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600}}>⚑ Flagged</span>}
+                          <GroupNameEditor name={g.name} records={g.records} onUpdate={loadData}/>
+                        </div>
                           <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
                           {g.records.filter(r=>r.service!==FLAG_ALERT_SERVICE&&(logTab==="All"||r.service===logTab)).map(r=>(
                             <PersonServiceTag key={r.id} r={r} onCheckOut={checkOut} onDelete={deleteRecord} onUpdate={loadData}/>
