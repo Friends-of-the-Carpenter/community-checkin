@@ -1014,7 +1014,7 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
   const serviceOrder=["Day Center","Community Partnership","Drop-in"];
   const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_SERVICES[s]&&s!=="Volunteer").sort((a,b)=>{const ai=serviceOrder.indexOf(a),bi=serviceOrder.indexOf(b);if(ai===-1&&bi===-1)return 0;if(ai===-1)return 1;if(bi===-1)return-1;return ai-bi;});
   const todayCount = new Set(records.filter(r => r.check_in >= todayISO() && r.service !== FLAG_ALERT_SERVICE).map(r => r.name)).size;
-  const guestCount = new Set(records.filter(r => r.type === "Guest" && r.service !== FLAG_ALERT_SERVICE && r.check_in >= todayISO()).map(r => r.name)).size;
+  const guestCount = records.filter(r => r.type === "Guest" && r.service !== FLAG_ALERT_SERVICE && r.check_in >= todayISO()).length;
   const volCount = records.filter(r => r.type === "Volunteer" && r.service !== FLAG_ALERT_SERVICE).length;
 
   return (
