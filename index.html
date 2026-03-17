@@ -88,11 +88,14 @@ function isoToLocalInput(iso) {
 }
 function localInputToIso(val) { if (!val) return null; return new Date(val).toISOString(); }
 function nextAvailablePosition(service, records) {
+  const cap = CAPPED_SERVICES[service];
   const todayRecords = records.filter(r => r.service === service && r.check_in >= todayISO());
   const activeRecords = todayRecords.filter(r => !r.check_out);
   if (activeRecords.length === 0) return 1;
   const max = todayRecords.reduce((m, r) => Math.max(m, r.queue_position || 0), 0);
-  return max + 1;
+  const next = max + 1;
+  if (cap && next > cap) return 1;
+  return next;
 }
 
 const AV_COLORS=[{bg:"#C2E8E6",color:"#1D5C5A"},{bg:"#B8DFE8",color:"#1A4A5C"},{bg:"#C8E6D4",color:"#1A5C35"},{bg:"#E6D4C8",color:"#5C3A1A"},{bg:"#D4C8E6",color:"#3A1A5C"}];
