@@ -484,6 +484,19 @@ function PeopleRemover({people, onRemove, onFlag, onUpdate}) {
   const [flagReason,setFlagReason]=useState("");
   const [flagging,setFlagging]=useState(null);
   const [showQR,setShowQR]=useState(null);
+  const [editingName,setEditingName]=useState(null);
+  const [nameVal,setNameVal]=useState("");
+
+  async function saveName(p){
+    if(!nameVal.trim()||nameVal.trim()===p.name){setEditingName(null);return;}
+    try{
+      await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({name:nameVal.trim()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      // Also update all checkin_records with the old name
+      await api(`checkin_records?name=eq.${encodeURIComponent(p.name)}`,{method:"PATCH",body:JSON.stringify({name:nameVal.trim()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      setEditingName(null);
+      onUpdate();
+    }catch(_){}
+  }
   const filtered=people.filter(p=>{
     const q=query.toLowerCase();
     return(!q||p.name.toLowerCase().includes(q))&&(filter==="all"||(filter==="flagged"&&p.flagged)||(filter==="ok"&&!p.flagged));
@@ -505,10 +518,18 @@ function PeopleRemover({people, onRemove, onFlag, onUpdate}) {
               <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
                 <div style={{width:38,height:38,borderRadius:"50%",background:avColor(p.name).bg,color:avColor(p.name).color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,flexShrink:0}}>{initials(p.name)||"?"}</div>
                 <span style={{fontSize:15,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+                {editingName===p.id?(
+                  <div style={{display:"flex",gap:6,alignItems:"center",marginTop:6,width:"100%"}}>
+                    <input value={nameVal} onChange={e=>setNameVal(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveName(p)} style={{...inpStyle,padding:"6px 10px",fontSize:14,flex:1}} autoFocus/>
+                    <button onClick={()=>saveName(p)} style={{...btnPrimary,padding:"6px 14px",fontSize:13}}>Save</button>
+                    <button onClick={()=>setEditingName(null)} style={{...btnGhost,fontSize:13,padding:"6px 10px"}}>Cancel</button>
+                  </div>
+                ):null}
                 {p.flagged&&<span style={{fontSize:12,padding:"2px 8px",borderRadius:20,background:C.dangerBg,color:C.danger,fontWeight:600,flexShrink:0}}>⚑</span>}
               </div>
              <div style={{display:"flex",gap:7,flexShrink:0,flexWrap:"wrap"}}>
                 <button onClick={()=>setShowQR(showQR===p.id?null:p.id)} style={{...btnGhost,fontSize:13,padding:"6px 12px",color:C.teal,borderColor:C.tealMid}}>QR</button>
+                <button onClick={()=>{setEditingName(p.id);setNameVal(p.name);}} style={{...btnGhost,fontSize:13,padding:"6px 12px",color:C.teal,borderColor:C.tealMid}}>Edit</button>
                 <select
                   value={p.default_service||""}
                   onChange={async e=>{
