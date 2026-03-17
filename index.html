@@ -330,7 +330,37 @@ function ManualAddToQueue({ svc, people, records, numLabel, onAdd }) {
     </div>
   );
 }
+function AssignQueueNumber({ r, numLabel, onUpdate }) {
+  const [editing, setEditing] = useState(!r.queue_position);
+  const [val, setVal] = useState(r.queue_position||"");
+  const [saving, setSaving] = useState(false);
 
+  async function save() {
+    if(!val) return;
+    setSaving(true);
+    try {
+      await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({queue_position:parseInt(val)}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      setEditing(false);
+      onUpdate&&onUpdate();
+    } catch(_){}
+    setSaving(false);
+  }
+
+  if(!editing) return (
+    <p style={{margin:"2px 0 0",fontSize:13,color:"#5A7070"}}>
+      {numLabel} #{r.queue_position}
+      <button onClick={()=>setEditing(true)} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:"#46b4bf",textDecoration:"underline dotted",fontFamily:"inherit",marginLeft:8}}>edit</button>
+    </p>
+  );
+
+  return (
+    <div style={{display:"flex",gap:6,alignItems:"center",marginTop:4}}>
+      <input type="number" min="1" placeholder={`${numLabel} #`} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>e.key==="Enter"&&save()} style={{...inpStyle,padding:"4px 8px",fontSize:13,width:90,height:30}}/>
+      <button onClick={save} disabled={saving||!val} style={{...btnSuccess,padding:"4px 12px",fontSize:12,opacity:saving||!val?0.5:1}}>{saving?"…":"Assign"}</button>
+      {r.queue_position&&<button onClick={()=>setEditing(false)} style={{...btnGhost,fontSize:12,padding:"4px 8px"}}>Cancel</button>}
+    </div>
+  );
+}
 function ShowerLaundryPanel({ records, people, onMarkComplete, onCancel, onManualAdd }) {
   const services = Object.keys(CAPPED_SERVICES);
   return (
@@ -375,7 +405,7 @@ function ShowerLaundryPanel({ records, people, onMarkComplete, onCancel, onManua
                   <div style={{width:44,height:44,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:15,flexShrink:0}}>{initials(r.name)||"?"}</div>
                   <div style={{flex:1,minWidth:0}}>
                     <span style={{fontWeight:600,fontSize:16}}>{r.name}</span>
-                    <p style={{margin:"2px 0 0",fontSize:13,color:"#5A7070"}}>{r.queue_position?`${numLabel} #${r.queue_position}`:numLabel+" # unassigned"} · In: {fmt(r.check_in)}</p>
+                    <AssignQueueNumber r={r} numLabel={numLabel} onUpdate={onManualAdd||onMarkComplete}/>
                   </div>
                   <button onClick={()=>onMarkComplete(r.id)} style={{...btnSuccess,flexShrink:0}}>✓ Done</button>
                   <button onClick={()=>onCancel(r.id)} style={{...btnGhost,fontSize:14,color:C.danger,borderColor:C.dangerBorder,flexShrink:0}}>Cancel</button>
