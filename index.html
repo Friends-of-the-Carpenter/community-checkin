@@ -729,6 +729,7 @@ function TypeServiceEditor({ r, onSave, onCancel }) {
 }
   function PersonServiceTag({ r, onCheckOut, onDelete, onUpdate }) {
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [inProcess, setInProcess] = useState(null);
   const [editingPos, setEditingPos] = useState(false);
   const [posVal, setPosVal] = useState(r.queue_position||"");
   const [saving, setSaving] = useState(false);
@@ -799,8 +800,8 @@ function TypeServiceEditor({ r, onSave, onCancel }) {
           <button onClick={()=>setEditingPos(true)} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.teal,textDecoration:"underline dotted",fontFamily:"inherit",padding:0}}>+ set #</button>
         )}
         {!r.check_out&&!isShowerLaundry&&<span style={{fontSize:12,padding:"1px 8px",borderRadius:20,background:"#fff",color:C.teal,border:`1px solid ${C.tealMid}`}}>Active</span>}
-        {!r.check_out&&isShowerLaundry&&<>
-          <span style={{fontSize:12,padding:"1px 8px",borderRadius:20,background:C.danger,color:"#fff",fontWeight:600}}>Waiting</span>
+{!r.check_out&&isShowerLaundry&&<>
+          <button onClick={()=>setInProcess(ip=>ip===r.id?null:r.id)} style={{fontSize:12,padding:"1px 8px",borderRadius:20,background:inProcess===r.id?"#E6A817":C.danger,color:"#fff",fontWeight:600,border:"none",cursor:"pointer"}}>{inProcess===r.id?"In Process":"Waiting"}</button>
           <button onClick={()=>onCheckOut(r.id)} style={{background:C.success,color:"#fff",border:"none",borderRadius:20,padding:"1px 8px",fontSize:12,fontWeight:600,cursor:"pointer"}}>✓</button>
         </>}
         {r.locker_used&&<span style={{fontSize:12,padding:"1px 8px",borderRadius:20,background:"#FEF7E6",color:"#8A5A00",fontWeight:500}}>🔑 Locker {r.locker_used}</span>}
