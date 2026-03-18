@@ -1537,11 +1537,11 @@ useEffect(()=>{
     if(p.flagged)setFlagAlert(p);else setFlagAlert(null);
   }
   function countToday(s){return records.filter(r=>r.service===s&&r.check_in>=todayISO()).length;}
-  function validate(){
-    const e={};
-    if(!form.name.trim()&&!form.guestNumber.trim())e.name="Name or guest number is required";
-    if(!form.service)e.service="Please select a service";
-    if(form.service&&CAPPED_SERVICES[form.service]&&countToday(form.service)>=CAPPED_SERVICES[form.service])e.service=`${form.service} is full for today.`;
+function validate() {
+    const e = {};
+    if (!form.name.trim() && !form.guestNumber.trim()) e.name = "Name or guest number is required";
+    if (!form.service && form.type !== "Volunteer") e.service = "Please select a service";
+    if (form.service && CAPPED_SERVICES[form.service] && countToday(form.service) >= CAPPED_SERVICES[form.service]) e.service = `${form.service} is full for today.`;
     return e;
   }
   async function submit(){
