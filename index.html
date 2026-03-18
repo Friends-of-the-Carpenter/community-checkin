@@ -1224,8 +1224,9 @@ function PublicApp({ records, people, services, loading, dbError, loadData }) {
       } catch (_) { setErrors({ submit: "Failed to register guest." }); setSaving(false); return; }
     } else { guestNumber = String(existing.guest_number); }
     const now = new Date().toISOString();
-    const position=form.service&&CAPPED_SERVICES[form.service]&&form.service!=="Laundry"?nextAvailablePosition(form.service,records):null;
-    const toInsert = [{ name, member_id: form.memberId || null, type: form.type, service: form.service, notes: form.notes || null, queue_position: position, check_in: now, check_out: null }];
+const serviceToUse=form.type==="Volunteer"?"Volunteer":form.service;
+    const position=serviceToUse&&CAPPED_SERVICES[serviceToUse]&&serviceToUse!=="Laundry"?nextAvailablePosition(serviceToUse,records):null;
+    const toInsert=[{name,member_id:form.memberId||null,type:form.type,service:serviceToUse,notes:form.notes||null,queue_position:position,check_in:now,check_out:null}];
     const addOns = [];
     if (form.service === "Day Center") {
       if (form.addShowers && countToday("Showers") < CAPPED_SERVICES["Showers"]) { const p = nextAvailablePosition("Showers", records); toInsert.push({ name, member_id: form.memberId || null, type: form.type, service: "Showers", notes: form.notes || null, queue_position: p, check_in: now, check_out: null }); addOns.push({ service: "Showers", position: p }); }
