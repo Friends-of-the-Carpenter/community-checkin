@@ -443,7 +443,8 @@ function ShowerLaundryPanel({ records, people, onMarkComplete, onCancel, onManua
                     <span style={{fontWeight:600,fontSize:16}}>{r.name}</span>
                     <AssignQueueNumber r={r} numLabel={numLabel} onUpdate={onManualAdd||onMarkComplete}/>
                   </div>
-                  <button onClick={()=>onMarkComplete(r.id)} style={{...btnSuccess,flexShrink:0,background:C.danger}}>Waiting</button>
+                  <span style={{fontSize:14,padding:"5px 14px",borderRadius:20,background:C.danger,color:"#fff",fontWeight:600,flexShrink:0}}>Waiting</span>
+                  <button onClick={()=>onMarkComplete(r.id)} style={{...btnSuccess,flexShrink:0}}>✓</button>
                   <button onClick={()=>onCancel(r.id)} style={{...btnGhost,fontSize:14,color:C.danger,borderColor:C.dangerBorder,flexShrink:0}}>Cancel</button>
                 </div>
               );
