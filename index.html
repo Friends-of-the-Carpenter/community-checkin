@@ -1674,9 +1674,11 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
             <p style={{margin:0,fontWeight:700,fontSize:18}}>Admin panel</p>
           </div>
-          <div style={{display:"flex",borderBottom:"2px solid #C0E8EC",marginBottom:28}}>
+          <div style={{display:"flex",borderBottom:"2px solid #C0E8EC",marginBottom:28,flexWrap:"wrap"}}>
           <Tab id="checkin" label="Check in"/>
           <Tab id="log" label={`Visit log (${new Set(realRecords.filter(r=>r.check_in>=todayISO()&&(NO_DURATION_SERVICES.includes(r.service)||!r.check_out||(new Date(r.check_out)-new Date(r.check_in))/60000>=MIN_DURATION_MINUTES)).map(r=>r.name)).size})`}/>
+          <Tab id="manage" label="Manage"/>
+          <Tab id="analytics" label="Analytics"/>
           </div>
                   {view==="checkin"&&(
           <div>
@@ -1912,16 +1914,17 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
             </div>
           </div>
         )}
-        {view==="analytics"&&<AnalyticsTab records={records}/>}
-<div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
+{view==="manage"&&(
+          <div>
+            <div style={{borderBottom:"1px solid #D0E6E5",paddingBottom:20,marginBottom:20}}>
               <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Add person to system</p>
               <AddPersonPanel people={people} onUpdate={loadData}/>
             </div>
-            <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
+            <div style={{borderBottom:"1px solid #D0E6E5",paddingBottom:20,marginBottom:20}}>
               <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Manage people</p>
               <PeopleRemover people={people} onRemove={async(p)=>{await api(`people?id=eq.${p.id}`,{method:"DELETE"});loadData();}} onFlag={flagPerson} onUpdate={loadData}/>
             </div>
-            <div style={{borderTop:"1px solid #D0E6E5",paddingTop:20,marginBottom:20}}>
+            <div style={{borderBottom:"1px solid #D0E6E5",paddingBottom:20,marginBottom:20}}>
               <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service types</p>
               <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:12}}>
                 {services.map(s=>(<span key={s} style={{display:"flex",alignItems:"center",gap:5,fontSize:14,padding:"6px 14px",background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:20,color:"#2E8A94",fontWeight:500}}>{s}{CAPPED_SERVICES[s]?<span style={{fontSize:12,opacity:0.7}}> · {CAPPED_SERVICES[s]}</span>:null}<button onClick={()=>removeService(s)} style={{background:"none",border:"none",cursor:"pointer",color:"#2E8A94",padding:"0 2px",fontSize:16,lineHeight:1,opacity:0.6}}>×</button></span>))}
@@ -1931,12 +1934,11 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
                 <button onClick={addService} style={{...btnOutline,padding:"10px 20px",fontSize:15}}>Add</button>
               </div>
             </div>
-                <div style={{borderTop:"2px solid #C0E8EC",marginTop:40,paddingTop:28}}>
-          <h2 style={{margin:"0 0 24px",fontSize:22,fontWeight:700}}>Analytics</h2>
-          <AnalyticsTab records={records}/>
+            <button onClick={exportCSV} style={{...btnOutline,width:"100%",textAlign:"center",padding:13,fontSize:15}}>Export all check-ins as CSV ↓</button>
+          </div>
+        )}
+        {view==="analytics"&&<AnalyticsTab records={records}/>}
         </div>
-          <button onClick={exportCSV} style={{...btnOutline,width:"100%",textAlign:"center",padding:13,fontSize:15}}>Export all check-ins as CSV ↓</button>
-        </div> 
       </div>
     </div>
   );
