@@ -33,6 +33,7 @@ const SUPABASE_URL = "https://bnkdmdcinmbcuueakhug.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJua2RtZGNpbm1iY3V1ZWFraHVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMzQyNTYsImV4cCI6MjA4ODkxMDI1Nn0.UnURxxIweDAYik0UXfZLtdB33q-9DPah2kwUQKL9oVY";
 const HEADERS = { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` };
 const CAPPED_SERVICES = { "Showers": 25, "Laundry": 16 };
+const CAPPED_SERVICES_CUTOFF = { "Showers": "13:30", "Laundry": "12:30" };
 const CAPPED_SERVICES_DAYS = { "Showers": [2,3,4], "Laundry": [2,3,4] };
 const NO_DURATION_SERVICES = ["Showers", "Laundry"];
 const MIN_DURATION_MINUTES = 1;
@@ -64,7 +65,16 @@ function api(path, opts={}) {
 function isServiceAvailableToday(s) {
   const days = CAPPED_SERVICES_DAYS[s];
   if (!days) return true;
-  return days.includes(new Date().getDay());
+  if (!days.includes(new Date().getDay())) return false;
+  const cutoff = CAPPED_SERVICES_CUTOFF[s];
+  if (cutoff) {
+    const now = new Date();
+    const [h,m] = cutoff.split(":").map(Number);
+    const cutoffTime = new Date();
+    cutoffTime.setHours(h,m,0,0);
+    if (now > cutoffTime) return false;
+  }
+  return true;
 }
 function todayISO() { const d=new Date(); d.setHours(0,0,0,0); return d.toISOString(); }
 function initials(name) { return name.trim().split(" ").filter(Boolean).map(w=>w[0].toUpperCase()).slice(0,2).join(""); }
@@ -433,7 +443,7 @@ function ShowerLaundryPanel({ records, people, onMarkComplete, onCancel, onManua
                     <span style={{fontWeight:600,fontSize:16}}>{r.name}</span>
                     <AssignQueueNumber r={r} numLabel={numLabel} onUpdate={onManualAdd||onMarkComplete}/>
                   </div>
-                  <button onClick={()=>onMarkComplete(r.id)} style={{...btnSuccess,flexShrink:0}}>✓ Done</button>
+                  <button onClick={()=>onMarkComplete(r.id)} style={{...btnSuccess,flexShrink:0,background:C.danger}}>Waiting</button>
                   <button onClick={()=>onCancel(r.id)} style={{...btnGhost,fontSize:14,color:C.danger,borderColor:C.dangerBorder,flexShrink:0}}>Cancel</button>
                 </div>
               );
