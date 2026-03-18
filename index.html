@@ -201,7 +201,7 @@ function SimpleBarChart({data,keys,colors,height=200}) {
               const pct=(d[k]||0)/maxVal*100;
               return (
                 <div key={k} style={{width:barW,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                  {d[k]>0&&<span style={{fontSize:11,color:"#5A7070"}}>{d[k]}</span>}
+                  {d[k]>0&&<span style={{fontSize:14,color:"#5A7070"}}>{d[k]}</span>}
                   <div style={{width:"100%",height:`${pct*(height-36)/100}px`,background:colors[k],borderRadius:"3px 3px 0 0",minHeight:d[k]>0?4:0}}/>
                 </div>
               );
