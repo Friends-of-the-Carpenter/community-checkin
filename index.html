@@ -1762,18 +1762,15 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
             {/* LEFT COLUMN — visit log */}
             <div>
 {isServiceAvailableToday("Showers")&&(
-          <div style={{display:"flex",gap:14,marginBottom:20}}>
+          <div style={{display:"flex",gap:8,marginBottom:12}}>
             {Object.keys(CAPPED_SERVICES).map(svc=>(
-              <div key={svc} style={{flex:1,display:"flex",justifyContent:"space-between",alignItems:"center",background:"#fff",border:`1.5px solid ${closedServices[svc]?"#F0A9A3":"#C0E8EC"}`,borderRadius:12,padding:"12px 18px"}}>
-                <span style={{fontSize:15,fontWeight:600,color:closedServices[svc]?C.danger:C.tealDark}}>{svc}</span>
-                <button onClick={()=>setClosedServices(p=>{
-                  const next={...p,[svc]:!p[svc]};
-                  sessionStorage.setItem("closedServices",JSON.stringify(next));
-                  return next;
-                })} style={{...closedServices[svc]?btnPrimary:btnGhost,fontSize:13,padding:"6px 16px",background:closedServices[svc]?"#46b4bf":undefined}}>
-                  {closedServices[svc]?"Reopen":"Close"}
-                </button>
-              </div>
+              <button key={svc} onClick={()=>setClosedServices(p=>{
+                const next={...p,[svc]:!p[svc]};
+                sessionStorage.setItem("closedServices",JSON.stringify(next));
+                return next;
+              })} style={{fontSize:12,fontWeight:600,padding:"3px 12px",borderRadius:20,border:"none",cursor:"pointer",background:closedServices[svc]?"#EAF7F8":C.danger,color:closedServices[svc]?C.tealDark:"#fff"}}>
+                {closedServices[svc]?`↺ Reopen ${svc}`:`✕ Close ${svc}`}
+              </button>
             ))}
           </div>
         )}
