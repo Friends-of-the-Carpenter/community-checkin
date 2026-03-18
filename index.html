@@ -1127,7 +1127,7 @@ async function handleCheckOut(r) {
 }
 
 // ── PUBLIC APP ───────────────────────────────────────────────
-function PublicApp({ records, people, services, loading, dbError, loadData }) {
+function PublicApp({ records, people, services, loading, dbError, loadData, closedServices={} }) {
   const [pubView, setPubView] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [suggestions, setSuggestions] = useState([]);
@@ -1269,7 +1269,7 @@ const serviceToUse=form.type==="Volunteer"?"Volunteer":form.service;
   }
 
   const serviceOrder=["Day Center","Community Partnership","Drop-in"];
-  const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_SERVICES[s]&&s!=="Volunteer").sort((a,b)=>{const ai=serviceOrder.indexOf(a),bi=serviceOrder.indexOf(b);if(ai===-1&&bi===-1)return 0;if(ai===-1)return 1;if(bi===-1)return-1;return ai-bi;});
+  const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_SERVICES[s]&&s!=="Volunteer"&&!closedServices[s]).sort((a,b)=>{const ai=serviceOrder.indexOf(a),bi=serviceOrder.indexOf(b);if(ai===-1&&bi===-1)return 0;if(ai===-1)return 1;if(bi===-1)return-1;return ai-bi;});
   const todayCount = new Set(records.filter(r => r.check_in >= todayISO() && r.service !== FLAG_ALERT_SERVICE).map(r => r.name)).size;
   const guestCount = new Set(records.filter(r => r.type === "Guest" && r.service !== FLAG_ALERT_SERVICE && r.check_in >= todayISO()).map(r => r.name)).size;
   const volCount = records.filter(r => r.type === "Volunteer" && r.service !== FLAG_ALERT_SERVICE).length;
@@ -1455,8 +1455,7 @@ function AddPersonPanel({ people, onUpdate }) {
   );
 }
   function AdminApp() {
-  const [closedServices, setClosedServices] = useState(()=>{
-  try{return JSON.parse(sessionStorage.getItem("closedServices")||"{}");}catch{return {};}});
+  const [closedServices, setClosedServices] = useState({});
   const [view,setView]=useState("checkin");
   const [form,setForm]=useState(emptyForm);
   const [records,setRecords]=useState([]);
@@ -1499,7 +1498,9 @@ function AddPersonPanel({ people, onUpdate }) {
       const [rRes,sRes,pRes]=await Promise.all([api("checkin_records?order=check_in.desc"),api("checkin_services?order=name.asc"),api("people?order=name.asc")]);
       if(!rRes.ok||!sRes.ok||!pRes.ok) throw new Error();
       const [rData,sData,pData]=await Promise.all([rRes.json(),sRes.json(),pRes.json()]);
-      setRecords(rData);setServices(sData.map(s=>s.name));setPeople(pData);setDbError(null);
+      setRecords(rData);setServices(sData.map(s=>s.name));setPeople(pData);
+      const closedMap={};sData.forEach(s=>{if(s.closed)closedMap[s.name]=true;});
+      setClosedServices(closedMap);setDbError(null);
       // Clear locker_used from records older than today
       const staleLockers=rData.filter(r=>r.locker_used&&r.check_in<todayISO());
       if(staleLockers.length>0){
@@ -1833,11 +1834,11 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
               {isServiceAvailableToday("Showers")&&(
           <div style={{display:"flex",gap:8,marginBottom:12}}>
             {Object.keys(CAPPED_SERVICES).map(svc=>(
-              <button key={svc} onClick={()=>setClosedServices(p=>{
-                const next={...p,[svc]:!p[svc]};
-                sessionStorage.setItem("closedServices",JSON.stringify(next));
-                return next;
-              })} style={{fontSize:12,fontWeight:600,padding:"7px 14px",borderRadius:10,border:"1px solid",borderColor:"#D0E6E5",cursor:"pointer",background:closedServices[svc]?"#FFF":C.danger,color:closedServices[svc]?C.success:"#fff"}}>
+              <button key={svc} onClick={async()=>{
+                const newVal=!closedServices[svc];
+                await api(`checkin_services?name=eq.${encodeURIComponent(svc)}`,{method:"PATCH",body:JSON.stringify({closed:newVal}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                loadData();
+              }} style={{fontSize:12,fontWeight:600,padding:"7px 14px",borderRadius:10,border:"1px solid",borderColor:"#D0E6E5",cursor:"pointer",background:closedServices[svc]?"#FFF":C.danger,color:closedServices[svc]?C.success:"#fff"}}>
                 {closedServices[svc]?`↺ Reopen ${svc}`:`✕ Close ${svc}`}
               </button>
             ))}
