@@ -179,7 +179,7 @@ function FlagAlertPopup({ alerts, onDismiss }) {
 function SimpleBarChart({data,keys,colors,height=200}) {
   if(!data||data.length===0) return <p style={{textAlign:"center",color:"#5A7070",fontSize:15,padding:"1rem 0"}}>No data for this period.</p>;
   const maxVal=Math.max(1,...data.flatMap(d=>keys.map(k=>d[k]||0)));
-  const barW=Math.max(10,Math.floor(320/data.length)-4);
+  const barW=24;
   return (
     <div style={{overflowX:"auto"}}>
       <div style={{display:"flex",alignItems:"flex-end",gap:4,height,minWidth:data.length*((barW*keys.length)+8),paddingBottom:15}}>
