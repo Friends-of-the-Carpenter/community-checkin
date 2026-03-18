@@ -1768,7 +1768,7 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
                 const next={...p,[svc]:!p[svc]};
                 sessionStorage.setItem("closedServices",JSON.stringify(next));
                 return next;
-              })} style={{fontSize:12,fontWeight:600,padding:"7px 14px",borderRadius:10,border:"1px solid",borderColor:"#D0E6E5",cursor:"pointer",background:closedServices[svc]?"#FFF":C.danger,color:closedServices[svc]?C.tealDark:"#fff"}}>
+              })} style={{fontSize:12,fontWeight:600,padding:"7px 14px",borderRadius:10,border:"1px solid",borderColor:"#D0E6E5",cursor:"pointer",background:closedServices[svc]?"#FFF":C.danger,color:closedServices[svc]?C.textMuted:"#fff"}}>
                 {closedServices[svc]?`↺ Reopen ${svc}`:`✕ Close ${svc}`}
               </button>
             ))}
