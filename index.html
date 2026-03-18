@@ -1955,7 +1955,9 @@ function Root() {
       const [rRes,sRes,pRes]=await Promise.all([api("checkin_records?order=check_in.desc"),api("checkin_services?order=name.asc"),api("people?order=name.asc")]);
       if(!rRes.ok||!sRes.ok||!pRes.ok) throw new Error();
       const [rData,sData,pData]=await Promise.all([rRes.json(),sRes.json(),pRes.json()]);
-      setRecords(rData);setServices(sData.map(s=>s.name));setPeople(pData);setDbError(null);
+      setRecords(rData);setServices(sData.map(s=>s.name));setPeople(pData);
+      const closedMap={};sData.forEach(s=>{if(s.closed)closedMap[s.name]=true;});
+      setClosedServices(closedMap);setDbError(null);
     } catch(_){setDbError("Could not connect to database.");}
     setLoading(false);
   },[]);
