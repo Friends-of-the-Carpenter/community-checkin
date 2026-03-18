@@ -1758,9 +1758,7 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
           </div>
         )}
 {view==="log"&&(
-          <div style={{display:"grid",gridTemplateColumns:"1fr 320px",gap:20,alignItems:"start"}}>
-            {/* LEFT COLUMN — visit log */}
-             {isServiceAvailableToday("Showers")&&(
+    {isServiceAvailableToday("Showers")&&(
           <div style={{display:"flex",gap:8,marginBottom:12}}>
             {Object.keys(CAPPED_SERVICES).map(svc=>(
               <button key={svc} onClick={()=>setClosedServices(p=>{
@@ -1773,6 +1771,8 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
             ))}
           </div>
         )}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 320px",gap:20,alignItems:"start"}}>
+            {/* LEFT COLUMN — visit log */}
             <div>
               <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
                 {["All","Day Center","Showers","Laundry","Volunteer","Community Partnership","Drop-in"].map(tab=>(
