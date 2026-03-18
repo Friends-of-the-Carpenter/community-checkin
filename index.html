@@ -799,7 +799,6 @@ function TypeServiceEditor({ r, onSave, onCancel }) {
         )}
         {!r.check_out&&<span style={{fontSize:12,padding:"1px 8px",borderRadius:20,background:"#fff",color:C.teal,border:`1px solid ${C.tealMid}`}}>Active</span>}
         {r.locker_used&&<span style={{fontSize:12,padding:"1px 8px",borderRadius:20,background:"#FEF7E6",color:"#8A5A00",fontWeight:500}}>🔑 Locker {r.locker_used}</span>}
-        {!r.check_out&&isShowerLaundry&&<button onClick={()=>onCheckOut(r.id)} style={{...btnSuccess,fontSize:12,padding:"3px 10px"}}>✓ Done</button>}
         {!r.check_out&&!isShowerLaundry&&<button onClick={()=>onCheckOut(r.id)} style={{...btnOutline,fontSize:12,padding:"3px 10px"}}>Check out</button>}
         {confirmDelete===r.id?(
           <>
