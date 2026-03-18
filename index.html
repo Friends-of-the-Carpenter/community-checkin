@@ -797,7 +797,8 @@ function TypeServiceEditor({ r, onSave, onCancel }) {
         {isShowerLaundry&&!r.queue_position&&!editingPos&&(
           <button onClick={()=>setEditingPos(true)} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.teal,textDecoration:"underline dotted",fontFamily:"inherit",padding:0}}>+ set #</button>
         )}
-        {!r.check_out&&<span style={{fontSize:12,padding:"1px 8px",borderRadius:20,background:"#fff",color:C.teal,border:`1px solid ${C.tealMid}`}}>Active</span>}
+        {!r.check_out&&!isShowerLaundry&&<span style={{fontSize:12,padding:"1px 8px",borderRadius:20,background:"#fff",color:C.teal,border:`1px solid ${C.tealMid}`}}>Active</span>}
+        {!r.check_out&&isShowerLaundry&&<button onClick={()=>onCheckOut(r.id)} style={{background:C.danger,color:"#fff",border:"none",borderRadius:20,padding:"1px 8px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Waiting</button>}
         {r.locker_used&&<span style={{fontSize:12,padding:"1px 8px",borderRadius:20,background:"#FEF7E6",color:"#8A5A00",fontWeight:500}}>🔑 Locker {r.locker_used}</span>}
         {!r.check_out&&!isShowerLaundry&&<button onClick={()=>onCheckOut(r.id)} style={{...btnOutline,fontSize:12,padding:"3px 10px"}}>Check out</button>}
         {confirmDelete===r.id?(
