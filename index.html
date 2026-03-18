@@ -729,7 +729,7 @@ function TypeServiceEditor({ r, onSave, onCancel }) {
 }
   function PersonServiceTag({ r, onCheckOut, onDelete, onUpdate }) {
   const [confirmDelete, setConfirmDelete] = useState(null);
-  const [inProcess, setInProcess] = useState(null);
+  const [inProcess, setInProcess] = useState(false);
   const [editingPos, setEditingPos] = useState(false);
   const [posVal, setPosVal] = useState(r.queue_position||"");
   const [saving, setSaving] = useState(false);
