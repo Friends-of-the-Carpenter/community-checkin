@@ -175,21 +175,33 @@ function FlagAlertPopup({ alerts, onDismiss }) {
     </div>
   );
 }
-
 function SimpleBarChart({data,keys,colors,height=200}) {
+  const containerRef = useRef(null);
+  const [containerWidth, setContainerWidth] = useState(320);
+
+  useEffect(()=>{
+    if(!containerRef.current) return;
+    const ro = new ResizeObserver(entries=>{
+      for(let e of entries) setContainerWidth(e.contentRect.width);
+    });
+    ro.observe(containerRef.current);
+    return()=>ro.disconnect();
+  },[]);
+
   if(!data||data.length===0) return <p style={{textAlign:"center",color:"#5A7070",fontSize:15,padding:"1rem 0"}}>No data for this period.</p>;
   const maxVal=Math.max(1,...data.flatMap(d=>keys.map(k=>d[k]||0)));
-  const barW=24;
+  const groupW=Math.max(keys.length*16+8, Math.floor(containerWidth/data.length)-4);
+  const barW=Math.max(8,Math.floor((groupW-8)/keys.length));
   return (
-    <div style={{overflowX:"auto"}}>
-      <div style={{display:"flex",alignItems:"flex-end",gap:4,height,minWidth:data.length*((barW*keys.length)+8),paddingBottom:15}}>
+    <div ref={containerRef} style={{overflowX:"auto"}}>
+      <div style={{display:"flex",alignItems:"flex-end",gap:4,height,minWidth:data.length*(groupW+4),paddingBottom:15}}>
         {data.map((d,i)=>(
-          <div key={i} style={{display:"flex",alignItems:"flex-end",gap:2,flexShrink:0}}>
+          <div key={i} style={{display:"flex",alignItems:"flex-end",gap:2,flexShrink:0,width:groupW}}>
             {keys.map(k=>{
               const pct=(d[k]||0)/maxVal*100;
               return (
                 <div key={k} style={{width:barW,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                  {d[k]>0&&<span style={{fontSize:13,color:"#5A7070"}}>{d[k]}</span>}
+                  {d[k]>0&&<span style={{fontSize:11,color:"#5A7070"}}>{d[k]}</span>}
                   <div style={{width:"100%",height:`${pct*(height-36)/100}px`,background:colors[k],borderRadius:"3px 3px 0 0",minHeight:d[k]>0?4:0}}/>
                 </div>
               );
@@ -198,7 +210,7 @@ function SimpleBarChart({data,keys,colors,height=200}) {
         ))}
       </div>
       <div style={{display:"flex",gap:4,overflowX:"auto",paddingTop:4}}>
-        {data.map((d,i)=><span key={i} style={{fontSize:13,color:"#8AA5A5",flexShrink:0,width:(barW*keys.length)+(keys.length-1)*2,textAlign:"center",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{d.date}</span>)}
+        {data.map((d,i)=><span key={i} style={{fontSize:11,color:"#8AA5A5",flexShrink:0,width:groupW+4,textAlign:"center",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{d.date}</span>)}
       </div>
     </div>
   );
