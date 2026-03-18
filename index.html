@@ -1304,7 +1304,7 @@ const serviceToUse=form.type==="Volunteer"?"Volunteer":form.service;
               return (
                 <div key={svc} style={{flex:1,background:closed?"#F7FAFA":full?"#FCECEA":"#EAF7F8",border:`1.5px solid ${closed?"#D0E6E5":full?"#F0A9A3":"#C0E8EC"}`,borderRadius:12,padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <span style={{fontSize:15,fontWeight:600,color:closed?C.textMuted:full?"#C0392B":"#2E8A94"}}>{svc}</span>
-                  <span style={{fontSize:14,fontWeight:500,color:closed?C.textMuted:full?"#C0392B":"#46b4bf",background:closed?"#F0F0F0":full?"transparent":"#fff",padding:"4px 14px",borderRadius:20,border:`1px solid ${closed?"#D0E6E5":full?"#F0A9A3":"#C0E8EC"}`}}>{closed?"Closed":full?"Full":`${avail} left`}</span>
+                  <span style={{fontSize:14,fontWeight:500,color:closed?"#fff":full?"#C0392B":"#46b4bf",background:closed?"#C0392B":full?"transparent":"#fff",padding:"4px 14px",borderRadius:20,border:`1px solid ${closed?"#C0392B":full?"#F0A9A3":"#C0E8EC"}`}}>{closed?"Closed":full?"Full":`${avail} left`}</span>
                 </div>
                 );
               })}
