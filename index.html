@@ -181,7 +181,7 @@ function SimpleBarChart({data,keys,colors,height=200}) {
   const maxVal=Math.max(1,...data.flatMap(d=>keys.map(k=>d[k]||0)));
   const barW=Math.max(10,Math.floor(320/data.length)-4);
   return (
-    <div style={{overflowX:"visible"}}>
+    <div style={{overflowX:"auto"}}>
       <div style={{display:"flex",alignItems:"flex-end",gap:4,height,minWidth:data.length*((barW*keys.length)+8),paddingBottom:15}}>
         {data.map((d,i)=>(
           <div key={i} style={{display:"flex",alignItems:"flex-end",gap:2,flexShrink:0}}>
@@ -976,9 +976,11 @@ function AnalyticsTab({records}) {
             <p style={{margin:"0 0 16px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Showers & Laundry</p>
             <SimpleBarChart data={chartData} keys={["Showers","Laundry"]} colors={{"Showers":CHART_COLORS["Showers"],"Laundry":CHART_COLORS["Laundry"]}}/>
           </div>
-          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:20,marginBottom:20}}>
+          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:20,marginBottom:20,overflow:"hidden"}}>
             <p style={{margin:"0 0 16px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Day Center, Community Partnership & Drop-in</p>
-            <SimpleBarChart data={chartData} keys={["Day Center","Community Partnership","Drop-in"]} colors={{"Day Center":CHART_COLORS["Day Center"],"Community Partnership":CHART_COLORS["Community Partnership"],"Drop-in":CHART_COLORS["Drop-in"]}}/>
+            <div style={{overflowX:"auto"}}>
+              <SimpleBarChart data={chartData} keys={["Day Center","Community Partnership","Drop-in"]} colors={{"Day Center":CHART_COLORS["Day Center"],"Community Partnership":CHART_COLORS["Community Partnership"],"Drop-in":CHART_COLORS["Drop-in"]}}/>
+            </div>
           </div>
           <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:20,marginBottom:20}}>
             <p style={{margin:"0 0 16px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Volunteer hours</p>
