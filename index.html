@@ -1905,11 +1905,16 @@ const grouped=Object.values(byName).filter(g=>{
                         <p style={{margin:"0 0 4px",fontSize:10,color:occupant?C.danger:C.tealDark,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{occupant?occupant.name:"Open"}</p>
                         <select
                           value={occupant?.name||""}
-                          onChange={async e=>{
+                            onChange={async e=>{
                             const todayStr=new Date().toISOString().slice(0,10);
                             const val=e.target.value;
-                            if(occupant) await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-                            if(val){const p=people.find(x=>x.name===val);if(p) await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:l,locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});}
+                            if(!val&&occupant){
+                              await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                            } else if(val){
+                              if(occupant) await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                              const p=people.find(x=>x.name===val);
+                              if(p) await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:l,locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                            }
                             loadData();
                           }}
                           style={{...inpStyle,padding:"2px 2px",fontSize:10,height:24,borderColor:occupant?C.dangerBorder:C.tealMid}}>
