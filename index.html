@@ -397,11 +397,21 @@ function AssignQueueNumber({ r, numLabel, onUpdate }) {
     </div>
   );
 }
-  function WaitingButton({ onComplete }) {
-  const [inProcess, setInProcess] = useState(false);
+function WaitingButton({ r, onComplete, onUpdate }) {
+  const [saving, setSaving] = useState(false);
+  const inProcess = r.status === "in_process";
+
+  async function toggleStatus() {
+    setSaving(true);
+    const newStatus = inProcess ? null : "in_process";
+    await api(`checkin_records?id=eq.${r.id}`, {method:"PATCH", body:JSON.stringify({status:newStatus}), headers:{...HEADERS,"Prefer":"return=minimal"}});
+    onUpdate();
+    setSaving(false);
+  }
+
   return (
     <>
-      <button onClick={()=>setInProcess(v=>!v)} style={{fontSize:14,padding:"5px 14px",borderRadius:20,background:inProcess?"#E6A817":C.danger,color:"#fff",fontWeight:600,border:"none",cursor:"pointer",flexShrink:0}}>
+      <button onClick={toggleStatus} disabled={saving} style={{fontSize:14,padding:"5px 14px",borderRadius:20,background:inProcess?"#E6A817":C.danger,color:"#fff",fontWeight:600,border:"none",cursor:"pointer",flexShrink:0,opacity:saving?0.5:1}}>
         {inProcess?"In Process":"Waiting"}
       </button>
       <button onClick={onComplete} style={{...btnSuccess,flexShrink:0}}>✓</button>
@@ -454,7 +464,7 @@ function ShowerLaundryPanel({ records, people, onMarkComplete, onCancel, onManua
                     <span style={{fontWeight:600,fontSize:16}}>{r.name}</span>
                     <AssignQueueNumber r={r} numLabel={numLabel} onUpdate={onManualAdd||onMarkComplete}/>
                   </div>
-<WaitingButton onComplete={()=>onMarkComplete(r.id)}/>
+<WaitingButton r={r} onComplete={()=>onMarkComplete(r.id)} onUpdate={onManualAdd||onMarkComplete}/>
                   <button onClick={()=>onCancel(r.id)} style={{...btnGhost,fontSize:14,color:C.danger,borderColor:C.dangerBorder,flexShrink:0}}>Cancel</button>
                 </div>
               );
@@ -810,10 +820,7 @@ function TypeServiceEditor({ r, onSave, onCancel }) {
           <button onClick={()=>setEditingPos(true)} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.teal,textDecoration:"underline dotted",fontFamily:"inherit",padding:0}}>+ set #</button>
         )}
         {!r.check_out&&!isShowerLaundry&&<span style={{fontSize:12,padding:"1px 8px",borderRadius:20,background:"#fff",color:C.teal,border:`1px solid ${C.tealMid}`}}>Active</span>}
-{!r.check_out&&isShowerLaundry&&<>
-          <button onClick={()=>setInProcess(ip=>ip===r.id?null:r.id)} style={{fontSize:12,padding:"1px 8px",borderRadius:20,background:inProcess===r.id?"#E6A817":C.danger,color:"#fff",fontWeight:600,border:"none",cursor:"pointer"}}>{inProcess===r.id?"In Process":"Waiting"}</button>
-          <button onClick={()=>onCheckOut(r.id)} style={{background:C.success,color:"#fff",border:"none",borderRadius:20,padding:"1px 8px",fontSize:12,fontWeight:600,cursor:"pointer"}}>✓</button>
-        </>}
+{!r.check_out&&isShowerLaundry&&<WaitingButton r={r} onComplete={()=>onCheckOut(r.id)} onUpdate={onUpdate}/>}
         {r.locker_used&&<span style={{fontSize:12,padding:"1px 8px",borderRadius:20,background:"#FEF7E6",color:"#8A5A00",fontWeight:500}}>🔑 Locker {r.locker_used}</span>}
         {!r.check_out&&!isShowerLaundry&&<button onClick={()=>onCheckOut(r.id)} style={{...btnOutline,fontSize:12,padding:"3px 10px"}}>Check out</button>}
         {confirmDelete===r.id?(
