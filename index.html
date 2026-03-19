@@ -598,10 +598,19 @@ function PeopleRemover({people, onRemove, onFlag, onUpdate}) {
   }).sort((a,b)=>a.name.localeCompare(b.name));
   return (
     <div>
-      <div style={{display:"flex",gap:10,marginBottom:10}}>
-        <input placeholder="Filter by name…" value={query} onChange={e=>{setQuery(e.target.value);setConfirm(null);setFlagging(null);setShowQR(null);}} style={{...inpStyle,flex:1}}/>
+<div style={{display:"flex",gap:10,marginBottom:10,flexWrap:"wrap"}}>
+        <input placeholder="Filter by name…" value={query} onChange={e=>{setQuery(e.target.value);setConfirm(null);setFlagging(null);setShowQR(null);}} style={{...inpStyle,flex:1,minWidth:160}}/>
         <select value={filter} onChange={e=>setFilter(e.target.value)} style={{...inpStyle,width:130}}>
           <option value="all">All</option><option value="ok">OK</option><option value="flagged">Flagged</option>
+        </select>
+        <select value={serviceFilter} onChange={e=>setServiceFilter(e.target.value)} style={{...inpStyle,width:170}}>
+          <option value="all">All services</option>
+          <option value="Day Center">Day Center</option>
+          <option value="Volunteer">Volunteer</option>
+          <option value="Community Partnership">Community Partnership</option>
+          <option value="Drop-in">Drop-in</option>
+          <option value="Showers">Showers</option>
+          <option value="Laundry">Laundry</option>
         </select>
       </div>
       <p style={{margin:"0 0 10px",fontSize:14,color:C.textMuted}}>{filtered.length} {filtered.length===1?"person":"people"}</p>
