@@ -1921,7 +1921,7 @@ onChange={async e=>{
                             loadData();
                           }}
                           style={{...inpStyle,padding:"2px 2px",fontSize:10,height:24,borderColor:occupant?C.dangerBorder:C.tealMid}}>
-                          <option value="">{occupant?"Clear…":"Assign…"}</option>
+                          <option value="none">{occupant?"Clear…":"Assign…"}</option>
                           {people.filter(p=>{
                             const todayStr=new Date().toISOString().slice(0,10);
                             const checkedInToday=records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE);
@@ -1961,7 +1961,7 @@ onChange={async e=>{
                             loadData();
                           }}
                           style={{...inpStyle,padding:"4px 8px",fontSize:12,height:30,borderColor:occupant?C.dangerBorder:C.tealMid}}>
-                          <option value="">{occupant?"Clear…":"Assign…"}</option>
+                          <option value="none">{occupant?"Clear…":"Assign…"}</option>
                           {people.filter(p=>{
                             const todayStr=new Date().toISOString().slice(0,10);
                             const checkedInToday=records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE);
