@@ -581,6 +581,7 @@ function PeopleRemover({people, onRemove, onFlag, onUpdate}) {
   const [showQR,setShowQR]=useState(null);
   const [editingName,setEditingName]=useState(null);
   const [nameVal,setNameVal]=useState("");
+  const [serviceFilter,setServiceFilter]=useState("all");
 
   async function saveName(p){
     if(!nameVal.trim()||nameVal.trim()===p.name){setEditingName(null);return;}
@@ -592,9 +593,12 @@ function PeopleRemover({people, onRemove, onFlag, onUpdate}) {
       onUpdate();
     }catch(_){}
   }
-  const filtered=people.filter(p=>{
+const filtered=people.filter(p=>{
     const q=query.toLowerCase();
-    return(!q||p.name.toLowerCase().includes(q))&&(filter==="all"||(filter==="flagged"&&p.flagged)||(filter==="ok"&&!p.flagged));
+    const matchQ=!q||p.name.toLowerCase().includes(q);
+    const matchF=filter==="all"||(filter==="flagged"&&p.flagged)||(filter==="ok"&&!p.flagged);
+    const matchS=serviceFilter==="all"||p.default_service===serviceFilter;
+    return matchQ&&matchF&&matchS;
   }).sort((a,b)=>a.name.localeCompare(b.name));
   return (
     <div>
