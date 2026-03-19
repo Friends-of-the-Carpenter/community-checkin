@@ -1020,7 +1020,13 @@ function AnalyticsTab({records}) {
             </div>
           </div>
           <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:20,marginBottom:20}}>
-            <p style={{margin:"0 0 16px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Volunteer hours</p>
+            <p style={{margin:"0 0 8px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Volunteer hours</p>
+            {(()=>{
+              const totalHrs=volHours.reduce((s,d)=>s+d.hours,0);
+              const hh=Math.floor(totalHrs),mm=Math.round((totalHrs%1)*60);
+              const totalStr=mm>0?`${hh}h ${mm}m`:`${hh}h`;
+              return <p style={{margin:"0 0 16px",fontSize:14,color:C.tealDark,fontWeight:600}}>Total: {totalStr}</p>;
+            })()}
             <SimpleLineChart data={volHours}/>
           </div>
         </>
