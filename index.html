@@ -1816,7 +1816,7 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
                   byName[r.name].records.push(r);
                 }
               });
-                const grouped=Object.values(byName).filter(g=>{
+const grouped=Object.values(byName).filter(g=>{
                   if(logTab==="All") return true;
                   return g.records.some(r=>r.service===logTab);
                 }).filter(g=>!search.trim()||g.name.toLowerCase().includes(search.toLowerCase()))
@@ -1824,6 +1824,16 @@ const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_S
                   if(logTab==="All") return a.name.localeCompare(b.name);
                   const ar=a.records.find(r=>r.service===logTab);
                   const br=b.records.find(r=>r.service===logTab);
+                  // Completed shower/laundry drop to bottom
+                  const aDone=ar?.check_out?1:0;
+                  const bDone=br?.check_out?1:0;
+                  if(aDone!==bDone) return aDone-bDone;
+                  // Within active: sort by status (in_process first, then waiting, then unassigned)
+                  const statusOrder={in_process:0,null:1,undefined:1};
+                  const aStatus=statusOrder[ar?.status]??1;
+                  const bStatus=statusOrder[br?.status]??1;
+                  if(aStatus!==bStatus) return aStatus-bStatus;
+                  // Then by queue position
                   const ap=ar?.queue_position||999,bp=br?.queue_position||999;
                   return ap-bp;
                 });
