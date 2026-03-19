@@ -251,7 +251,7 @@ function SimpleLineChart({data,height=200}) {
           <g key={i}>
             <circle cx={p.x} cy={p.y} r={5} fill={CHART_COLORS["Volunteer"]}/>
             <text x={p.x} y={p.y-10} textAnchor="middle" fontSize={13} fill="#5A7070">{fmtH(p.d.hours)}</text>
-            <text x={p.x} y={height-4} textAnchor="middle" fontSize={13} fill="#8AA5A5">{p.d.date}</text>
+            <text x={p.x} y={height-4} textAnchor="middle" fontSize={15} fill="#8AA5A5">{p.d.date}</text>
           </g>
         ))}
       </svg>
