@@ -243,8 +243,8 @@ function SimpleLineChart({data,height=200}) {
   const pathD=pts.map((p,i)=>`${i===0?"M":"L"}${p.x},${p.y}`).join(" ");
   const fmtH=hrs=>{const hh=Math.floor(hrs),mm=Math.round((hrs%1)*60);return mm>0?`${hh}h ${mm}m`:`${hh}h`;};
   return (
-    <div style={{overflowX:"auto"}}>
-      <svg viewBox={`0 0 ${w} ${height}`} style={{width:"100%",height}} overflow="visible">
+    <div style={{overflowX:"auto",overflowY:"visible"}}>
+      <svg viewBox={`0 0 ${w} ${height}`} style={{width:"100%",height,paddingTop:16}} overflow="visible">
         {[0,0.25,0.5,0.75,1].map(t=><line key={t} x1={pad} x2={w-pad} y1={h-(t*(h-pad*2))-pad} y2={h-(t*(h-pad*2))-pad} stroke="#D0E6E5" strokeDasharray="3 3"/>)}
         <path d={pathD} fill="none" stroke={CHART_COLORS["Volunteer"]} strokeWidth={3} strokeLinejoin="round"/>
         {pts.map((p,i)=>(
