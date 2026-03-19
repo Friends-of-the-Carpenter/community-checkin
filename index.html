@@ -1908,12 +1908,15 @@ const grouped=Object.values(byName).filter(g=>{
                             onChange={async e=>{
                             const todayStr=new Date().toISOString().slice(0,10);
                             const val=e.target.value;
-                            if(!val&&occupant){
-                              await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-                            } else if(val){
-                              if(occupant) await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                            if(!val){
+                              // Find occupant by locker number directly
+                              const current=people.find(p=>String(p.locker)===String(l)&&p.locker_date===todayStr);
+                              if(current) await api(`people?id=eq.${current.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                            } else {
+                              const current=people.find(p=>String(p.locker)===String(l)&&p.locker_date===todayStr);
+                              if(current) await api(`people?id=eq.${current.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
                               const p=people.find(x=>x.name===val);
-                              if(p) await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:l,locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                              if(p) await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:parseInt(l),locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
                             }
                             loadData();
                           }}
@@ -1945,12 +1948,15 @@ const grouped=Object.values(byName).filter(g=>{
                             onChange={async e=>{
                             const todayStr=new Date().toISOString().slice(0,10);
                             const val=e.target.value;
-                            if(!val&&occupant){
-                              await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-                            } else if(val){
-                              if(occupant) await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                            if(!val){
+                              // Find occupant by locker number directly
+                              const current=people.find(p=>String(p.locker)===String(l)&&p.locker_date===todayStr);
+                              if(current) await api(`people?id=eq.${current.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                            } else {
+                              const current=people.find(p=>String(p.locker)===String(l)&&p.locker_date===todayStr);
+                              if(current) await api(`people?id=eq.${current.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
                               const p=people.find(x=>x.name===val);
-                              if(p) await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:l,locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                              if(p) await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:parseInt(l),locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
                             }
                             loadData();
                           }}
