@@ -1908,11 +1908,10 @@ const grouped=Object.values(byName).filter(g=>{
                             onChange={async e=>{
                             const todayStr=new Date().toISOString().slice(0,10);
                             const val=e.target.value;
-                            if(!val){
-                              // Find occupant by locker number directly
+if(!val){
                               const current=people.find(p=>String(p.locker)===String(l)&&p.locker_date===todayStr);
-                              if(current) await api(`people?id=eq.${current.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-                            } else {
+                              console.log("clearing locker",l,"current occupant:",current);
+                              if(current) await api(`people?id=eq.${current.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}}); else {
                               const current=people.find(p=>String(p.locker)===String(l)&&p.locker_date===todayStr);
                               if(current) await api(`people?id=eq.${current.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
                               const p=people.find(x=>x.name===val);
