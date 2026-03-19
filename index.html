@@ -1898,7 +1898,7 @@ const grouped=Object.values(byName).filter(g=>{
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:6,marginBottom:10}}>
                   {Array.from({length:20},(_,i)=>String(i+1)).map(l=>{
                     const todayStr=new Date().toISOString().slice(0,10);
-                    const occupant=people.find(p=>p.locker===l&&p.locker_date===todayStr);
+                    const occupant=people.find(p=>String(p.locker)===String(l)&&p.locker_date===todayStr&&p.locker!==null);
                     return (
                       <div key={l} style={{border:`1.5px solid ${occupant?"#F0A9A3":"#C0E8EC"}`,borderRadius:10,padding:"6px 8px",background:occupant?"#FFF5F5":"#EAF7F8",textAlign:"center"}}>
                         <p style={{margin:"0 0 2px",fontSize:12,fontWeight:700,color:occupant?C.danger:C.tealDark}}>#{l}</p>
