@@ -1896,45 +1896,45 @@ const grouped=Object.values(byName).filter(g=>{
               <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Locker & Bin Availability</p>
               <div style={{marginBottom:22}}>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:6,marginBottom:10}}>
-                  {Array.from({length:20},(_,i)=>String(i+1)).map(l=>{
+{Array.from({length:20},(_,i)=>String(i+1)).map(l=>{
                     const todayStr=new Date().toISOString().slice(0,10);
                     const occupant=people.find(p=>String(p.locker)===String(l)&&p.locker_date===todayStr&&p.locker!==null);
                     return (
                       <div key={l} style={{border:`1.5px solid ${occupant?"#F0A9A3":"#C0E8EC"}`,borderRadius:10,padding:"6px 8px",background:occupant?"#FFF5F5":"#EAF7F8",textAlign:"center"}}>
                         <p style={{margin:"0 0 2px",fontSize:12,fontWeight:700,color:occupant?C.danger:C.tealDark}}>#{l}</p>
                         <p style={{margin:"0 0 4px",fontSize:10,color:occupant?C.danger:C.tealDark,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{occupant?occupant.name:"Open"}</p>
-<select
-                          value={occupant?.name||"none"}
-onChange={async e=>{
-                            const todayStr=new Date().toISOString().slice(0,10);
-                            const val=e.target.value;
-                            if(val==="none"){
-                              const current=people.find(p=>String(p.locker)===String(l)&&p.locker_date===todayStr);
-                              console.log("clearing locker",l,"current occupant:",current);
-                              if(current) await api(`people?id=eq.${current.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-                            } else {
-                              const current=people.find(p=>String(p.locker)===String(l)&&p.locker_date===todayStr);
-                              if(current) await api(`people?id=eq.${current.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-                              const p=people.find(x=>x.name===val);
-                              if(p) await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:l,locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-                            }
+                        {occupant?(
+                          <button onClick={async()=>{
+                            await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
                             loadData();
-                          }}
-                          style={{...inpStyle,padding:"2px 2px",fontSize:10,height:24,borderColor:occupant?C.dangerBorder:C.tealMid}}>
-                          <option value="none">{occupant?"Clear…":"Assign…"}</option>
-                          {people.filter(p=>{
-                            const todayStr=new Date().toISOString().slice(0,10);
-                            const checkedInToday=records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE);
-                            const noLocker=!p.locker||p.locker_date!==todayStr;
-                            return checkedInToday&&noLocker;
-                          }).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
-                        </select>
+                          }} style={{...btnGhost,fontSize:10,padding:"2px 6px",color:C.danger,borderColor:C.dangerBorder,width:"100%"}}>Clear</button>
+                        ):(
+                          <select
+                            value=""
+                            onChange={async e=>{
+                              const val=e.target.value;
+                              if(!val) return;
+                              const todayStr=new Date().toISOString().slice(0,10);
+                              const p=people.find(x=>x.name===val);
+                              if(p) await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:parseInt(l),locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                              loadData();
+                            }}
+                            style={{...inpStyle,padding:"2px 2px",fontSize:10,height:24,borderColor:C.tealMid}}>
+                            <option value="">Assign…</option>
+                            {people.filter(p=>{
+                              const todayStr=new Date().toISOString().slice(0,10);
+                              const checkedInToday=records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE);
+                              const noLocker=!p.locker||p.locker_date!==todayStr;
+                              return checkedInToday&&noLocker;
+                            }).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+                          </select>
+                        )}
                       </div>
                     );
                   })}
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}}>
-                  {["Bin A","Bin B"].map(l=>{
+{["Bin A","Bin B"].map(l=>{
                     const todayStr=new Date().toISOString().slice(0,10);
                     const occupant=people.find(p=>p.locker===l&&p.locker_date===todayStr);
                     return (
@@ -1943,32 +1943,32 @@ onChange={async e=>{
                           <span style={{fontSize:14,fontWeight:700,color:occupant?C.danger:C.tealDark}}>{l}</span>
                           <span style={{fontSize:13,color:occupant?C.danger:C.tealDark,fontWeight:500}}>{occupant?occupant.name:"Open"}</span>
                         </div>
-<select
-                          value={occupant?.name||"none"}
-onChange={async e=>{
-                            const todayStr=new Date().toISOString().slice(0,10);
-                            const val=e.target.value;
-                            if(val==="none"){
-                              const current=people.find(p=>String(p.locker)===String(l)&&p.locker_date===todayStr);
-                              console.log("clearing locker",l,"current occupant:",current);
-                              if(current) await api(`people?id=eq.${current.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-                            } else {
-                              const current=people.find(p=>String(p.locker)===String(l)&&p.locker_date===todayStr);
-                              if(current) await api(`people?id=eq.${current.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                        {occupant?(
+                          <button onClick={async()=>{
+                            await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                            loadData();
+                          }} style={{...btnGhost,fontSize:12,padding:"4px 8px",color:C.danger,borderColor:C.dangerBorder,width:"100%"}}>Clear</button>
+                        ):(
+                          <select
+                            value=""
+                            onChange={async e=>{
+                              const val=e.target.value;
+                              if(!val) return;
+                              const todayStr=new Date().toISOString().slice(0,10);
                               const p=people.find(x=>x.name===val);
                               if(p) await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:l,locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-                            }
-                            loadData();
-                          }}
-                          style={{...inpStyle,padding:"4px 8px",fontSize:12,height:30,borderColor:occupant?C.dangerBorder:C.tealMid}}>
-                          <option value="none">{occupant?"Clear…":"Assign…"}</option>
-                          {people.filter(p=>{
-                            const todayStr=new Date().toISOString().slice(0,10);
-                            const checkedInToday=records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE);
-                            const noLocker=!p.locker||p.locker_date!==todayStr;
-                            return checkedInToday&&noLocker;
-                          }).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
-                        </select>
+                              loadData();
+                            }}
+                            style={{...inpStyle,padding:"4px 8px",fontSize:12,height:30,borderColor:C.tealMid}}>
+                            <option value="">Assign…</option>
+                            {people.filter(p=>{
+                              const todayStr=new Date().toISOString().slice(0,10);
+                              const checkedInToday=records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE);
+                              const noLocker=!p.locker||p.locker_date!==todayStr;
+                              return checkedInToday&&noLocker;
+                            }).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+                          </select>
+                        )}
                       </div>
                     );
                   })}
