@@ -1916,7 +1916,7 @@ onChange={async e=>{
                               const current=people.find(p=>String(p.locker)===String(l)&&p.locker_date===todayStr);
                               if(current) await api(`people?id=eq.${current.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
                               const p=people.find(x=>x.name===val);
-                              if(p) await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:parseInt(l),locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                              if(p) await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:l,locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
                             }
                             loadData();
                           }}
@@ -1956,7 +1956,7 @@ onChange={async e=>{
                               const current=people.find(p=>String(p.locker)===String(l)&&p.locker_date===todayStr);
                               if(current) await api(`people?id=eq.${current.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
                               const p=people.find(x=>x.name===val);
-                              if(p) await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:parseInt(l),locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                              if(p) await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:l,locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
                             }
                             loadData();
                           }}
