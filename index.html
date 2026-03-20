@@ -1403,7 +1403,7 @@ function AnalyticsTab({ records }) {
     return Object.values(map).sort((a, b) => new Date(a.date) > new Date(b.date) ? 1 : -1);
   }
 
-  const filtered  = getFiltered().filter(meetsMinDuration);
+  const filtered  = hasCustomDates ? getFiltered().filter(meetsMinDuration) : [];
   const chartData = groupBy(filtered);
   const volHours  = getVolHours(filtered);
   const totals = {};
