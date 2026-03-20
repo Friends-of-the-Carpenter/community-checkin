@@ -232,7 +232,19 @@ function LiveClock() {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
+    // Nothing selected yet — show prompt
+  if (!range) return (
+    <div>
+      <div style={{ display:"flex", gap:8, marginBottom:24, flexWrap:"wrap" }}>
+        {ranges.map(r => (
+          <button key={r.id} onClick={() => setRange(r.id)} style={{ ...btnGhost, fontSize:14, padding:"8px 16px" }}>{r.label}</button>
+        ))}
+      </div>
+      <p style={{ textAlign:"center", color:C.textMuted, fontSize:15, padding:"2rem 0" }}>Select a time range to view data.</p>
+    </div>
+  );
+
+  return () => clearInterval(t);
   }, []);
   const date = now.toLocaleDateString("en-US", { weekday:"long", month:"long", day:"numeric", year:"numeric" });
   const time = now.toLocaleTimeString("en-US", { hour:"numeric", minute:"2-digit" });
@@ -1347,7 +1359,7 @@ function LogRecord({ r, av, dur, person, isFlagged, onCheckOut, onDelete, onUpda
 // ─────────────────────────────────────────────────────────────
 
 function AnalyticsTab({ records }) {
-  const [range, setRange]           = useState("today");
+  const [range, setRange]           = useState(null); // null = nothing selected yet
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd]     = useState("");
 
@@ -1461,7 +1473,7 @@ function AnalyticsTab({ records }) {
             <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} style={{ ...inpStyle, width:"auto" }}/>
           </div>
           {(customStart || customEnd) && (
-            <button onClick={() => { setCustomStart(""); setCustomEnd(""); setRange("today"); }} style={{ ...btnGhost, fontSize:13, padding:"8px 14px" }}>Clear</button>
+            <button onClick={() => { setCustomStart(""); setCustomEnd(""); setRange(null); }} style={{ ...btnGhost, fontSize:13, padding:"8px 14px" }}>Clear</button>
           )}
         </div>
       )}
