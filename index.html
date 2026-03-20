@@ -1331,11 +1331,22 @@ function LogRecord({ r, av, dur, person, isFlagged, onCheckOut, onDelete, onUpda
 // ─────────────────────────────────────────────────────────────
 
 function AnalyticsTab({ records }) {
-  const [range, setRange] = useState("today");
+  const [range, setRange]           = useState("today");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd]     = useState("");
 
   function getFiltered() {
+    if (range === "custom") {
+      const start = customStart ? new Date(customStart) : new Date(0);
+      const end   = customEnd   ? new Date(customEnd)   : new Date();
+      end.setHours(23, 59, 59, 999); // include the full end day
+      return records.filter(r => {
+        const t = new Date(r.check_in);
+        return t >= start && t <= end && r.service !== FLAG_ALERT_SERVICE;
+      });
+    }
     const now = new Date(); let cutoff;
-    if (range === "today")   { cutoff = new Date(now); cutoff.setHours(0,0,0,0); }
+    if (range === "today")        { cutoff = new Date(now); cutoff.setHours(0,0,0,0); }
     else if (range === "7days")   { cutoff = new Date(now); cutoff.setDate(cutoff.getDate()-6); }
     else if (range === "30days")  { cutoff = new Date(now); cutoff.setDate(cutoff.getDate()-29); }
     else if (range === "month")   { cutoff = new Date(now.getFullYear(), now.getMonth(), 1); }
@@ -1383,7 +1394,7 @@ function AnalyticsTab({ records }) {
   const ranges = [
     { id:"today", label:"Today" }, { id:"7days", label:"7 days" }, { id:"30days", label:"30 days" },
     { id:"month", label:"This month" }, { id:"quarter", label:"This quarter" },
-    { id:"year", label:"This year" }, { id:"all", label:"All time" }
+    { id:"year", label:"This year" }, { id:"all", label:"All time" }, { id:"custom", label:"Custom" }
   ];
 
   const totalVolHrs = volHours.reduce((s, d) => s + d.hours, 0);
@@ -1393,11 +1404,28 @@ function AnalyticsTab({ records }) {
   return (
     <div>
       {/* Range selector */}
-      <div style={{ display:"flex", gap:8, marginBottom:24, flexWrap:"wrap" }}>
+      <div style={{ display:"flex", gap:8, marginBottom: range === "custom" ? 12 : 24, flexWrap:"wrap" }}>
         {ranges.map(r => (
           <button key={r.id} onClick={() => setRange(r.id)} style={{ ...btnGhost, fontSize:14, background: range === r.id ? "#46b4bf" : "transparent", color: range === r.id ? "#fff" : "#5A7070", borderColor: range === r.id ? "#46b4bf" : "#D0E6E5", padding:"8px 16px" }}>{r.label}</button>
         ))}
       </div>
+
+      {/* Custom date range inputs */}
+      {range === "custom" && (
+        <div style={{ display:"flex", gap:10, alignItems:"center", marginBottom:24, flexWrap:"wrap" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <label style={{ fontSize:14, color:C.textMuted, whiteSpace:"nowrap" }}>From</label>
+            <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} style={{ ...inpStyle, width:"auto" }}/>
+          </div>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <label style={{ fontSize:14, color:C.textMuted, whiteSpace:"nowrap" }}>To</label>
+            <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} style={{ ...inpStyle, width:"auto" }}/>
+          </div>
+          {(customStart || customEnd) && (
+            <button onClick={() => { setCustomStart(""); setCustomEnd(""); }} style={{ ...btnGhost, fontSize:13, padding:"8px 14px" }}>Clear</button>
+          )}
+        </div>
+      )}
 
       {/* Summary cards */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:14, marginBottom:28 }}>
