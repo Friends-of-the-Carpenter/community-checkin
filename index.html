@@ -232,13 +232,7 @@ function LiveClock() {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
-    const ranges = [
-    { id:"today", label:"Today" }, { id:"7days", label:"7 days" }, { id:"30days", label:"30 days" },
-    { id:"month", label:"This month" }, { id:"quarter", label:"This quarter" },
-    { id:"year", label:"This year" }, { id:"all", label:"All time" }, { id:"custom", label:"Custom" }
-  ];
-
-  return () => clearInterval(t);
+    return () => clearInterval(t);
   }, []);
   const date = now.toLocaleDateString("en-US", { weekday:"long", month:"long", day:"numeric", year:"numeric" });
   const time = now.toLocaleTimeString("en-US", { hour:"numeric", minute:"2-digit" });
@@ -1353,21 +1347,9 @@ function LogRecord({ r, av, dur, person, isFlagged, onCheckOut, onDelete, onUpda
 // ─────────────────────────────────────────────────────────────
 
 function AnalyticsTab({ records }) {
-  const [range, setRange]           = useState(null); // null = nothing selected yet
+  const [range, setRange]           = useState("today");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd]     = useState("");
-
-  // Nothing selected yet — show prompt
-  if (!range) return (
-    <div>
-      <div style={{ display:"flex", gap:8, marginBottom:24, flexWrap:"wrap" }}>
-        {ranges.map(r => (
-          <button key={r.id} onClick={() => setRange(r.id)} style={{ ...btnGhost, fontSize:14, padding:"8px 16px" }}>{r.label}</button>
-        ))}
-      </div>
-      <p style={{ textAlign:"center", color:C.textMuted, fontSize:15, padding:"2rem 0" }}>Select a time range to view data.</p>
-    </div>
-  );
 
   function getFiltered() {
     if (range === "custom") {
@@ -1421,36 +1403,22 @@ function AnalyticsTab({ records }) {
     return Object.values(map).sort((a, b) => new Date(a.date) > new Date(b.date) ? 1 : -1);
   }
 
-  const filtered  = hasCustomDates ? getFiltered().filter(meetsMinDuration) : [];
+  const filtered  = getFiltered().filter(meetsMinDuration);
   const chartData = groupBy(filtered);
   const volHours  = getVolHours(filtered);
   const totals = {};
   CHART_SERVICES.forEach(s => { totals[s] = filtered.filter(r => r.service === s).length; });
   const guestTotal = GUEST_SERVICES.reduce((sum, s) => sum + (totals[s] || 0), 0);
 
+  const ranges = [
+    { id:"today", label:"Today" }, { id:"7days", label:"7 days" }, { id:"30days", label:"30 days" },
+    { id:"month", label:"This month" }, { id:"quarter", label:"This quarter" },
+    { id:"year", label:"This year" }, { id:"all", label:"All time" }, { id:"custom", label:"Custom" }
+  ];
+
   const totalVolHrs = volHours.reduce((s, d) => s + d.hours, 0);
   const volHH = Math.floor(totalVolHrs), volMM = Math.round((totalVolHrs % 1) * 60);
   const volTotalStr = volMM > 0 ? `${volHH}h ${volMM}m` : `${volHH}h`;
-
-  // ── SINGLE pill grid, rendered once ──
-  const pillGrid = (
-    <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:14, marginBottom:28 }}>
-      <div style={{ background:"#fff", border:"1.5px solid #D0E6E5", borderRadius:12, padding:"18px 16px", textAlign:"center" }}>
-        <p style={{ margin:0, fontSize:34, fontWeight:700, color:CHART_COLORS["Day Center"] }}>{guestTotal}</p>
-        <p style={{ margin:"6px 0 0", fontSize:14, color:"#5A7070", textTransform:"uppercase", letterSpacing:"0.04em", lineHeight:1.3 }}>Guests</p>
-      </div>
-      {["Showers","Laundry","Volunteer"].map(s => (
-        <div key={s} style={{ background:"#fff", border:"1.5px solid #D0E6E5", borderRadius:12, padding:"18px 16px", textAlign:"center" }}>
-          <p style={{ margin:0, fontSize:34, fontWeight:700, color:CHART_COLORS[s] }}>{totals[s] || 0}</p>
-          <p style={{ margin:"6px 0 0", fontSize:14, color:"#5A7070", textTransform:"uppercase", letterSpacing:"0.04em", wordBreak:"break-word", lineHeight:1.3 }}>{s}</p>
-        </div>
-      ))}
-      <div style={{ background:"#fff", border:"1.5px solid #D0E6E5", borderRadius:12, padding:"18px 16px", textAlign:"center" }}>
-        <p style={{ margin:0, fontSize:34, fontWeight:700, color:CHART_COLORS["Volunteer"] }}>{volHH}</p>
-        <p style={{ margin:"6px 0 0", fontSize:14, color:"#5A7070", textTransform:"uppercase", letterSpacing:"0.04em", lineHeight:1.3 }}>Volunteer Hours</p>
-      </div>
-    </div>
-  );
 
   return (
     <div>
@@ -1473,7 +1441,7 @@ function AnalyticsTab({ records }) {
             <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} style={{ ...inpStyle, width:"auto" }}/>
           </div>
           {(customStart || customEnd) && (
-            <button onClick={() => { setCustomStart(""); setCustomEnd(""); setRange(null); }} style={{ ...btnGhost, fontSize:13, padding:"8px 14px" }}>Clear</button>
+            <button onClick={() => { setCustomStart(""); setCustomEnd(""); setRange("today"); }} style={{ ...btnGhost, fontSize:13, padding:"8px 14px" }}>Clear</button>
           )}
         </div>
       )}
