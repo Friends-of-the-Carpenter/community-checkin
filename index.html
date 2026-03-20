@@ -581,14 +581,18 @@ function PeopleRemover({people, onRemove, onFlag, onUpdate}) {
   const [showQR,setShowQR]=useState(null);
   const [editingName,setEditingName]=useState(null);
   const [nameVal,setNameVal]=useState("");
+  const [genderVal,setGenderVal]=useState("");
+  const [raceVal,setRaceVal]=useState("");
   const [serviceFilter,setServiceFilter]=useState("all");
 
-  async function saveName(p){
-    if(!nameVal.trim()||nameVal.trim()===p.name){setEditingName(null);return;}
+async function saveName(p){
+    if(!nameVal.trim()){setEditingName(null);return;}
     try{
-      await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({name:nameVal.trim()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-      // Also update all checkin_records with the old name
-      await api(`checkin_records?name=eq.${encodeURIComponent(p.name)}`,{method:"PATCH",body:JSON.stringify({name:nameVal.trim()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      const updates={name:nameVal.trim(),gender:genderVal||null,race:raceVal||null};
+      await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify(updates),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      if(nameVal.trim()!==p.name){
+        await api(`checkin_records?name=eq.${encodeURIComponent(p.name)}`,{method:"PATCH",body:JSON.stringify({name:nameVal.trim()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      }
       setEditingName(null);
       onUpdate();
     }catch(_){}
@@ -626,11 +630,40 @@ const filtered=people.filter(p=>{
               <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
                 <div style={{width:38,height:38,borderRadius:"50%",background:avColor(p.name).bg,color:avColor(p.name).color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,flexShrink:0}}>{initials(p.name)||"?"}</div>
                 <span style={{fontSize:15,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
-                {editingName===p.id?(
-                  <div style={{display:"flex",gap:6,alignItems:"center",marginTop:6,width:"100%"}}>
-                    <input value={nameVal} onChange={e=>setNameVal(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveName(p)} style={{...inpStyle,padding:"6px 10px",fontSize:14,flex:1}} autoFocus/>
-                    <button onClick={()=>saveName(p)} style={{...btnPrimary,padding:"6px 14px",fontSize:13}}>Save</button>
-                    <button onClick={()=>setEditingName(null)} style={{...btnGhost,fontSize:13,padding:"6px 10px"}}>Cancel</button>
+                {p.gender&&<span style={{fontSize:12,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:C.tealDark,flexShrink:0}}>{p.gender}</span>}
+                {p.race&&<span style={{fontSize:12,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:C.tealDark,flexShrink:0}}>{p.race}</span>}
+{editingName===p.id?(
+                  <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:6,width:"100%"}}>
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <input value={nameVal} onChange={e=>setNameVal(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveName(p)} style={{...inpStyle,padding:"6px 10px",fontSize:14,flex:1}} autoFocus/>
+                    </div>
+                    <div style={{display:"flex",gap:6}}>
+                      <select value={genderVal} onChange={e=>setGenderVal(e.target.value)} style={{...inpStyle,padding:"6px 10px",fontSize:14,flex:1}}>
+                        <option value="">Gender…</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Non-binary">Non-binary</option>
+                        <option value="Transgender">Transgender</option>
+                        <option value="Prefer not to say">Prefer not to say</option>
+                        <option value="Other">Other</option>
+                      </select>
+                      <select value={raceVal} onChange={e=>setRaceVal(e.target.value)} style={{...inpStyle,padding:"6px 10px",fontSize:14,flex:1}}>
+                        <option value="">Race/Ethnicity…</option>
+                        <option value="American Indian or Alaska Native">American Indian or Alaska Native</option>
+                        <option value="Asian">Asian</option>
+                        <option value="Black or African American">Black or African American</option>
+                        <option value="Hispanic or Latino">Hispanic or Latino</option>
+                        <option value="Native Hawaiian or Pacific Islander">Native Hawaiian or Pacific Islander</option>
+                        <option value="White">White</option>
+                        <option value="Two or more races">Two or more races</option>
+                        <option value="Prefer not to say">Prefer not to say</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div style={{display:"flex",gap:6}}>
+                      <button onClick={()=>saveName(p)} style={{...btnPrimary,padding:"6px 14px",fontSize:13}}>Save</button>
+                      <button onClick={()=>setEditingName(null)} style={{...btnGhost,fontSize:13,padding:"6px 10px"}}>Cancel</button>
+                    </div>
                   </div>
                 ):null}
                 {p.flagged&&<span style={{fontSize:12,padding:"2px 8px",borderRadius:20,background:C.dangerBg,color:C.danger,fontWeight:600,flexShrink:0}}>⚑</span>}
