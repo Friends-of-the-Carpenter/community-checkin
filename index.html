@@ -1337,9 +1337,8 @@ function AnalyticsTab({ records }) {
 
   function getFiltered() {
     if (range === "custom") {
-      const start = customStart ? new Date(customStart) : new Date(0);
-      const end   = customEnd   ? new Date(customEnd)   : new Date();
-      end.setHours(23, 59, 59, 999); // include the full end day
+      const start = customStart ? new Date(customStart + "T00:00:00") : new Date(0);
+      const end   = customEnd   ? new Date(customEnd   + "T23:59:59") : new Date();
       return records.filter(r => {
         const t = new Date(r.check_in);
         return t >= start && t <= end && r.service !== FLAG_ALERT_SERVICE;
