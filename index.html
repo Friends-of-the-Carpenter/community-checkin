@@ -238,18 +238,6 @@ function LiveClock() {
     { id:"year", label:"This year" }, { id:"all", label:"All time" }, { id:"custom", label:"Custom" }
   ];
 
-  // Nothing selected yet — show prompt
-  if (!range) return (
-    <div>
-      <div style={{ display:"flex", gap:8, marginBottom:24, flexWrap:"wrap" }}>
-        {ranges.map(r => (
-          <button key={r.id} onClick={() => setRange(r.id)} style={{ ...btnGhost, fontSize:14, padding:"8px 16px" }}>{r.label}</button>
-        ))}
-      </div>
-      <p style={{ textAlign:"center", color:C.textMuted, fontSize:15, padding:"2rem 0" }}>Select a time range to view data.</p>
-    </div>
-  );
-
   return () => clearInterval(t);
   }, []);
   const date = now.toLocaleDateString("en-US", { weekday:"long", month:"long", day:"numeric", year:"numeric" });
@@ -1368,6 +1356,18 @@ function AnalyticsTab({ records }) {
   const [range, setRange]           = useState(null); // null = nothing selected yet
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd]     = useState("");
+
+  // Nothing selected yet — show prompt
+  if (!range) return (
+    <div>
+      <div style={{ display:"flex", gap:8, marginBottom:24, flexWrap:"wrap" }}>
+        {ranges.map(r => (
+          <button key={r.id} onClick={() => setRange(r.id)} style={{ ...btnGhost, fontSize:14, padding:"8px 16px" }}>{r.label}</button>
+        ))}
+      </div>
+      <p style={{ textAlign:"center", color:C.textMuted, fontSize:15, padding:"2rem 0" }}>Select a time range to view data.</p>
+    </div>
+  );
 
   function getFiltered() {
     if (range === "custom") {
