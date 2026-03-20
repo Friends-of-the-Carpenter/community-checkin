@@ -82,6 +82,8 @@ const CHART_COLORS   = {
   "Showers": "#46b4bf", "Laundry": "#2E8A94", "Day Center": "#E6A817",
   "Community Partnership": "#7B61C4", "Volunteer": "#3A9C6A", "Drop-in": "#E67E22"
 };
+// Services grouped into the "Guests" summary pill in analytics
+const GUEST_SERVICES = ["Day Center","Community Partnership","Drop-in"];
 
 // Internal pseudo-service used only to log flagged-person check-in attempts
 const FLAG_ALERT_SERVICE = "FLAG_ALERT";
@@ -1401,8 +1403,9 @@ function AnalyticsTab({ records }) {
   const filtered  = getFiltered().filter(meetsMinDuration);
   const chartData = groupBy(filtered);
   const volHours  = getVolHours(filtered);
-  const totals    = {};
+  const totals = {};
   CHART_SERVICES.forEach(s => { totals[s] = filtered.filter(r => r.service === s).length; });
+  const guestTotal = GUEST_SERVICES.reduce((sum, s) => sum + (totals[s] || 0), 0);
 
   const ranges = [
     { id:"today", label:"Today" }, { id:"7days", label:"7 days" }, { id:"30days", label:"30 days" },
@@ -1473,7 +1476,13 @@ function AnalyticsTab({ records }) {
 
             {/* Summary cards */}
             <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:14, marginBottom:28 }}>
-              {CHART_SERVICES.map(s => (
+              {/* Guests pill — combines Day Center, Community Partnership, Drop-in */}
+              <div style={{ background:"#fff", border:"1.5px solid #D0E6E5", borderRadius:12, padding:"18px 16px", textAlign:"center" }}>
+                <p style={{ margin:0, fontSize:34, fontWeight:700, color:CHART_COLORS["Day Center"] }}>{guestTotal}</p>
+                <p style={{ margin:"6px 0 0", fontSize:14, color:"#5A7070", textTransform:"uppercase", letterSpacing:"0.04em", lineHeight:1.3 }}>Guests</p>
+              </div>
+              {/* Individual pills for Showers, Laundry, Volunteer */}
+              {["Showers","Laundry","Volunteer"].map(s => (
                 <div key={s} style={{ background:"#fff", border:"1.5px solid #D0E6E5", borderRadius:12, padding:"18px 16px", textAlign:"center" }}>
                   <p style={{ margin:0, fontSize:34, fontWeight:700, color:CHART_COLORS[s] }}>{totals[s] || 0}</p>
                   <p style={{ margin:"6px 0 0", fontSize:14, color:"#5A7070", textTransform:"uppercase", letterSpacing:"0.04em", wordBreak:"break-word", lineHeight:1.3 }}>{s}</p>
