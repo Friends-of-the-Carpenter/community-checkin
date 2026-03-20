@@ -82,6 +82,8 @@ const CHART_COLORS   = {
   "Showers": "#46b4bf", "Laundry": "#2E8A94", "Day Center": "#E6A817",
   "Community Partnership": "#7B61C4", "Volunteer": "#3A9C6A", "Drop-in": "#E67E22"
 };
+// Services grouped into the "Guests" summary pill in analytics
+const GUEST_SERVICES = ["Day Center","Community Partnership","Drop-in"];
 
 // Internal pseudo-service used only to log flagged-person check-in attempts
 const FLAG_ALERT_SERVICE = "FLAG_ALERT";
@@ -230,7 +232,13 @@ function LiveClock() {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
+    const ranges = [
+    { id:"today", label:"Today" }, { id:"7days", label:"7 days" }, { id:"30days", label:"30 days" },
+    { id:"month", label:"This month" }, { id:"quarter", label:"This quarter" },
+    { id:"year", label:"This year" }, { id:"all", label:"All time" }, { id:"custom", label:"Custom" }
+  ];
+
+  return () => clearInterval(t);
   }, []);
   const date = now.toLocaleDateString("en-US", { weekday:"long", month:"long", day:"numeric", year:"numeric" });
   const time = now.toLocaleTimeString("en-US", { hour:"numeric", minute:"2-digit" });
@@ -812,11 +820,12 @@ function PeopleRemover({ people, onRemove, onFlag, onUpdate }) {
   const [nameVal, setNameVal]           = useState("");
   const [genderVal, setGenderVal]       = useState("");
   const [raceVal, setRaceVal]           = useState("");
+  const [ageVal, setAgeVal]             = useState("");
 
   async function saveName(p) {
     if (!nameVal.trim()) { setEditingName(null); return; }
     try {
-      const updates = { name: nameVal.trim(), gender: genderVal || null, race: raceVal || null };
+      const updates = { name: nameVal.trim(), gender: genderVal || null, race: raceVal || null, age_range: ageVal || null };
       await api(`people?id=eq.${p.id}`, { method:"PATCH", body:JSON.stringify(updates), headers:{ ...HEADERS, "Prefer":"return=minimal" } });
       // Rename all associated records too
       if (nameVal.trim() !== p.name) {
@@ -874,8 +883,8 @@ function PeopleRemover({ people, onRemove, onFlag, onUpdate }) {
                     <div style={{ display:"flex", gap:6, alignItems:"center" }}>
                       <input value={nameVal} onChange={e => setNameVal(e.target.value)} onKeyDown={e => e.key === "Enter" && saveName(p)} style={{ ...inpStyle, padding:"6px 10px", fontSize:14, flex:1 }} autoFocus/>
                     </div>
-                    {/* Gender & Race selects — currently hidden; change display to "flex" to enable */}
-                    <div style={{ display:"none", gap:6 }}>
+                    {/* Gender, Race & Age selects — currently hidden; change display to "flex" to enable */}
+                    <div style={{ display:"none", gap:6, flexWrap:"wrap" }}>
                       <select value={genderVal} onChange={e => setGenderVal(e.target.value)} style={{ ...inpStyle, padding:"6px 10px", fontSize:14, flex:1 }}>
                         <option value="">Gender…</option>
                         <option value="Male">Male</option>
@@ -899,6 +908,16 @@ function PeopleRemover({ people, onRemove, onFlag, onUpdate }) {
                         <option value="Two or more races">Two or more races</option>
                         <option value="Prefer not to say">Prefer not to say</option>
                         <option value="Other">Other</option>
+                      </select>
+                      <select value={ageVal} onChange={e => setAgeVal(e.target.value)} style={{ ...inpStyle, padding:"6px 10px", fontSize:14, flex:1 }}>
+                        <option value="">Age range…</option>
+                        <option value="18–24">18–24</option>
+                        <option value="25–34">25–34</option>
+                        <option value="35–44">35–44</option>
+                        <option value="45–54">45–54</option>
+                        <option value="55–64">55–64</option>
+                        <option value="65+">65+</option>
+                        <option value="Prefer not to say">Prefer not to say</option>
                       </select>
                     </div>
                     <div style={{ display:"flex", gap:6 }}>
@@ -1334,9 +1353,21 @@ function LogRecord({ r, av, dur, person, isFlagged, onCheckOut, onDelete, onUpda
 // ─────────────────────────────────────────────────────────────
 
 function AnalyticsTab({ records }) {
-  const [range, setRange]           = useState("today");
+  const [range, setRange]           = useState(null); // null = nothing selected yet
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd]     = useState("");
+
+  // Nothing selected yet — show prompt
+  if (!range) return (
+    <div>
+      <div style={{ display:"flex", gap:8, marginBottom:24, flexWrap:"wrap" }}>
+        {ranges.map(r => (
+          <button key={r.id} onClick={() => setRange(r.id)} style={{ ...btnGhost, fontSize:14, padding:"8px 16px" }}>{r.label}</button>
+        ))}
+      </div>
+      <p style={{ textAlign:"center", color:C.textMuted, fontSize:15, padding:"2rem 0" }}>Select a time range to view data.</p>
+    </div>
+  );
 
   function getFiltered() {
     if (range === "custom") {
@@ -1367,6 +1398,9 @@ function AnalyticsTab({ records }) {
 
   function getKey(r) { return range === "year" ? fmtMonth(r.check_in) : fmtDate(r.check_in); }
 
+  // When custom range is selected but no dates are chosen yet, show zeros
+  const hasCustomDates = range !== "custom" || (customStart && customEnd);
+
   function groupBy(recs) {
     const map = {};
     recs.forEach(r => {
@@ -1387,21 +1421,36 @@ function AnalyticsTab({ records }) {
     return Object.values(map).sort((a, b) => new Date(a.date) > new Date(b.date) ? 1 : -1);
   }
 
-  const filtered  = getFiltered().filter(meetsMinDuration);
+  const filtered  = hasCustomDates ? getFiltered().filter(meetsMinDuration) : [];
   const chartData = groupBy(filtered);
   const volHours  = getVolHours(filtered);
-  const totals    = {};
+  const totals = {};
   CHART_SERVICES.forEach(s => { totals[s] = filtered.filter(r => r.service === s).length; });
-
-  const ranges = [
-    { id:"today", label:"Today" }, { id:"7days", label:"7 days" }, { id:"30days", label:"30 days" },
-    { id:"month", label:"This month" }, { id:"quarter", label:"This quarter" },
-    { id:"year", label:"This year" }, { id:"all", label:"All time" }, { id:"custom", label:"Custom" }
-  ];
+  const guestTotal = GUEST_SERVICES.reduce((sum, s) => sum + (totals[s] || 0), 0);
 
   const totalVolHrs = volHours.reduce((s, d) => s + d.hours, 0);
   const volHH = Math.floor(totalVolHrs), volMM = Math.round((totalVolHrs % 1) * 60);
   const volTotalStr = volMM > 0 ? `${volHH}h ${volMM}m` : `${volHH}h`;
+
+  // ── SINGLE pill grid, rendered once ──
+  const pillGrid = (
+    <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:14, marginBottom:28 }}>
+      <div style={{ background:"#fff", border:"1.5px solid #D0E6E5", borderRadius:12, padding:"18px 16px", textAlign:"center" }}>
+        <p style={{ margin:0, fontSize:34, fontWeight:700, color:CHART_COLORS["Day Center"] }}>{guestTotal}</p>
+        <p style={{ margin:"6px 0 0", fontSize:14, color:"#5A7070", textTransform:"uppercase", letterSpacing:"0.04em", lineHeight:1.3 }}>Guests</p>
+      </div>
+      {["Showers","Laundry","Volunteer"].map(s => (
+        <div key={s} style={{ background:"#fff", border:"1.5px solid #D0E6E5", borderRadius:12, padding:"18px 16px", textAlign:"center" }}>
+          <p style={{ margin:0, fontSize:34, fontWeight:700, color:CHART_COLORS[s] }}>{totals[s] || 0}</p>
+          <p style={{ margin:"6px 0 0", fontSize:14, color:"#5A7070", textTransform:"uppercase", letterSpacing:"0.04em", wordBreak:"break-word", lineHeight:1.3 }}>{s}</p>
+        </div>
+      ))}
+      <div style={{ background:"#fff", border:"1.5px solid #D0E6E5", borderRadius:12, padding:"18px 16px", textAlign:"center" }}>
+        <p style={{ margin:0, fontSize:34, fontWeight:700, color:CHART_COLORS["Volunteer"] }}>{volHH}</p>
+        <p style={{ margin:"6px 0 0", fontSize:14, color:"#5A7070", textTransform:"uppercase", letterSpacing:"0.04em", lineHeight:1.3 }}>Volunteer Hours</p>
+      </div>
+    </div>
+  );
 
   return (
     <div>
@@ -1424,7 +1473,7 @@ function AnalyticsTab({ records }) {
             <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} style={{ ...inpStyle, width:"auto" }}/>
           </div>
           {(customStart || customEnd) && (
-            <button onClick={() => { setCustomStart(""); setCustomEnd(""); }} style={{ ...btnGhost, fontSize:13, padding:"8px 14px" }}>Clear</button>
+            <button onClick={() => { setCustomStart(""); setCustomEnd(""); setRange(null); }} style={{ ...btnGhost, fontSize:13, padding:"8px 14px" }}>Clear</button>
           )}
         </div>
       )}
@@ -1457,6 +1506,29 @@ function AnalyticsTab({ records }) {
         ? <p style={{ textAlign:"center", color:"#5A7070", padding:"2rem 0", fontSize:16 }}>No data for this period.</p>
         : (
           <>
+            {/* ── VISIT DATA ── */}
+            <p style={{ margin:"0 0 16px", fontSize:16, fontWeight:700, color:C.text }}>Visit Data</p>
+
+            {/* Summary cards */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:14, marginBottom:28 }}>
+              {/* Guests pill — combines Day Center, Community Partnership, Drop-in */}
+              <div style={{ background:"#fff", border:"1.5px solid #D0E6E5", borderRadius:12, padding:"18px 16px", textAlign:"center" }}>
+                <p style={{ margin:0, fontSize:34, fontWeight:700, color:CHART_COLORS["Day Center"] }}>{guestTotal}</p>
+                <p style={{ margin:"6px 0 0", fontSize:14, color:"#5A7070", textTransform:"uppercase", letterSpacing:"0.04em", lineHeight:1.3 }}>Guests</p>
+              </div>
+              {/* Individual pills for Showers, Laundry, Volunteer */}
+              {["Showers","Laundry","Volunteer"].map(s => (
+                <div key={s} style={{ background:"#fff", border:"1.5px solid #D0E6E5", borderRadius:12, padding:"18px 16px", textAlign:"center" }}>
+                  <p style={{ margin:0, fontSize:34, fontWeight:700, color:CHART_COLORS[s] }}>{totals[s] || 0}</p>
+                  <p style={{ margin:"6px 0 0", fontSize:14, color:"#5A7070", textTransform:"uppercase", letterSpacing:"0.04em", wordBreak:"break-word", lineHeight:1.3 }}>{s}</p>
+                </div>
+              ))}
+              <div style={{ background:"#fff", border:"1.5px solid #D0E6E5", borderRadius:12, padding:"18px 16px", textAlign:"center" }}>
+                <p style={{ margin:0, fontSize:34, fontWeight:700, color:CHART_COLORS["Volunteer"] }}>{volHH}</p>
+                <p style={{ margin:"6px 0 0", fontSize:14, color:"#5A7070", textTransform:"uppercase", letterSpacing:"0.04em", lineHeight:1.3 }}>Volunteer Hours</p>
+              </div>
+            </div>
+
             <div style={{ background:"#fff", border:"1.5px solid #D0E6E5", borderRadius:14, padding:20, marginBottom:20 }}>
               <p style={{ margin:"0 0 16px", fontSize:15, fontWeight:600, color:"#5A7070", textTransform:"uppercase", letterSpacing:"0.05em" }}>Showers & Laundry</p>
               <SimpleBarChart data={chartData} keys={["Showers","Laundry"]} colors={{ "Showers":CHART_COLORS["Showers"], "Laundry":CHART_COLORS["Laundry"] }}/>
@@ -1467,10 +1539,68 @@ function AnalyticsTab({ records }) {
                 <SimpleBarChart data={chartData} keys={["Day Center","Community Partnership","Drop-in"]} colors={{ "Day Center":CHART_COLORS["Day Center"], "Community Partnership":CHART_COLORS["Community Partnership"], "Drop-in":CHART_COLORS["Drop-in"] }}/>
               </div>
             </div>
-            <div style={{ background:"#fff", border:"1.5px solid #D0E6E5", borderRadius:14, padding:20, marginBottom:20 }}>
+            <div style={{ background:"#fff", border:"1.5px solid #D0E6E5", borderRadius:14, padding:20, marginBottom:36 }}>
               <p style={{ margin:"0 0 8px", fontSize:15, fontWeight:600, color:"#5A7070", textTransform:"uppercase", letterSpacing:"0.05em" }}>Volunteer hours</p>
               <p style={{ margin:"0 0 16px", fontSize:14, color:C.tealDark, fontWeight:600 }}>Total: {volTotalStr}</p>
               <SimpleLineChart data={volHours}/>
+            </div>
+
+            {/* ── DEMOGRAPHIC DATA — hidden until sufficient data collected; change display to "block" to enable ── */}
+            <div style={{ display:"none" }}>
+              <p style={{ margin:"0 0 16px", fontSize:16, fontWeight:700, color:C.text }}>Demographic Data</p>
+              {(()=>{
+                const uniquePeople = [...new Map(filtered.map(r => {
+                  const p = records.find(x => x.name === r.name);
+                  return [r.name, p];
+                })).values()].filter(Boolean);
+
+                function tally(field) {
+                  const map = {};
+                  uniquePeople.forEach(p => {
+                    const val = p[field] || "Not recorded";
+                    map[val] = (map[val] || 0) + 1;
+                  });
+                  return Object.entries(map).sort((a,b) => b[1]-a[1]);
+                }
+
+                const genderTally    = tally("gender");
+                const raceTally      = tally("race");
+                const ageRangeTally  = tally("age_range");
+
+                function DemoCard({ title, data, color }) {
+                  const total = data.reduce((s,[,v])=>s+v,0);
+                  return (
+                    <div style={{ background:"#fff", border:"1.5px solid #D0E6E5", borderRadius:14, padding:20, marginBottom:20 }}>
+                      <p style={{ margin:"0 0 16px", fontSize:15, fontWeight:600, color:"#5A7070", textTransform:"uppercase", letterSpacing:"0.05em" }}>{title}</p>
+                      {data.length === 0
+                        ? <p style={{ fontSize:14, color:C.textMuted }}>No data recorded yet.</p>
+                        : data.map(([label, count]) => {
+                          const pct = Math.round(count / total * 100);
+                          return (
+                            <div key={label} style={{ marginBottom:10 }}>
+                              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                                <span style={{ fontSize:14, color:C.text }}>{label}</span>
+                                <span style={{ fontSize:14, color:C.textMuted }}>{count} <span style={{ fontSize:12 }}>({pct}%)</span></span>
+                              </div>
+                              <div style={{ height:8, borderRadius:4, background:"#EAF7F8" }}>
+                                <div style={{ height:8, borderRadius:4, width:`${pct}%`, background:color, transition:"width 0.3s" }}/>
+                              </div>
+                            </div>
+                          );
+                        })
+                      }
+                    </div>
+                  );
+                }
+
+                return (
+                  <>
+                    <DemoCard title="Gender" data={genderTally} color={C.teal}/>
+                    <DemoCard title="Race / Ethnicity" data={raceTally} color={C.tealDark}/>
+                    <DemoCard title="Age Range" data={ageRangeTally} color="#7B61C4"/>
+                  </>
+                );
+              })()}
             </div>
           </>
         )
