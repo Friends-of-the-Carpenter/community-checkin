@@ -1415,7 +1415,7 @@ function AnalyticsTab({ records }) {
         <div style={{ display:"flex", gap:10, alignItems:"center", marginBottom:24, flexWrap:"wrap" }}>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
             <label style={{ fontSize:14, color:C.textMuted, whiteSpace:"nowrap" }}>From</label>
-            <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} style={{ ...inpStyle, width:"auto" }}/>
+            <input type="date" value={customStart} onChange={e => { setCustomStart(e.target.value); if (!customEnd) setCustomEnd(e.target.value); }} style={{ ...inpStyle, width:"auto" }}/>
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
             <label style={{ fontSize:14, color:C.textMuted, whiteSpace:"nowrap" }}>To</label>
