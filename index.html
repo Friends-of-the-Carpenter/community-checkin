@@ -637,7 +637,7 @@ const filtered=people.filter(p=>{
                     <div style={{display:"flex",gap:6,alignItems:"center"}}>
                       <input value={nameVal} onChange={e=>setNameVal(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveName(p)} style={{...inpStyle,padding:"6px 10px",fontSize:14,flex:1}} autoFocus/>
                     </div>
-                    <div style={{display:"flex",gap:6}}>
+                    <div style={{display:"none",gap:6}}>
                       <select value={genderVal} onChange={e=>setGenderVal(e.target.value)} style={{...inpStyle,padding:"6px 10px",fontSize:14,flex:1}}>
                         <option value="">Gender…</option>
                         <option value="Male">Male</option>
