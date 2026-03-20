@@ -232,7 +232,13 @@ function LiveClock() {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
-    // Nothing selected yet — show prompt
+    const ranges = [
+    { id:"today", label:"Today" }, { id:"7days", label:"7 days" }, { id:"30days", label:"30 days" },
+    { id:"month", label:"This month" }, { id:"quarter", label:"This quarter" },
+    { id:"year", label:"This year" }, { id:"all", label:"All time" }, { id:"custom", label:"Custom" }
+  ];
+
+  // Nothing selected yet — show prompt
   if (!range) return (
     <div>
       <div style={{ display:"flex", gap:8, marginBottom:24, flexWrap:"wrap" }}>
@@ -1421,12 +1427,6 @@ function AnalyticsTab({ records }) {
   const totals = {};
   CHART_SERVICES.forEach(s => { totals[s] = filtered.filter(r => r.service === s).length; });
   const guestTotal = GUEST_SERVICES.reduce((sum, s) => sum + (totals[s] || 0), 0);
-
-  const ranges = [
-    { id:"today", label:"Today" }, { id:"7days", label:"7 days" }, { id:"30days", label:"30 days" },
-    { id:"month", label:"This month" }, { id:"quarter", label:"This quarter" },
-    { id:"year", label:"This year" }, { id:"all", label:"All time" }, { id:"custom", label:"Custom" }
-  ];
 
   const totalVolHrs = volHours.reduce((s, d) => s + d.hours, 0);
   const volHH = Math.floor(totalVolHrs), volMM = Math.round((totalVolHrs % 1) * 60);
