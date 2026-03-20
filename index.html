@@ -1290,8 +1290,9 @@ function AnalyticsTab({ records }) {
   CHART_SERVICES.forEach(s => { totals[s] = filtered.filter(r => r.service === s).length; });
   const guestTotal = GUEST_SERVICES.reduce((sum, s) => sum + (totals[s] || 0), 0);
   const totalVolHrs = volHours.reduce((s, d) => s + d.hours, 0);
-  const volHH = Math.floor(totalVolHrs), volMM = Math.round((totalVolHrs % 1) * 60);
-  const volTotalStr = volMM > 0 ? `${volHH}h ${volMM}m` : `${volHH}h`;
+  const volMM = Math.round((totalVolHrs % 1) * 60);
+  const volHH = volMM >= 30 ? Math.ceil(totalVolHrs) : Math.floor(totalVolHrs);
+  const volTotalStr = volMM > 0 ? `${Math.floor(totalVolHrs)}h ${volMM}m` : `${volHH}h`;
 
   return (
     <div>
