@@ -1380,6 +1380,9 @@ function AnalyticsTab({ records }) {
 
   function getKey(r) { return range === "year" ? fmtMonth(r.check_in) : fmtDate(r.check_in); }
 
+  // When custom range is selected but no dates are chosen yet, show zeros
+  const hasCustomDates = range !== "custom" || (customStart && customEnd);
+
   function groupBy(recs) {
     const map = {};
     recs.forEach(r => {
@@ -1400,7 +1403,7 @@ function AnalyticsTab({ records }) {
     return Object.values(map).sort((a, b) => new Date(a.date) > new Date(b.date) ? 1 : -1);
   }
 
-  const filtered  = getFiltered().filter(meetsMinDuration);
+  const filtered  = hasCustomDates ? getFiltered().filter(meetsMinDuration) : [];
   const chartData = groupBy(filtered);
   const volHours  = getVolHours(filtered);
   const totals = {};
