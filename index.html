@@ -1438,7 +1438,7 @@ function AnalyticsTab({ records }) {
             <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} style={{ ...inpStyle, width:"auto" }}/>
           </div>
           {(customStart || customEnd) && (
-            <button onClick={() => { setCustomStart(""); setCustomEnd(""); }} style={{ ...btnGhost, fontSize:13, padding:"8px 14px" }}>Clear</button>
+            <button onClick={() => { setCustomStart(""); setCustomEnd(""); setRange("today"); }} style={{ ...btnGhost, fontSize:13, padding:"8px 14px" }}>Clear</button>
           )}
         </div>
       )}
@@ -1492,16 +1492,6 @@ function AnalyticsTab({ records }) {
                 <p style={{ margin:0, fontSize:34, fontWeight:700, color:CHART_COLORS["Volunteer"] }}>{volHH}</p>
                 <p style={{ margin:"6px 0 0", fontSize:14, color:"#5A7070", textTransform:"uppercase", letterSpacing:"0.04em", lineHeight:1.3 }}>Volunteer Hours</p>
               </div>
-            </div>
-
-            {/* Legend */}
-            <div style={{ display:"flex", flexWrap:"wrap", gap:12, marginBottom:20 }}>
-              {CHART_SERVICES.map(s => (
-                <div key={s} style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  <div style={{ width:12, height:12, borderRadius:"50%", background:CHART_COLORS[s] }}/>
-                  <span style={{ fontSize:14, color:"#5A7070" }}>{s}</span>
-                </div>
-              ))}
             </div>
 
             <div style={{ background:"#fff", border:"1.5px solid #D0E6E5", borderRadius:14, padding:20, marginBottom:20 }}>
