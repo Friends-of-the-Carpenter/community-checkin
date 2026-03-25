@@ -757,7 +757,7 @@ function PeopleRemover({ people, onRemove, onFlag, onUpdate }) {
   async function saveName(p) {
     if (!nameVal.trim()) { setEditingName(null); return; }
     try {
-      const updates = { name: nameVal.trim() };
+      const updates = { name: nameVal.trim(), gender: genderVal || null, race: raceVal || null, age_range: ageVal || null };
       await api(`people?id=eq.${p.id}`, { method:"PATCH", body:JSON.stringify(updates), headers:{ ...HEADERS, "Prefer":"return=minimal" } });
       if (nameVal.trim() !== p.name) {
         await api(`checkin_records?name=eq.${encodeURIComponent(p.name)}`, { method:"PATCH", body:JSON.stringify({ name: nameVal.trim() }), headers:{ ...HEADERS, "Prefer":"return=minimal" } });
