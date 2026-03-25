@@ -853,7 +853,7 @@ function PeopleRemover({ people, onRemove, onFlag, onUpdate }) {
               </div>
               <div style={{ display:"flex", gap:7, flexShrink:0, flexWrap:"wrap" }}>
                 <button onClick={() => setShowQR(showQR === p.id ? null : p.id)} style={{ ...btnGhost, fontSize:13, padding:"6px 12px", color:C.teal, borderColor:C.tealMid }}>QR</button>
-                <button onClick={() => { setEditingName(p.id); setNameVal(p.name); }} style={{ ...btnGhost, fontSize:13, padding:"6px 12px", color:C.teal, borderColor:C.tealMid }}>Edit</button>
+                <button onClick={() => { setEditingName(p.id); setNameVal(p.name); setGenderVal(p.gender||""); setRaceVal(p.race||""); setAgeVal(p.age_range||""); }} style={{ ...btnGhost, fontSize:13, padding:"6px 12px", color:C.teal, borderColor:C.tealMid }}>Edit</button>
                 <select
                   value={p.default_service || ""}
                   onChange={async e => {
