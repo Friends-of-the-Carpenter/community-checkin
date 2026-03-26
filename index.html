@@ -696,7 +696,7 @@ function ShowerLaundryPanel({ records, people, onMarkComplete, onCancel, onManua
                     <span style={{ fontWeight:600, fontSize:16 }}>{r.name}</span>
                     <AssignQueueNumber r={r} numLabel={numLabel} onUpdate={onManualAdd || onMarkComplete}/>
                   </div>
-                  <WaitingButton r={r} onComplete={() => onMarkComplete(r.id)} onUpdate={onManualAdd || onMarkComplete}/>
+                  <WaitingButton key={r.id} r={r} onComplete={() => onMarkComplete(r.id)} onUpdate={onManualAdd || onMarkComplete}/>
                   <button onClick={() => onCancel(r.id)} style={{ ...btnGhost, fontSize:14, color:C.danger, borderColor:C.dangerBorder, flexShrink:0 }}>Cancel</button>
                 </div>
               );
@@ -1140,7 +1140,7 @@ function PersonServiceTag({ r, onCheckOut, onDelete, onUpdate }) {
           <button onClick={() => setEditingPos(true)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, color:C.teal, textDecoration:"underline dotted", fontFamily:"inherit", padding:0 }}>+ set #</button>
         )}
         {!r.check_out && !isShowerLaundry && <span style={{ fontSize:12, padding:"1px 8px", borderRadius:20, background:"#fff", color:C.teal, border:`1px solid ${C.tealMid}` }}>Active</span>}
-        {!r.check_out && isShowerLaundry && <WaitingButton r={r} onComplete={() => onCheckOut(r.id)} onUpdate={onUpdate}/>}
+        {!r.check_out && isShowerLaundry && <WaitingButton key={r.id} r={r} onComplete={() => onCheckOut(r.id)} onUpdate={onUpdate}/>}
         {r.locker_used && <span style={{ fontSize:12, padding:"1px 8px", borderRadius:20, background:"#FEF7E6", color:"#8A5A00", fontWeight:500 }}>🔑 Locker {r.locker_used}</span>}
         {!r.check_out && !isShowerLaundry && <button onClick={() => onCheckOut(r.id)} style={{ ...btnOutline, fontSize:12, padding:"3px 10px" }}>Check out</button>}
         {confirmDelete === r.id ? (
