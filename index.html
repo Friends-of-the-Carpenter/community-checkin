@@ -562,8 +562,10 @@ function WaitingButton({ r, onComplete, onUpdate }) {
   const SHOWER_LIMIT            = 20 * 60;
 
   useEffect(() => {
-    if (inProcess && r.status_at) {
-      const elapsedSecs = Math.floor((Date.now() - new Date(r.status_at)) / 1000);
+    if (inProcess) {
+      const elapsedSecs = r.status_at
+        ? Math.floor((Date.now() - new Date(r.status_at)) / 1000)
+        : 0;
       setElapsed(elapsedSecs);
       if (isShower) setTimeLeft(Math.max(0, SHOWER_LIMIT - elapsedSecs));
       startTick(elapsedSecs);
@@ -585,17 +587,31 @@ function WaitingButton({ r, onComplete, onUpdate }) {
     if (inProcess) {
       if (timerRef.current) clearInterval(timerRef.current);
       setTimeLeft(null); setElapsed(0);
-      await api(`checkin_records?id=eq.${r.id}`, {
+      // Try with status_at, fall back without it
+      let res = await api(`checkin_records?id=eq.${r.id}`, {
         method:"PATCH", body:JSON.stringify({ status:null, status_at:null }),
         headers:{ ...HEADERS, "Prefer":"return=minimal" }
       });
+      if (!res.ok) {
+        await api(`checkin_records?id=eq.${r.id}`, {
+          method:"PATCH", body:JSON.stringify({ status:null }),
+          headers:{ ...HEADERS, "Prefer":"return=minimal" }
+        });
+      }
       onUpdate();
     } else {
       const now = new Date().toISOString();
-      await api(`checkin_records?id=eq.${r.id}`, {
+      // Try with status_at, fall back without it
+      let res = await api(`checkin_records?id=eq.${r.id}`, {
         method:"PATCH", body:JSON.stringify({ status:"in_process", status_at:now }),
         headers:{ ...HEADERS, "Prefer":"return=minimal" }
       });
+      if (!res.ok) {
+        await api(`checkin_records?id=eq.${r.id}`, {
+          method:"PATCH", body:JSON.stringify({ status:"in_process" }),
+          headers:{ ...HEADERS, "Prefer":"return=minimal" }
+        });
+      }
       if (isShower) setTimeLeft(SHOWER_LIMIT);
       setElapsed(0);
       startTick(0);
@@ -612,10 +628,10 @@ function WaitingButton({ r, onComplete, onUpdate }) {
   const isOver  = isShower && inProcess && timeLeft === 0;
   const overBy  = isOver ? elapsed - SHOWER_LIMIT : 0;
   let label, bgColor;
-  if (!inProcess)    { label = "Waiting";             bgColor = C.danger; }
-  else if (isLaundry){ label = fmtTime(elapsed);       bgColor = "#E6A817"; }
-  else if (isOver)   { label = `+${fmtTime(overBy)}`; bgColor = "#E6A817"; }
-  else               { label = fmtTime(timeLeft);      bgColor = "#E6A817"; }
+  if (!inProcess)     { label = "Waiting";             bgColor = C.danger; }
+  else if (isLaundry) { label = fmtTime(elapsed);       bgColor = "#E6A817"; }
+  else if (isOver)    { label = `+${fmtTime(overBy)}`; bgColor = "#E6A817"; }
+  else                { label = fmtTime(timeLeft);      bgColor = "#E6A817"; }
 
   return (
     <>
