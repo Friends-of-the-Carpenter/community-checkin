@@ -1656,7 +1656,7 @@ function CheckOutPanel({ records, people, loadData }) {
 // ─────────────────────────────────────────────────────────────
 
 function PublicApp({ records, people, services, loading, dbError, loadData, closedServices = {} }) {
-  const [pubView, setPubView]               = useState(null);
+  const [pubView, setPubView]               = useState("checkin");
   const [form, setForm]                     = useState(EMPTY_FORM);
   const [suggestions, setSuggestions]       = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -1859,8 +1859,8 @@ function PublicApp({ records, people, services, loading, dbError, loadData, clos
         {scanResult && <ScanToast result={scanResult} onDone={() => setScanResult(null)}/>}
         <div style={{ display:"flex", gap:14, marginBottom:28 }}>
           {["checkin","checkout"].map(v => (
-            <button key={v} onClick={() => setPubView(pubView === v ? null : v)} style={{ flex:1, padding:"28px 0", borderRadius:14, border: pubView === v ? "2px solid #46b4bf" : "1.5px solid #D0E6E5", background: pubView === v ? "#EAF7F8" : "#fff", fontWeight:700, fontSize:22, cursor:"pointer", color: pubView === v ? "#2E8A94" : "#5A7070", fontFamily:"inherit", transition:"all 0.15s ease" }}>
-              {pubView === v ? `▲ ${v === "checkin" ? "Check in" : "Check out"}` : `▼ ${v === "checkin" ? "Check in" : "Check out"}`}
+            <button key={v} onClick={() => setPubView(v)} style={{ flex:1, padding:"18px 0", borderRadius:14, border: pubView === v ? "2px solid #46b4bf" : "1.5px solid #D0E6E5", background: pubView === v ? "#EAF7F8" : "#fff", fontWeight:700, fontSize:18, cursor:"pointer", color: pubView === v ? "#2E8A94" : "#5A7070", fontFamily:"inherit", transition:"all 0.15s ease" }}>
+              {v === "checkin" ? "Check in" : "Check out"}
             </button>
           ))}
         </div>
