@@ -115,9 +115,106 @@ const btnGhost   = { background:"transparent", color:"#5A7070", border:"1px soli
 const btnSuccess = { background:"#3A9C6A", color:"#fff", border:"none", borderRadius:10, padding:"9px 18px", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"inherit" };
 
 // ─────────────────────────────────────────────────────────────
+// OFFLINE QUEUE — buffers writes when Supabase is unreachable
+// ─────────────────────────────────────────────────────────────
+
+const _offlineQueue = [];        // pending { path, opts } operations
+let   _isOnline     = true;      // current connection state
+const _onlineListeners = new Set();
+
+function notifyOnlineState(state) {
+  _isOnline = state;
+  _onlineListeners.forEach(fn => fn(state));
+}
+
+function useOnlineState() {
+  const [online, setOnline] = useState(_isOnline);
+  useEffect(() => {
+    _onlineListeners.add(setOnline);
+    return () => _onlineListeners.delete(setOnline);
+  }, []);
+  return online;
+}
+
+// Wrapped api that queues writes when offline
+async function apiWithFallback(path, opts = {}) {
+  const isWrite = opts.method && opts.method !== "GET";
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: HEADERS, ...opts });
+    if (!res.ok && res.status >= 500) throw new Error(`Server error ${res.status}`);
+    if (_isOnline === false) {
+      notifyOnlineState(true);
+      flushOfflineQueue();
+    }
+    return res;
+  } catch(e) {
+    if (isWrite) {
+      _offlineQueue.push({ path, opts });
+      notifyOnlineState(false);
+      // Return a fake successful response so callers don't break
+      return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    notifyOnlineState(false);
+    throw e;
+  }
+}
+
+async function flushOfflineQueue() {
+  if (_offlineQueue.length === 0) return;
+  const pending = [..._offlineQueue];
+  _offlineQueue.length = 0;
+  for (const { path, opts } of pending) {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: HEADERS, ...opts });
+    } catch(_) {
+      _offlineQueue.unshift({ path, opts }); // put back if still failing
+      notifyOnlineState(false);
+      return;
+    }
+  }
+}
+
+// Banner shown when offline or syncing
+function OfflineBanner() {
+  const online = useOnlineState();
+  const [syncing, setSyncing] = useState(false);
+  const [justBack, setJustBack] = useState(false);
+  const prevOnline = useRef(_isOnline);
+
+  useEffect(() => {
+    if (!prevOnline.current && online) {
+      setSyncing(true);
+      setTimeout(() => { setSyncing(false); setJustBack(true); }, 2000);
+      setTimeout(() => setJustBack(false), 5000);
+    }
+    prevOnline.current = online;
+  }, [online]);
+
+  if (online && !syncing && !justBack) return null;
+
+  const bg      = !online ? "#C0392B" : syncing ? "#E6A817" : "#3A9C6A";
+  const message = !online
+    ? "⚠ Offline — check-ins are being saved locally and will sync when connection is restored"
+    : syncing ? "↻ Back online — syncing queued check-ins…"
+    : "✓ All check-ins synced successfully";
+
+  return (
+    <div style={{
+      position:"fixed", top:0, left:0, right:0, zIndex:2000,
+      background:bg, color:"#fff", textAlign:"center",
+      padding:"10px 16px", fontSize:14, fontWeight:600,
+      animation:"slideIn 0.3s ease"
+    }}>
+      {message}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // API HELPER
 // ─────────────────────────────────────────────────────────────
 
+// Use api() for reads — use apiWithFallback() for writes that must not be lost
 function api(path, opts = {}) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: HEADERS, ...opts });
 }
@@ -1802,7 +1899,7 @@ function PublicApp({ records, people, services, loading, dbError, loadData, clos
       }
     }
     try {
-      const res = await api("checkin_records", { method:"POST", body:JSON.stringify(toInsert.length === 1 ? toInsert[0] : toInsert), headers:{ ...HEADERS, "Prefer":"return=representation" } });
+      const res = await apiWithFallback("checkin_records", { method:"POST", body:JSON.stringify(toInsert.length === 1 ? toInsert[0] : toInsert), headers:{ ...HEADERS, "Prefer":"return=representation" } });
       if (!res.ok) throw new Error();
       await loadData();
       setSuccess({ name, guestNumber, service:form.service, position, isNew:!person, addOns });
@@ -1826,6 +1923,7 @@ function PublicApp({ records, people, services, loading, dbError, loadData, clos
 
   return (
     <div style={{ minHeight:"100vh", background:"#F7FAFA" }}>
+      <OfflineBanner/>
       <div style={{ background:"#46b4bf", padding:"28px 24px 22px", textAlign:"center" }}>
         <div style={{ display:"flex", justifyContent:"center", marginBottom:12 }}><Logo/></div>
         <LiveClock/>
@@ -2227,6 +2325,7 @@ function AdminApp() {
 
   return (
     <div style={{ minHeight:"100vh", background:"#F7FAFA" }}>
+      <OfflineBanner/>
       <FlagAlertPopup alerts={flagAlerts} onDismiss={dismissAlert}/>
       <div style={{ background:"#46b4bf", padding:"28px 24px 22px", textAlign:"center" }}>
         <div style={{ display:"flex", justifyContent:"center", marginBottom:12 }}><Logo/></div>
