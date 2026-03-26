@@ -1067,7 +1067,7 @@ function GroupNameEditor({ name, records, onUpdate }) {
   );
 }
 
-function PersonServiceTag({ r, onCheckOut, onDelete, onUpdate }) {
+function PersonServiceTag({ r, onCheckOut, onMarkComplete, onDelete, onUpdate }) {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [editingPos, setEditingPos]       = useState(false);
   const [posVal, setPosVal]               = useState(r.queue_position || "");
@@ -1140,7 +1140,7 @@ function PersonServiceTag({ r, onCheckOut, onDelete, onUpdate }) {
           <button onClick={() => setEditingPos(true)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, color:C.teal, textDecoration:"underline dotted", fontFamily:"inherit", padding:0 }}>+ set #</button>
         )}
         {!r.check_out && !isShowerLaundry && <span style={{ fontSize:12, padding:"1px 8px", borderRadius:20, background:"#fff", color:C.teal, border:`1px solid ${C.tealMid}` }}>Active</span>}
-        {!r.check_out && isShowerLaundry && <WaitingButton key={r.id} r={r} onComplete={() => onCheckOut(r.id)} onUpdate={onUpdate}/>}
+        {!r.check_out && isShowerLaundry && <WaitingButton key={r.id} r={r} onComplete={() => onMarkComplete(r.id)} onUpdate={onUpdate}/>}
         {r.locker_used && <span style={{ fontSize:12, padding:"1px 8px", borderRadius:20, background:"#FEF7E6", color:"#8A5A00", fontWeight:500 }}>🔑 Locker {r.locker_used}</span>}
         {!r.check_out && !isShowerLaundry && <button onClick={() => onCheckOut(r.id)} style={{ ...btnOutline, fontSize:12, padding:"3px 10px" }}>Check out</button>}
         {confirmDelete === r.id ? (
@@ -2390,7 +2390,7 @@ function AdminApp() {
                             </div>
                             <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
                               {g.records.filter(r => r.service !== FLAG_ALERT_SERVICE && (logTab === "All" || r.service === logTab)).map(r => (
-                                <PersonServiceTag key={r.id} r={r} onCheckOut={checkOut} onDelete={deleteRecord} onUpdate={loadData}/>
+                                <PersonServiceTag key={r.id} r={r} onCheckOut={checkOut} onMarkComplete={markComplete} onDelete={deleteRecord} onUpdate={loadData}/>
                               ))}
                             </div>
                           </div>
