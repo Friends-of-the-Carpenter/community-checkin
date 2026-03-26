@@ -552,29 +552,83 @@ function AssignQueueNumber({ r, numLabel, onUpdate }) {
 }
 
 function WaitingButton({ r, onComplete, onUpdate }) {
-  const [saving, setSaving] = useState(false);
-  const inProcess = r.status === "in_process";
+  const [saving, setSaving]     = useState(false);
+  const [timeLeft, setTimeLeft] = useState(null);
+  const [elapsed, setElapsed]   = useState(0);
+  const timerRef                = useRef(null);
+  const inProcess               = r.status === "in_process";
+  const isShower                = r.service === "Showers";
+  const isLaundry               = r.service === "Laundry";
+  const SHOWER_LIMIT            = 20 * 60;
+
+  useEffect(() => {
+    if (inProcess && r.status_at) {
+      const elapsedSecs = Math.floor((Date.now() - new Date(r.status_at)) / 1000);
+      setElapsed(elapsedSecs);
+      if (isShower) setTimeLeft(Math.max(0, SHOWER_LIMIT - elapsedSecs));
+      startTick(elapsedSecs);
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, []);
+
+  function startTick(startElapsed = 0) {
+    let e = startElapsed;
+    timerRef.current = setInterval(() => {
+      e += 1;
+      setElapsed(e);
+      if (isShower) setTimeLeft(Math.max(0, SHOWER_LIMIT - e));
+    }, 1000);
+  }
 
   async function toggleStatus() {
     setSaving(true);
-    const newStatus = inProcess ? null : "in_process";
-    await api(`checkin_records?id=eq.${r.id}`, {
-      method:"PATCH", body:JSON.stringify({ status: newStatus }),
-      headers:{ ...HEADERS, "Prefer":"return=minimal" }
-    });
-    onUpdate(); setSaving(false);
+    if (inProcess) {
+      if (timerRef.current) clearInterval(timerRef.current);
+      setTimeLeft(null); setElapsed(0);
+      await api(`checkin_records?id=eq.${r.id}`, {
+        method:"PATCH", body:JSON.stringify({ status:null, status_at:null }),
+        headers:{ ...HEADERS, "Prefer":"return=minimal" }
+      });
+      onUpdate();
+    } else {
+      const now = new Date().toISOString();
+      await api(`checkin_records?id=eq.${r.id}`, {
+        method:"PATCH", body:JSON.stringify({ status:"in_process", status_at:now }),
+        headers:{ ...HEADERS, "Prefer":"return=minimal" }
+      });
+      if (isShower) setTimeLeft(SHOWER_LIMIT);
+      setElapsed(0);
+      startTick(0);
+      onUpdate();
+    }
+    setSaving(false);
   }
+
+  function fmtTime(s) {
+    const m = Math.floor(Math.abs(s) / 60), sec = Math.abs(s) % 60;
+    return `${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
+  }
+
+  const isOver  = isShower && inProcess && timeLeft === 0;
+  const overBy  = isOver ? elapsed - SHOWER_LIMIT : 0;
+  let label, bgColor;
+  if (!inProcess)    { label = "Waiting";             bgColor = C.danger; }
+  else if (isLaundry){ label = fmtTime(elapsed);       bgColor = "#E6A817"; }
+  else if (isOver)   { label = `+${fmtTime(overBy)}`; bgColor = "#E6A817"; }
+  else               { label = fmtTime(timeLeft);      bgColor = "#E6A817"; }
 
   return (
     <>
       <button onClick={toggleStatus} disabled={saving} style={{
-        fontSize:14, padding:"5px 14px", borderRadius:20,
-        background: inProcess ? "#E6A817" : C.danger,
-        color:"#fff", fontWeight:600, border:"none", cursor:"pointer", flexShrink:0, opacity: saving ? 0.5 : 1
+        fontSize: inProcess ? 15 : 14, padding:"5px 14px", borderRadius:20, minWidth:90,
+        background: bgColor, color:"#fff", fontWeight:700, border:"none",
+        cursor:"pointer", flexShrink:0, opacity: saving ? 0.5 : 1,
+        animation: isOver ? "pulse 0.8s infinite" : "none"
       }}>
-        {inProcess ? "In Process" : "Waiting"}
+        {label}
       </button>
       <button onClick={onComplete} style={{ ...btnSuccess, flexShrink:0 }}>✓</button>
+      <style>{`@keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }`}</style>
     </>
   );
 }
@@ -758,12 +812,27 @@ function PeopleRemover({ people, onRemove, onFlag, onUpdate }) {
     if (!nameVal.trim()) { setEditingName(null); return; }
     try {
       const updates = { name: nameVal.trim(), gender: genderVal || null, race: raceVal || null, age_range: ageVal || null };
-      await api(`people?id=eq.${p.id}`, { method:"PATCH", body:JSON.stringify(updates), headers:{ ...HEADERS, "Prefer":"return=minimal" } });
-      if (nameVal.trim() !== p.name) {
-        await api(`checkin_records?name=eq.${encodeURIComponent(p.name)}`, { method:"PATCH", body:JSON.stringify({ name: nameVal.trim() }), headers:{ ...HEADERS, "Prefer":"return=minimal" } });
+      const res = await api(`people?id=eq.${p.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(updates),
+        headers: { ...HEADERS, "Prefer": "return=representation" }
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        console.error("saveName failed:", res.status, err);
+        return;
       }
-      setEditingName(null); onUpdate();
-    } catch(_) {}
+      if (nameVal.trim() !== p.name) {
+        await api(`checkin_records?name=eq.${encodeURIComponent(p.name)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ name: nameVal.trim() }),
+          headers: { ...HEADERS, "Prefer": "return=minimal" }
+        });
+      }
+      setEditingName(null);
+      setNameVal(""); setGenderVal(""); setRaceVal(""); setAgeVal("");
+      onUpdate();
+    } catch(e) { console.error("saveName error:", e); }
   }
 
   const filtered = people.filter(p => {
@@ -853,7 +922,7 @@ function PeopleRemover({ people, onRemove, onFlag, onUpdate }) {
               </div>
               <div style={{ display:"flex", gap:7, flexShrink:0, flexWrap:"wrap" }}>
                 <button onClick={() => setShowQR(showQR === p.id ? null : p.id)} style={{ ...btnGhost, fontSize:13, padding:"6px 12px", color:C.teal, borderColor:C.tealMid }}>QR</button>
-                <button onClick={() => { setEditingName(p.id); setNameVal(p.name); setGenderVal(p.gender||""); setRaceVal(p.race||""); setAgeVal(p.age_range||""); }} style={{ ...btnGhost, fontSize:13, padding:"6px 12px", color:C.teal, borderColor:C.tealMid }}>Edit</button>
+                <button onClick={() => { setEditingName(p.id); setNameVal(p.name); }} style={{ ...btnGhost, fontSize:13, padding:"6px 12px", color:C.teal, borderColor:C.tealMid }}>Edit</button>
                 <select
                   value={p.default_service || ""}
                   onChange={async e => {
