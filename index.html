@@ -2423,6 +2423,29 @@ function AdminApp() {
               <button onClick={submit} disabled={saving || !!flagAlert} style={{ ...btnPrimary, width:"100%", padding:16, fontSize:18, opacity:(saving || !!flagAlert) ? 0.5 : 1, cursor: flagAlert ? "not-allowed" : "pointer" }}>
                 {saving ? "Saving…" : "Check in"}
               </button>
+
+              {/* Showers & Laundry quick-add */}
+              {isServiceAvailableToday("Showers") && (
+                <div style={{ marginTop:28, borderTop:`2px solid ${C.border}`, paddingTop:24 }}>
+                  <p style={{ margin:"0 0 16px", fontSize:15, fontWeight:600, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.05em" }}>Showers & Laundry Queue</p>
+                  {Object.keys(CAPPED_SERVICES).map(svc => {
+                    const cap  = CAPPED_SERVICES[svc];
+                    const used = countToday(svc);
+                    const numLabel = svc === "Showers" ? "Shower" : "Laundry";
+                    return (
+                      <div key={svc} style={{ marginBottom:12 }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                          <span style={{ fontSize:15, fontWeight:600 }}>{svc}</span>
+                          <span style={{ fontSize:13, fontWeight:600, color: used >= cap ? C.danger : C.teal, background: used >= cap ? C.dangerBg : C.tealLight, padding:"3px 12px", borderRadius:20 }}>
+                            {used >= cap ? "Full" : `${cap - used} spots left`}
+                          </span>
+                        </div>
+                        <ManualAddToQueue svc={svc} people={people} records={records} numLabel={numLabel} onAdd={loadData}/>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
