@@ -133,7 +133,7 @@ function useOnlineState() {
   useEffect(() => {
     _onlineListeners.add(setOnline);
     return () => _onlineListeners.delete(setOnline);
-  }, []);
+  }, [loadData]);
   return online;
 }
 
@@ -2194,6 +2194,24 @@ function AdminApp() {
     const h = e => { if (suggestRef.current && !suggestRef.current.contains(e.target)) setShowSuggestions(false); };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  // Fast 3-second poll just for flag alerts — tiny payload, only unseen flags today
+  useEffect(() => {
+    async function checkFlags() {
+      try {
+        const res = await api(`checkin_records?select=id,name,notes,check_in,check_out&service=eq.${FLAG_ALERT_SERVICE}&check_in=gte.${todayISO()}&check_out=is.null&order=check_in.desc`);
+        if (!res.ok) return;
+        const alerts = await res.json();
+        const newAlerts = alerts.filter(a => !seenAlertIds.current.has(a.id));
+        if (newAlerts.length > 0) {
+          newAlerts.forEach(a => seenAlertIds.current.add(a.id));
+          if (!isFirstLoad.current) setFlagAlerts(prev => [...prev, ...newAlerts]);
+        }
+      } catch(_) {}
+    }
+    const t = setInterval(checkFlags, 3000);
+    return () => clearInterval(t);
   }, []);
 
   // Fast 3-second poll just for flag alerts — tiny payload, only unseen flags today
