@@ -87,8 +87,7 @@ const ANALYTICS_RANGES = [
   { id:"custom",  label:"Custom" }
 ];
 
-// Selected columns for live polling — reduces egress significantly
-const LIVE_COLUMNS = "id,name,type,service,notes,member_id,check_in,check_out,status,status_at,queue_position,locker_used";
+const IS_ADMIN_MODE = new URLSearchParams(window.location.search).get("mode") === "admin";
 const IS_QUEUE_MODE = new URLSearchParams(window.location.search).get("mode") === "showerslaundry";
 
 const EMPTY_FORM = {
@@ -133,7 +132,7 @@ function useOnlineState() {
   useEffect(() => {
     _onlineListeners.add(setOnline);
     return () => _onlineListeners.delete(setOnline);
-  }, [loadData]);
+  }, []);
   return online;
 }
 
@@ -1414,27 +1413,12 @@ function AnalyticsTab({ records }) {
   const [range, setRange]             = useState(null);
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd]     = useState("");
-  const [allRecords, setAllRecords]   = useState(null); // fetched on demand
-  const [loadingAll, setLoadingAll]   = useState(false);
-
-  // Fetch all records when a non-today range is selected
-  useEffect(() => {
-    if (!range || range === "today") { setAllRecords(null); return; }
-    setLoadingAll(true);
-    api("checkin_records?select=" + LIVE_COLUMNS + "&order=check_in.desc")
-      .then(r => r.json())
-      .then(d => { setAllRecords(d); setLoadingAll(false); })
-      .catch(() => setLoadingAll(false));
-  }, [range]);
-
-  // Use live today records for "today", fetched all records for other ranges
-  const sourceRecords = (range === "today" || !range) ? records : (allRecords || records);
 
   function getFiltered() {
     if (range === "custom") {
       const start = customStart ? new Date(customStart + "T00:00:00") : new Date(0);
       const end   = customEnd   ? new Date(customEnd   + "T23:59:59") : new Date();
-      return sourceRecords.filter(r => {
+      return records.filter(r => {
         const t = new Date(r.check_in);
         return t >= start && t <= end && r.service !== FLAG_ALERT_SERVICE;
       });
@@ -1448,7 +1432,7 @@ function AnalyticsTab({ records }) {
     else if (range === "year")    { cutoff = new Date(now.getFullYear(), 0, 1); }
     else { cutoff = new Date(0); }
     cutoff.setHours(0,0,0,0);
-    return sourceRecords.filter(r => new Date(r.check_in) >= cutoff && r.service !== FLAG_ALERT_SERVICE);
+    return records.filter(r => new Date(r.check_in) >= cutoff && r.service !== FLAG_ALERT_SERVICE);
   }
 
   function meetsMinDuration(r) {
@@ -1518,11 +1502,6 @@ function AnalyticsTab({ records }) {
       {/* Prompt when nothing selected */}
       {!range && (
         <p style={{ textAlign:"center", color:C.textMuted, fontSize:15, padding:"2rem 0" }}>Select a time range to view data.</p>
-      )}
-
-      {/* Loading indicator for non-today ranges */}
-      {range && range !== "today" && loadingAll && !allRecords && (
-        <p style={{ textAlign:"center", color:C.textMuted, fontSize:15, padding:"2rem 0" }}>Loading data…</p>
       )}
 
       {/* Custom date pickers */}
@@ -1599,7 +1578,7 @@ function AnalyticsTab({ records }) {
             <p style={{ margin:"0 0 16px", fontSize:16, fontWeight:700, color:C.text }}>Demographic Data</p>
             {(()=>{
               const uniquePeople = [...new Map(filtered.map(r => {
-                const p = sourceRecords.find(x => x.name === r.name);
+                const p = records.find(x => x.name === r.name);
                 return [r.name, p];
               })).values()].filter(Boolean);
               function tally(field) {
@@ -1795,23 +1774,9 @@ function PublicApp({ records, people, services, loading, dbError, loadData, clos
   useEffect(() => { recordsRef2.current = records; }, [records]);
   useEffect(() => { peopleRef2.current  = people;  }, [people]);
 
-  // Fast 3-second poll just for flag alerts — lightweight, only fetches today's FLAG_ALERT records
   useEffect(() => {
-    async function checkFlags() {
-      try {
-        const res = await api(`checkin_records?select=id,name,notes,check_in,check_out&service=eq.${FLAG_ALERT_SERVICE}&check_in=gte.${todayISO()}&check_out=is.null&order=check_in.desc`);
-        if (!res.ok) return;
-        const alerts = await res.json();
-        const newAlerts = alerts.filter(a => !seenAlertIds.current.has(a.id));
-        if (newAlerts.length > 0) {
-          newAlerts.forEach(a => seenAlertIds.current.add(a.id));
-          if (!isFirstLoad.current) setFlagAlerts(prev => [...prev, ...newAlerts]);
-        }
-      } catch(_) {}
-    }
-    const t = setInterval(checkFlags, 3000);
-    return () => clearInterval(t);
-  }, []);
+    const h = e => { if (suggestRef.current && !suggestRef.current.contains(e.target)) setShowSuggestions(false); };
+    document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
@@ -2164,7 +2129,7 @@ function AdminApp() {
   const loadData = useCallback(async () => {
     try {
       const [rRes, sRes, pRes] = await Promise.all([
-        api(`checkin_records?select=${LIVE_COLUMNS}&check_in=gte.${todayISO()}&order=check_in.desc`),
+        api("checkin_records?order=check_in.desc"),
         api("checkin_services?order=name.asc"),
         api("people?order=name.asc")
       ]);
@@ -2179,6 +2144,11 @@ function AdminApp() {
           api(`checkin_records?id=eq.${r.id}`, { method:"PATCH", body:JSON.stringify({ locker_used:null }), headers:{ ...HEADERS, "Prefer":"return=minimal" } })
         ));
       }
+      const newAlerts = rData.filter(r => r.service === FLAG_ALERT_SERVICE && !r.check_out && r.check_in >= todayISO() && !seenAlertIds.current.has(r.id));
+      if (newAlerts.length > 0) {
+        newAlerts.forEach(a => seenAlertIds.current.add(a.id));
+        if (!isFirstLoad.current) setFlagAlerts(prev => [...prev, ...newAlerts]);
+      }
       isFirstLoad.current = false;
     } catch(_) { setDbError("Could not connect to database."); }
     setLoading(false);
@@ -2186,51 +2156,13 @@ function AdminApp() {
 
   useEffect(() => {
     loadData();
-    const t = setInterval(loadData, 10000);
+    const t = setInterval(loadData, 3000);
     return () => clearInterval(t);
   }, [loadData]);
 
   useEffect(() => {
     const h = e => { if (suggestRef.current && !suggestRef.current.contains(e.target)) setShowSuggestions(false); };
     document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
-
-  // Fast 3-second poll just for flag alerts — tiny payload, only unseen flags today
-  useEffect(() => {
-    async function checkFlags() {
-      try {
-        const res = await api(`checkin_records?select=id,name,notes,check_in,check_out&service=eq.${FLAG_ALERT_SERVICE}&check_in=gte.${todayISO()}&check_out=is.null&order=check_in.desc`);
-        if (!res.ok) return;
-        const alerts = await res.json();
-        const newAlerts = alerts.filter(a => !seenAlertIds.current.has(a.id));
-        if (newAlerts.length > 0) {
-          newAlerts.forEach(a => seenAlertIds.current.add(a.id));
-          if (!isFirstLoad.current) setFlagAlerts(prev => [...prev, ...newAlerts]);
-        }
-      } catch(_) {}
-    }
-    const t = setInterval(checkFlags, 3000);
-    return () => clearInterval(t);
-  }, []);
-
-  // Fast 3-second poll just for flag alerts — tiny payload, only unseen flags today
-  useEffect(() => {
-    async function checkFlags() {
-      try {
-        const res = await api(`checkin_records?select=id,name,notes,check_in,check_out&service=eq.${FLAG_ALERT_SERVICE}&check_in=gte.${todayISO()}&check_out=is.null&order=check_in.desc`);
-        if (!res.ok) return;
-        const alerts = await res.json();
-        const newAlerts = alerts.filter(a => !seenAlertIds.current.has(a.id));
-        if (newAlerts.length > 0) {
-          newAlerts.forEach(a => seenAlertIds.current.add(a.id));
-          if (!isFirstLoad.current) setFlagAlerts(prev => [...prev, ...newAlerts]);
-        }
-      } catch(_) {}
-    }
-    const t = setInterval(checkFlags, 3000);
-    return () => clearInterval(t);
-  }, []);
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
@@ -2731,7 +2663,7 @@ function Root() {
   const loadData = useCallback(async () => {
     try {
       const [rRes, sRes, pRes] = await Promise.all([
-        api(`checkin_records?select=${LIVE_COLUMNS}&check_in=gte.${todayISO()}&order=check_in.desc`),
+        api("checkin_records?order=check_in.desc"),
         api("checkin_services?order=name.asc"),
         api("people?order=name.asc")
       ]);
@@ -2746,7 +2678,7 @@ function Root() {
 
   useEffect(() => {
     loadData();
-    const t = setInterval(loadData, 10000);
+    const t = setInterval(loadData, 3000);
     return () => clearInterval(t);
   }, [loadData]);
 
