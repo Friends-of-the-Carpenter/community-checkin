@@ -49,6 +49,7 @@ const ADMIN_PIN              = "9866";
 const QUEUE_PIN              = "7777";
 const QR_PREFIX              = "VOL-";
 const SCANNER_TIMEOUT_MS     = 100;
+
 const CHART_SERVICES = ["Showers","Laundry","Day Center","Volunteer","Community Partnership","Drop-in"];
 const CHART_COLORS   = { "Showers":"#46b4bf","Laundry":"#2E8A94","Day Center":"#E6A817","Community Partnership":"#7B61C4","Volunteer":"#3A9C6A","Drop-in":"#E67E22" };
 const GUEST_SERVICES     = ["Day Center","Community Partnership","Drop-in"];
@@ -84,12 +85,8 @@ const btnGhost   = { background:"transparent", color:"#5A7070", border:"1px soli
 const btnSuccess = { background:"#3A9C6A", color:"#fff", border:"none", borderRadius:10, padding:"9px 18px", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"inherit" };
 
 // ─────────────────────────────────────────────────────────────
-// API & OFFLINE FALLBACK
+// OFFLINE QUEUE
 // ─────────────────────────────────────────────────────────────
-
-function api(path, opts = {}) {
-  return fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: HEADERS, ...opts });
-}
 
 const _offlineQueue    = [];
 let   _isOnline        = true;
@@ -102,7 +99,10 @@ function notifyOnlineState(state) {
 
 function useOnlineState() {
   const [online, setOnline] = useState(_isOnline);
-  useEffect(() => { _onlineListeners.add(setOnline); return () => _onlineListeners.delete(setOnline); }, []);
+  useEffect(() => {
+    _onlineListeners.add(setOnline);
+    return () => _onlineListeners.delete(setOnline);
+  }, []);
   return online;
 }
 
@@ -166,6 +166,14 @@ function OfflineBanner() {
       {message}
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────
+// API HELPER
+// ─────────────────────────────────────────────────────────────
+
+function api(path, opts = {}) {
+  return fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: HEADERS, ...opts });
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -487,41 +495,54 @@ function AssignQueueNumber({r,numLabel,onUpdate}) {
   );
 }
 
-// Global clock for WaitingButton — one shared interval, no per-component timers
-const _nowListeners = new Set();
-let _now = Date.now();
-setInterval(()=>{_now=Date.now();_nowListeners.forEach(fn=>fn(_now));},1000);
-function useNow(){
-  const [now,setNow]=useState(_now);
-  useEffect(()=>{_nowListeners.add(setNow);return()=>_nowListeners.delete(setNow);},[]);
-  return now;
-}
-
 function WaitingButton({r,onComplete,onUpdate}) {
-  const now=useNow();
   const [saving,setSaving]=useState(false);
+  const [timeLeft,setTimeLeft]=useState(null);
+  const [elapsed,setElapsed]=useState(0);
+  const timerRef=useRef(null);
   const inProcess=r.status==="in_process";
   const isShower=r.service==="Showers";
   const isLaundry=r.service==="Laundry";
   const SHOWER_LIMIT=20*60;
 
-  const elapsed=inProcess&&r.status_at?Math.floor((now-new Date(r.status_at))/1000):0;
-  const timeLeft=isShower?Math.max(0,SHOWER_LIMIT-elapsed):null;
-  const isOver=isShower&&inProcess&&timeLeft===0;
-  const overBy=isOver?elapsed-SHOWER_LIMIT:0;
+  useEffect(()=>{
+    if(inProcess){
+      const elapsedSecs=r.status_at?Math.floor((Date.now()-new Date(r.status_at))/1000):0;
+      setElapsed(elapsedSecs);
+      if(isShower)setTimeLeft(Math.max(0,SHOWER_LIMIT-elapsedSecs));
+      startTick(elapsedSecs);
+    }
+    return()=>{if(timerRef.current)clearInterval(timerRef.current);};
+  },[]);
 
-  async function toggleStatus() {
+  function startTick(startElapsed=0){
+    let e=startElapsed;
+    timerRef.current=setInterval(()=>{
+      e+=1;setElapsed(e);
+      if(isShower)setTimeLeft(Math.max(0,SHOWER_LIMIT-e));
+    },1000);
+  }
+
+  async function toggleStatus(){
     setSaving(true);
     if(inProcess){
+      if(timerRef.current)clearInterval(timerRef.current);
+      setTimeLeft(null);setElapsed(0);
       await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({status:null,status_at:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      onUpdate();
     }else{
-      await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({status:"in_process",status_at:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      const now=new Date().toISOString();
+      await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({status:"in_process",status_at:now}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      if(isShower)setTimeLeft(SHOWER_LIMIT);
+      setElapsed(0);startTick(0);onUpdate();
     }
-    onUpdate();setSaving(false);
+    setSaving(false);
   }
 
   function fmtTime(s){const m=Math.floor(Math.abs(s)/60),sec=Math.abs(s)%60;return`${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;}
 
+  const isOver=isShower&&inProcess&&timeLeft===0;
+  const overBy=isOver?elapsed-SHOWER_LIMIT:0;
   let label,bgColor;
   if(!inProcess){label="Waiting";bgColor=C.danger;}
   else if(isLaundry){label=fmtTime(elapsed);bgColor="#E6A817";}
@@ -702,7 +723,7 @@ function PeopleRemover({people,onRemove,onFlag,onUpdate}) {
   async function saveName(p) {
     if(!nameVal.trim()){setEditingName(null);return;}
     try{
-      const updates={name:nameVal.trim()};
+      const updates={name:nameVal.trim(),gender:genderVal||null,race:raceVal||null,age_range:ageVal||null};
       const res=await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify(updates),headers:{...HEADERS,"Prefer":"return=representation"}});
       if(!res.ok){console.error("saveName failed:",res.status,await res.text());return;}
       if(nameVal.trim()!==p.name){
@@ -739,7 +760,7 @@ function PeopleRemover({people,onRemove,onFlag,onUpdate}) {
         {filtered.map((p,i)=>(
           <div key={p.id} style={{background:p.flagged?"#FFF5F5":C.white,borderBottom:i<filtered.length-1?`1px solid ${C.border}`:"none",overflow:"hidden"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",gap:10,flexWrap:"wrap"}}>
-              <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:1}}>
                 <div style={{width:38,height:38,borderRadius:"50%",background:avColor(p.name).bg,color:avColor(p.name).color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,flexShrink:0}}>{initials(p.name)||"?"}</div>
                 <span style={{fontSize:15,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
                 {p.gender&&<span style={{fontSize:12,padding:"2px 8px",borderRadius:20,background:"#EAF7F8",color:C.tealDark,flexShrink:0}}>{p.gender}</span>}
@@ -747,37 +768,7 @@ function PeopleRemover({people,onRemove,onFlag,onUpdate}) {
                 {p.flagged&&<span style={{fontSize:12,padding:"2px 8px",borderRadius:20,background:C.dangerBg,color:C.danger,fontWeight:600,flexShrink:0}}>⚑</span>}
                 {editingName===p.id&&(
                   <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:6,width:"100%"}}>
-                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                      <input value={nameVal} onChange={e=>setNameVal(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveName(p)} style={{...inpStyle,padding:"6px 10px",fontSize:14,flex:1}} autoFocus/>
-                    </div>
-                    {/* Gender, Race & Age selects — currently hidden; change display to "flex" to enable */}
-                    <div style={{display:"none",gap:6,flexWrap:"wrap"}}>
-                      <select value={genderVal} onChange={e=>setGenderVal(e.target.value)} style={{...inpStyle,padding:"6px 10px",fontSize:14,flex:1}}>
-                        <option value="">Gender…</option>
-                        <option value="Male">Male</option><option value="Female">Female</option>
-                        <option value="Non-binary">Non-binary</option><option value="Transgender">Transgender</option>
-                        <option value="Prefer not to say">Prefer not to say</option><option value="Other">Other</option>
-                      </select>
-                      <select value={raceVal} onChange={e=>setRaceVal(e.target.value)} style={{...inpStyle,padding:"6px 10px",fontSize:14,flex:1}}>
-                        <option value="">Race/Ethnicity…</option>
-                        <option value="American Indian, Alaska Native or Indigenous">American Indian, Alaska Native or Indigenous</option>
-                        <option value="East Asian">East Asian</option><option value="South Asian">South Asian</option>
-                        <option value="Southeastern Asian">Southeastern Asian</option>
-                        <option value="Black or African American">Black or African American</option>
-                        <option value="Hispanic or Latino">Hispanic or Latino</option>
-                        <option value="Native Hawaiian or Pacific Islander">Native Hawaiian or Pacific Islander</option>
-                        <option value="Middle Eastern or North African">Middle Eastern or North African</option>
-                        <option value="White">White</option><option value="Two or more races">Two or more races</option>
-                        <option value="Prefer not to say">Prefer not to say</option><option value="Other">Other</option>
-                      </select>
-                      <select value={ageVal} onChange={e=>setAgeVal(e.target.value)} style={{...inpStyle,padding:"6px 10px",fontSize:14,flex:1}}>
-                        <option value="">Age range…</option>
-                        <option value="18–24">18–24</option><option value="25–34">25–34</option>
-                        <option value="35–44">35–44</option><option value="45–54">45–54</option>
-                        <option value="55–64">55–64</option><option value="65+">65+</option>
-                        <option value="Prefer not to say">Prefer not to say</option>
-                      </select>
-                    </div>
+                    <input value={nameVal} onChange={e=>setNameVal(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveName(p)} style={{...inpStyle,padding:"6px 10px",fontSize:14}} autoFocus/>
                     <div style={{display:"flex",gap:6}}>
                       <button onClick={()=>saveName(p)} style={{...btnPrimary,padding:"6px 14px",fontSize:13}}>Save</button>
                       <button onClick={()=>setEditingName(null)} style={{...btnGhost,fontSize:13,padding:"6px 10px"}}>Cancel</button>
@@ -860,7 +851,7 @@ function TypeServiceEditor({r,onSave,onCancel}) {
         <select value={service} onChange={e=>setService(e.target.value)} style={{...inpStyle,width:"auto",flex:1}}>
           <option value="Day Center">Day Center</option><option value="Volunteer">Volunteer</option>
           <option value="Community Partnership">Community Partnership</option>
-          <option value="Showers">Showers</option><option value="Laundry">Laundry</option>
+          <option value="Showers">Showers</option><option value="Laundry">Laundry</option><option value="Drop-in">Drop-in</option>
         </select>
         <button onClick={save} disabled={saving} style={{...btnPrimary,padding:"11px 20px",fontSize:15,opacity:saving?0.5:1}}>{saving?"Saving…":"Save"}</button>
         <button onClick={onCancel} style={{...btnGhost,fontSize:14}}>Cancel</button>
@@ -912,13 +903,12 @@ function PersonServiceTag({r,onCheckOut,onMarkComplete,onDelete,onUpdate}) {
   const isShowerLaundry=NO_DURATION_SERVICES.includes(r.service);
   const numLabel=r.service==="Showers"?"Shower":r.service==="Laundry"?"Laundry":"";
 
-  async function saveService() {
+  async function saveService(){
     setSaving(true);
     try{const res=await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({service:editSvc,type:editType}),headers:{...HEADERS,"Prefer":"return=minimal"}});if(!res.ok)throw new Error();setEditingService(false);onUpdate();}catch(_){}
     setSaving(false);
   }
-
-  async function saveTime() {
+  async function saveTime(){
     const newVal=localInputToIso(timeVal);
     const inTime=editingTime==="check_in"?newVal:r.check_in;
     const outTime=editingTime==="check_out"?newVal:r.check_out;
@@ -931,14 +921,12 @@ function PersonServiceTag({r,onCheckOut,onMarkComplete,onDelete,onUpdate}) {
     }catch(_){setTimeMsg({type:"error",text:"Failed to save."});}
     setSaving(false);
   }
-
-  async function clearTime() {
+  async function clearTime(){
     setSaving(true);
     try{const res=await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});if(!res.ok)throw new Error();setEditingTime(null);onUpdate();}catch(_){setTimeMsg({type:"error",text:"Failed to clear."});}
     setSaving(false);
   }
-
-  async function savePos() {
+  async function savePos(){
     setSaving(true);
     try{await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({queue_position:parseInt(posVal)||null}),headers:{...HEADERS,"Prefer":"return=minimal"}});setEditingPos(false);onUpdate();}catch(_){}
     setSaving(false);
@@ -1114,9 +1102,7 @@ function AnalyticsTab({records}) {
     if(!range||range==="today"){setAllRecords(null);return;}
     setLoadingAll(true);
     api(`checkin_records?select=${LIVE_COLUMNS}&order=check_in.desc`)
-      .then(r=>r.json())
-      .then(d=>{setAllRecords(d);setLoadingAll(false);})
-      .catch(()=>setLoadingAll(false));
+      .then(r=>r.json()).then(d=>{setAllRecords(d);setLoadingAll(false);}).catch(()=>setLoadingAll(false));
   },[range]);
 
   const sourceRecords=(range==="today"||!range)?records:(allRecords||records);
@@ -1237,34 +1223,6 @@ function AnalyticsTab({records}) {
               </div>
             </>
           )}
-          {/* DEMOGRAPHIC DATA — hidden; change display to "block" to enable */}
-          <div style={{display:"none"}}>
-            <p style={{margin:"0 0 16px",fontSize:16,fontWeight:700,color:C.text}}>Demographic Data</p>
-            {(()=>{
-              const uniquePeople=[...new Map(filtered.map(r=>{const p=sourceRecords.find(x=>x.name===r.name);return[r.name,p];})).values()].filter(Boolean);
-              function tally(field){const map={};uniquePeople.forEach(p=>{const val=p[field]||"Not recorded";map[val]=(map[val]||0)+1;});return Object.entries(map).sort((a,b)=>b[1]-a[1]);}
-              const genderTally=tally("gender"),raceTally=tally("race"),ageRangeTally=tally("age_range");
-              function DemoCard({title,data,color}){
-                const total=data.reduce((s,[,v])=>s+v,0);
-                return(
-                  <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:20,marginBottom:20}}>
-                    <p style={{margin:"0 0 16px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{title}</p>
-                    {data.length===0?<p style={{fontSize:14,color:C.textMuted}}>No data recorded yet.</p>:data.map(([label,count])=>{
-                      const pct=Math.round(count/total*100);
-                      return(<div key={label} style={{marginBottom:10}}>
-                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                          <span style={{fontSize:14,color:C.text}}>{label}</span>
-                          <span style={{fontSize:14,color:C.textMuted}}>{count} <span style={{fontSize:12}}>({pct}%)</span></span>
-                        </div>
-                        <div style={{height:8,borderRadius:4,background:"#EAF7F8"}}><div style={{height:8,borderRadius:4,width:`${pct}%`,background:color,transition:"width 0.3s"}}/></div>
-                      </div>);
-                    })}
-                  </div>
-                );
-              }
-              return(<><DemoCard title="Gender" data={genderTally} color={C.teal}/><DemoCard title="Race / Ethnicity" data={raceTally} color={C.tealDark}/><DemoCard title="Age Range" data={ageRangeTally} color="#7B61C4"/></>);
-            })()}
-          </div>
         </>
       )}
     </div>
@@ -1375,7 +1333,8 @@ function PublicApp({records,people,services,loading,dbError,loadData,closedServi
 
   useEffect(()=>{
     const h=e=>{if(suggestRef.current&&!suggestRef.current.contains(e.target))setShowSuggestions(false);};
-    document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
+    document.addEventListener("mousedown",h);
+    return()=>document.removeEventListener("mousedown",h);
   },[]);
 
   useEffect(()=>{
@@ -1450,4 +1409,751 @@ function PublicApp({records,people,services,loading,dbError,loadData,closedServi
     if(alreadyCheckedIn){setErrors({submit:`${name} is already checked in for ${form.service} today.`});return;}
     setSaving(true);
     let guestNumber=gNum;
-    if(!person
+    if(!person){
+      try{
+        const res=await api("people",{method:"POST",body:JSON.stringify({name}),headers:{...HEADERS,"Prefer":"return=representation"}});
+        if(!res.ok)throw new Error();
+        const[np]=await res.json();guestNumber=String(np.guest_number);await loadData();
+      }catch(_){setErrors({submit:"Failed to register guest."});setSaving(false);return;}
+    }else{guestNumber=String(person.guest_number);}
+    const now=new Date().toISOString();
+    const serviceToUse=form.type==="Volunteer"?"Volunteer":form.service;
+    const position=serviceToUse&&CAPPED_SERVICES[serviceToUse]&&serviceToUse!=="Laundry"?nextAvailablePosition(serviceToUse,records):null;
+    const toInsert=[{name,member_id:form.memberId||null,type:form.type,service:serviceToUse,notes:form.notes||null,queue_position:position,check_in:now,check_out:null}];
+    const addOns=[];
+    if(form.service==="Day Center"){
+      if(form.addShowers&&countToday("Showers")<CAPPED_SERVICES["Showers"]){const p=nextAvailablePosition("Showers",records);toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Showers",notes:form.notes||null,queue_position:p,check_in:now,check_out:null});addOns.push({service:"Showers",position:p});}
+      if(form.addLaundry&&countToday("Laundry")<CAPPED_SERVICES["Laundry"]){toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Laundry",notes:form.notes||null,queue_position:null,check_in:now,check_out:null});addOns.push({service:"Laundry",position:null});}
+    }
+    try{
+      const res=await apiWithFallback("checkin_records",{method:"POST",body:JSON.stringify(toInsert.length===1?toInsert[0]:toInsert),headers:{...HEADERS,"Prefer":"return=representation"}});
+      if(!res.ok)throw new Error();
+      await loadData();
+      setSuccess({name,guestNumber,service:form.service,position,isNew:!person,addOns});
+      setForm(EMPTY_FORM);setErrors({});setFlagAlert(null);
+      setTimeout(()=>setSuccess(null),7000);
+    }catch(_){setErrors({submit:"Failed to save. Please try again."});}
+    setSaving(false);
+  }
+
+  const serviceOrder=["Day Center","Community Partnership","Drop-in"];
+  const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_SERVICES[s]&&s!=="Volunteer"&&!closedServices[s]).sort((a,b)=>{const ai=serviceOrder.indexOf(a),bi=serviceOrder.indexOf(b);if(ai===-1&&bi===-1)return 0;if(ai===-1)return 1;if(bi===-1)return -1;return ai-bi;});
+  const todayCount=new Set(records.filter(r=>r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE).map(r=>r.name)).size;
+  const guestCount=new Set(records.filter(r=>r.type==="Guest"&&r.service!==FLAG_ALERT_SERVICE&&r.check_in>=todayISO()).map(r=>r.name)).size;
+  const volCount=new Set(records.filter(r=>r.type==="Volunteer"&&r.service!==FLAG_ALERT_SERVICE&&r.check_in>=todayISO()).map(r=>r.name)).size;
+
+  return(
+    <div style={{minHeight:"100vh",background:"#F7FAFA"}}>
+      <OfflineBanner/>
+      <div style={{background:"#46b4bf",padding:"28px 24px 22px",textAlign:"center"}}>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Logo/></div>
+        <LiveClock/>
+      </div>
+      <div style={{maxWidth:900,margin:"0 auto",padding:"28px 24px 4rem"}}>
+        {dbError&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:10,padding:"12px 16px",marginBottom:20,fontSize:15,color:"#C0392B"}}>{dbError}</div>}
+        {!loading&&(
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:14,marginBottom:24}}>
+            {[["Today",todayCount],["Guests",guestCount],["Volunteers",volCount]].map(([l,v])=>(
+              <div key={l} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:"16px 14px",textAlign:"center"}}>
+                <p style={{margin:0,fontSize:28,fontWeight:700,color:"#46b4bf"}}>{v}</p>
+                <p style={{margin:0,fontSize:13,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>{l}</p>
+              </div>
+            ))}
+          </div>
+        )}
+        {Object.values(CAPPED_SERVICES_DAYS)[0].includes(new Date().getDay())&&(
+          <div style={{marginBottom:28}}>
+            <div style={{display:"flex",gap:14}}>
+              {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{
+                const used=records.filter(r=>r.service===svc&&r.check_in>=todayISO()).length;
+                const full=used>=cap,closed=closedServices[svc];
+                return(
+                  <div key={svc} style={{flex:1,background:closed?"#F7FAFA":full?"#FCECEA":"#EAF7F8",border:`1.5px solid ${closed?"#D0E6E5":full?"#F0A9A3":"#C0E8EC"}`,borderRadius:12,padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontSize:15,fontWeight:600,color:closed?C.textMuted:full?"#C0392B":"#2E8A94"}}>{svc}</span>
+                    <span style={{fontSize:14,fontWeight:500,color:closed?"#fff":full?"#C0392B":"#46b4bf",background:closed?"#C0392B":full?"transparent":"#fff",padding:"4px 14px",borderRadius:20,border:`1px solid ${closed?"#C0392B":full?"#F0A9A3":"#C0E8EC"}`}}>
+                      {closed?"Closed":full?"Full":`${cap-used} left`}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {scanResult&&<ScanToast result={scanResult} onDone={()=>setScanResult(null)}/>}
+        <div style={{display:"flex",gap:14,marginBottom:28}}>
+          {["checkin","checkout"].map(v=>(
+            <button key={v} onClick={()=>setPubView(v)} style={{flex:1,padding:"18px 0",borderRadius:14,border:pubView===v?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:pubView===v?"#EAF7F8":"#fff",fontWeight:700,fontSize:18,cursor:"pointer",color:pubView===v?"#2E8A94":"#5A7070",fontFamily:"inherit",transition:"all 0.15s ease"}}>
+              {v==="checkin"?"Check in":"Check out"}
+            </button>
+          ))}
+        </div>
+        {pubView==="checkin"&&(
+          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:24,marginBottom:16}}>
+            {flagAlert&&(
+              <div style={{background:"#FFF0F0",border:"2px solid #C0392B",borderRadius:12,padding:"18px 20px",marginBottom:24}}>
+                <p style={{margin:"0 0 6px",fontSize:18,fontWeight:700,color:"#C0392B"}}>⚑ This person is not allowed on the premises</p>
+                <p style={{margin:"0 0 4px",fontSize:15,color:"#C0392B"}}><strong>{flagAlert.name}</strong></p>
+                {flagAlert.flag_reason&&<p style={{margin:0,fontSize:14,color:"#C0392B"}}>Reason: {flagAlert.flag_reason}</p>}
+                <p style={{margin:"10px 0 0",fontSize:14,color:"#5A7070"}}>Please contact a staff member. Check-in has been blocked.</p>
+              </div>
+            )}
+            {success&&!flagAlert&&(
+              <div style={{background:"#EAF7F8",border:"1.5px solid #C0E8EC",borderRadius:12,padding:"18px 20px",marginBottom:24}}>
+                <p style={{margin:"0 0 6px",fontSize:18,fontWeight:700,color:"#2E8A94"}}>{success.isNew?`Welcome, ${success.name}! You've been registered.`:`Welcome back, ${success.name}!`}</p>
+                {success.position&&<p style={{margin:"0 0 4px",fontSize:15,color:"#46b4bf"}}>{success.service}: queue <strong>#{success.position}</strong></p>}
+                {success.addOns&&success.addOns.map(a=>(
+                  <p key={a.service} style={{margin:"0 0 4px",fontSize:15,color:"#46b4bf"}}>{a.service==="Laundry"?"Your laundry number will be assigned at the laundry station.":`Shower #${a.position}`}</p>
+                ))}
+              </div>
+            )}
+            {errors.submit&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:10,padding:"12px 16px",marginBottom:20,fontSize:15,color:"#C0392B"}}>{errors.submit}</div>}
+            <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Please Choose</p>
+            <div style={{display:"flex",gap:14,marginBottom:22}}>
+              {["Guest","Volunteer"].map(t=>(
+                <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"14px 0",borderRadius:10,border:form.type===t?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:form.type===t?"#EAF7F8":"#fff",fontWeight:form.type===t?700:400,fontSize:17,cursor:"pointer",color:form.type===t?"#2E8A94":"#5A7070",fontFamily:"inherit"}}>{t}</button>
+              ))}
+            </div>
+            <p style={{margin:"0 0 8px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>NAME — FIRST TIME? JUST ENTER YOUR NAME AND CHECK IN</p>
+            <div style={{marginBottom:6,position:"relative"}} ref={suggestRef}>
+              <div style={{position:"relative"}}>
+                <input placeholder="Enter your full name…" value={form.name} onChange={e=>handleNameInput(e.target.value)} style={{...inpStyle,borderColor:errors.name?"#C0392B":"#D0E6E5",paddingRight:form.name?44:16}}/>
+                {form.name&&(
+                  <button onClick={()=>{setForm(f=>({...f,name:"",guestNumber:""}));setSuggestions([]);setShowSuggestions(false);setFlagAlert(null);setErrors(e=>({...e,name:undefined}));}}
+                    style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"#D0E6E5",border:"none",borderRadius:"50%",width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:15,color:"#5A7070",lineHeight:1}}>×</button>
+                )}
+              </div>
+              {errors.name&&<p style={{margin:"6px 0 0",fontSize:14,color:"#C0392B"}}>{errors.name}</p>}
+              {showSuggestions&&suggestions.length>0&&(
+                <div style={{position:"absolute",top:"calc(100% + 2px)",left:0,right:0,background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,zIndex:10,boxShadow:"0 6px 20px rgba(70,180,191,0.15)",overflow:"hidden"}}>
+                  {suggestions.map(p=>{const av=avColor(p.name);return(
+                    <div key={p.id} onClick={()=>selectPerson(p)} style={{display:"flex",alignItems:"center",gap:12,padding:"13px 16px",cursor:"pointer",borderBottom:"1px solid #D0E6E5",background:p.flagged?"#FFF5F5":"#fff"}}
+                      onMouseEnter={e=>e.currentTarget.style.background=p.flagged?"#FFE8E8":"#EAF7F8"}
+                      onMouseLeave={e=>e.currentTarget.style.background=p.flagged?"#FFF5F5":"#fff"}>
+                      <div style={{width:40,height:40,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:14,flexShrink:0}}>{initials(p.name)||"?"}</div>
+                      <div style={{flex:1}}><p style={{margin:0,fontSize:16,fontWeight:600}}>{p.name}</p></div>
+                      {p.flagged&&<span style={{fontSize:13,padding:"3px 10px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600,flexShrink:0}}>⚑ Flagged</span>}
+                    </div>
+                  );})}
+                </div>
+              )}
+            </div>
+            <ServiceButtons availableServices={availableServices} form={form} setForm={setForm} setErrors={setErrors} countToday={countToday}/>
+            {errors.service&&<p style={{margin:"-8px 0 10px",fontSize:14,color:"#C0392B"}}>{errors.service}</p>}
+            {form.service==="Day Center"&&(()=>{
+              const showersAvail=isServiceAvailableToday("Showers")&&!closedServices["Showers"]&&countToday("Showers")<(CAPPED_SERVICES["Showers"]||Infinity);
+              const laundryAvail=isServiceAvailableToday("Laundry")&&!closedServices["Laundry"]&&countToday("Laundry")<(CAPPED_SERVICES["Laundry"]||Infinity);
+              if(!showersAvail&&!laundryAvail)return null;
+              return(
+                <div style={{background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:10,padding:"16px 18px",marginBottom:18}}>
+                  <p style={{margin:"0 0 12px",fontSize:14,fontWeight:600,color:"#2E8A94",textTransform:"uppercase",letterSpacing:"0.05em"}}>Check if you would like to take a shower and/or do laundry:</p>
+                  <div style={{display:"flex",gap:24,flexWrap:"wrap"}}>
+                    {showersAvail&&<label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:16,color:C.text}}><input type="checkbox" checked={form.addShowers} onChange={e=>setForm(f=>({...f,addShowers:e.target.checked}))} style={{width:20,height:20,accentColor:"#46b4bf",cursor:"pointer"}}/><span>Showers</span><span style={{fontSize:14,color:C.textMuted}}>({CAPPED_SERVICES["Showers"]-countToday("Showers")} spots left)</span></label>}
+                    {laundryAvail&&<label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:16,color:C.text}}><input type="checkbox" checked={form.addLaundry} onChange={e=>setForm(f=>({...f,addLaundry:e.target.checked}))} style={{width:20,height:20,accentColor:"#46b4bf",cursor:"pointer"}}/><span>Laundry</span><span style={{fontSize:14,color:C.textMuted}}>({CAPPED_SERVICES["Laundry"]-countToday("Laundry")} spots left)</span></label>}
+                  </div>
+                </div>
+              );
+            })()}
+            <div style={{marginBottom:26}}>
+              <textarea placeholder="Notes (optional)" value={form.notes} onChange={ev=>setForm(f=>({...f,notes:ev.target.value}))} rows={3} style={{...inpStyle,resize:"vertical"}}/>
+            </div>
+            <button onClick={submit} disabled={saving||!!flagAlert} style={{...btnPrimary,width:"100%",padding:16,fontSize:18,opacity:(saving||!!flagAlert)?0.5:1,cursor:flagAlert?"not-allowed":"pointer"}}>
+              {saving?"Saving…":"Check in"}
+            </button>
+          </div>
+        )}
+        {pubView==="checkout"&&(
+          <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:24}}>
+            <CheckOutPanel records={records} people={people} loadData={loadData}/>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// ADMIN APP
+// ─────────────────────────────────────────────────────────────
+
+function AddPersonPanel({people,onUpdate}) {
+  const [name,setName]=useState("");
+  const [saving,setSaving]=useState(false);
+  const [msg,setMsg]=useState(null);
+
+  async function handleAdd() {
+    if(!name.trim())return;
+    if(people.find(p=>p.name.toLowerCase()===name.trim().toLowerCase())){setMsg({type:"error",text:`${name.trim()} is already in the system.`});return;}
+    setSaving(true);
+    try{
+      const res=await api("people",{method:"POST",body:JSON.stringify({name:name.trim()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      if(!res.ok)throw new Error();
+      setMsg({type:"ok",text:`${name.trim()} has been added to the system.`});setName("");onUpdate();setTimeout(()=>setMsg(null),4000);
+    }catch(_){setMsg({type:"error",text:"Failed to add person. Try again."});}
+    setSaving(false);
+  }
+
+  return(
+    <div>
+      <div style={{display:"flex",gap:10}}>
+        <input placeholder="Full name…" value={name} onChange={e=>{setName(e.target.value);setMsg(null);}} onKeyDown={e=>e.key==="Enter"&&handleAdd()} style={{...inpStyle,flex:1}}/>
+        <button onClick={handleAdd} disabled={saving||!name.trim()} style={{...btnPrimary,padding:"12px 24px",fontSize:15,opacity:saving||!name.trim()?0.5:1}}>{saving?"Adding…":"Add"}</button>
+      </div>
+      {msg&&<p style={{margin:"10px 0 0",fontSize:14,color:msg.type==="ok"?C.tealDark:C.danger}}>{msg.type==="ok"?"✓ ":"⚠ "}{msg.text}</p>}
+    </div>
+  );
+}
+
+function AdminApp() {
+  const [view,setView]=useState("checkin");
+  const [form,setForm]=useState(EMPTY_FORM);
+  const [records,setRecords]=useState([]);
+  const [services,setServices]=useState([]);
+  const [people,setPeople]=useState([]);
+  const [closedServices,setClosedServices]=useState({});
+  const [suggestions,setSuggestions]=useState([]);
+  const [showSuggestions,setShowSuggestions]=useState(false);
+  const [success,setSuccess]=useState(null);
+  const [flagAlert,setFlagAlert]=useState(null);
+  const [scanResult,setScanResult]=useState(null);
+  const [search,setSearch]=useState("");
+  const [filterDate,setFilterDate]=useState("today");
+  const [logTab,setLogTab]=useState("All");
+  const [errors,setErrors]=useState({});
+  const [loading,setLoading]=useState(true);
+  const [saving,setSaving]=useState(false);
+  const [queueAuth,setQueueAuth]=useState(false);
+  const [newService,setNewService]=useState("");
+  const [dbError,setDbError]=useState(null);
+  const [flagAlerts,setFlagAlerts]=useState([]);
+
+  const seenAlertIds=useRef(new Set());
+  const isFirstLoad=useRef(true);
+  const suggestRef=useRef(null);
+  const scanBuffer=useRef("");
+  const scanTimer=useRef(null);
+  const peopleRef=useRef([]);
+  const recordsRef=useRef([]);
+
+  useEffect(()=>{peopleRef.current=people;},[people]);
+  useEffect(()=>{recordsRef.current=records;},[records]);
+
+  const loadData=useCallback(async()=>{
+    try{
+      const[rRes,sRes,pRes]=await Promise.all([
+        api(`checkin_records?select=${LIVE_COLUMNS}&check_in=gte.${todayISO()}&order=check_in.desc`),
+        api("checkin_services?order=name.asc"),
+        api("people?order=name.asc")
+      ]);
+      if(!rRes.ok||!sRes.ok||!pRes.ok)throw new Error();
+      const[rData,sData,pData]=await Promise.all([rRes.json(),sRes.json(),pRes.json()]);
+      setRecords(rData);setServices(sData.map(s=>s.name));setPeople(pData);
+      const closedMap={};sData.forEach(s=>{if(s.closed)closedMap[s.name]=true;});
+      setClosedServices(closedMap);setDbError(null);
+      const staleLockers=rData.filter(r=>r.locker_used&&r.check_in<todayISO());
+      if(staleLockers.length>0){
+        await Promise.all(staleLockers.map(r=>api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({locker_used:null}),headers:{...HEADERS,"Prefer":"return=minimal"}})));
+      }
+      isFirstLoad.current=false;
+    }catch(_){setDbError("Could not connect to database.");}
+    setLoading(false);
+  },[]);
+
+  useEffect(()=>{loadData();const t=setInterval(loadData,10000);return()=>clearInterval(t);},[loadData]);
+
+  useEffect(()=>{
+    const h=e=>{if(suggestRef.current&&!suggestRef.current.contains(e.target))setShowSuggestions(false);};
+    document.addEventListener("mousedown",h);
+    return()=>document.removeEventListener("mousedown",h);
+  },[]);
+
+  // Flag alert polling — runs every 3 seconds
+  useEffect(()=>{
+    async function checkFlags(){
+      try{
+        const res=await api(`checkin_records?select=id,name,notes,check_in,check_out&service=eq.${FLAG_ALERT_SERVICE}&check_in=gte.${todayISO()}&check_out=is.null&order=check_in.desc`);
+        if(!res.ok)return;
+        const alerts=await res.json();
+        const newAlerts=alerts.filter(a=>!seenAlertIds.current.has(a.id));
+        if(newAlerts.length>0){
+          newAlerts.forEach(a=>seenAlertIds.current.add(a.id));
+          if(!isFirstLoad.current)setFlagAlerts(prev=>[...prev,...newAlerts]);
+        }
+      }catch(_){}
+    }
+    const t=setInterval(checkFlags,3000);
+    return()=>clearInterval(t);
+  },[]);
+
+  // QR scanner
+  useEffect(()=>{
+    async function handleScan(code){
+      if(!code.startsWith(QR_PREFIX))return;
+      const guestNum=code.slice(QR_PREFIX.length);
+      const person=peopleRef.current.find(p=>String(p.guest_number)===guestNum);
+      if(!person){setScanResult({action:"error",message:`No volunteer found with ID ${guestNum}`});return;}
+      if(person.flagged){setScanResult({action:"error",message:`${person.name} is flagged and cannot check in.`});return;}
+      const svcToUse=person.default_service||"Volunteer";
+      const activeRecord=recordsRef.current.find(r=>r.name===person.name&&r.service===svcToUse&&r.check_in>=todayISO()&&!r.check_out);
+      if(activeRecord){
+        const now=new Date().toISOString();
+        await api(`checkin_records?id=eq.${activeRecord.id}`,{method:"PATCH",body:JSON.stringify({check_out:now}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+        setScanResult({action:"checkout",name:person.name,guestNumber:guestNum,duration:duration(activeRecord.check_in,now,svcToUse)});
+      }else{
+        const typeToUse=svcToUse==="Volunteer"?"Volunteer":"Guest";
+        await api("checkin_records",{method:"POST",body:JSON.stringify({name:person.name,type:typeToUse,service:svcToUse,check_in:new Date().toISOString(),check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+        setScanResult({action:"checkin",name:person.name,guestNumber:guestNum});
+      }
+      loadData();
+    }
+    function onKeyDown(e){
+      const tag=document.activeElement?.tagName;
+      if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT")return;
+      if(e.key==="Enter"){const code=scanBuffer.current.trim();scanBuffer.current="";if(scanTimer.current)clearTimeout(scanTimer.current);if(code.length>3)handleScan(code);return;}
+      if(e.key.length===1){if(scanTimer.current)clearTimeout(scanTimer.current);scanBuffer.current+=e.key;scanTimer.current=setTimeout(()=>{scanBuffer.current="";},SCANNER_TIMEOUT_MS);}
+    }
+    document.addEventListener("keydown",onKeyDown);
+    return()=>document.removeEventListener("keydown",onKeyDown);
+  },[loadData]);
+
+  function handleNameInput(val){
+    setForm(f=>({...f,name:val,guestNumber:""}));setErrors(e=>({...e,name:undefined}));setFlagAlert(null);
+    if(!val.trim()){setSuggestions([]);setShowSuggestions(false);return;}
+    const m=people.filter(p=>p.name.toLowerCase().includes(val.toLowerCase())||String(p.guest_number).includes(val)).slice(0,6);
+    setSuggestions(m);setShowSuggestions(m.length>0);
+  }
+  function selectPerson(p){
+    setForm(f=>({...f,name:p.name,guestNumber:String(p.guest_number)}));
+    setSuggestions([]);setShowSuggestions(false);setErrors(e=>({...e,name:undefined}));
+    if(p.flagged)setFlagAlert(p);else setFlagAlert(null);
+  }
+  function countToday(s){return records.filter(r=>r.service===s&&r.check_in>=todayISO()).length;}
+
+  function validate(){
+    const e={};
+    if(!form.name.trim()&&!form.guestNumber.trim())e.name="Name or guest number is required";
+    if(!form.service&&form.type!=="Volunteer")e.service="Please select a service";
+    if(form.service&&CAPPED_SERVICES[form.service]&&countToday(form.service)>=CAPPED_SERVICES[form.service])e.service=`${form.service} is full for today.`;
+    return e;
+  }
+
+  async function submit(){
+    const e=validate();if(Object.keys(e).length){setErrors(e);return;}
+    let name=form.name.trim(),gNum=form.guestNumber.trim();
+    if(!name&&gNum){const match=people.find(p=>String(p.guest_number)===gNum);if(!match){setErrors({name:"Guest number not found."});return;}name=match.name;}
+    const person=people.find(p=>p.name.toLowerCase()===name.toLowerCase());
+    if(person?.flagged){setFlagAlert(person);return;}
+    setSaving(true);
+    let guestNumber=gNum;
+    if(!person){
+      try{
+        const res=await api("people",{method:"POST",body:JSON.stringify({name}),headers:{...HEADERS,"Prefer":"return=representation"}});
+        if(!res.ok)throw new Error();
+        const[np]=await res.json();guestNumber=String(np.guest_number);await loadData();
+      }catch(_){setErrors({submit:"Failed to register guest."});setSaving(false);return;}
+    }else{guestNumber=String(person.guest_number);}
+    const now=new Date().toISOString();
+    const position=form.service&&CAPPED_SERVICES[form.service]&&form.service!=="Laundry"?nextAvailablePosition(form.service,records):null;
+    const toInsert=[{name,member_id:form.memberId||null,type:form.type,service:form.service,notes:form.notes||null,queue_position:position,check_in:now,check_out:null}];
+    const addOns=[];
+    if(form.service==="Day Center"){
+      if(form.addShowers&&countToday("Showers")<CAPPED_SERVICES["Showers"]){const p=nextAvailablePosition("Showers",records);toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Showers",notes:form.notes||null,queue_position:p,check_in:now,check_out:null});addOns.push({service:"Showers",position:p});}
+      if(form.addLaundry&&countToday("Laundry")<CAPPED_SERVICES["Laundry"]){toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Laundry",notes:form.notes||null,queue_position:null,check_in:now,check_out:null});addOns.push({service:"Laundry",position:null});}
+    }
+    try{
+      const res=await api("checkin_records",{method:"POST",body:JSON.stringify(toInsert.length===1?toInsert[0]:toInsert),headers:{...HEADERS,"Prefer":"return=representation"}});
+      if(!res.ok)throw new Error();
+      await loadData();
+      setSuccess({name,guestNumber,service:form.service,position,isNew:!person,addOns});
+      setForm(EMPTY_FORM);setErrors({});setFlagAlert(null);
+      setTimeout(()=>setSuccess(null),7000);
+    }catch(_){setErrors({submit:"Failed to save. Please try again."});}
+    setSaving(false);
+  }
+
+  async function markComplete(id){await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}
+  async function checkOut(id){
+    const record=recordsRef.current.find(r=>r.id===id);
+    const person=record?peopleRef.current.find(p=>p.name===record.name):null;
+    const lockerUsed=person?.locker&&person?.locker_date===new Date().toISOString().slice(0,10)?person.locker:null;
+    await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString(),locker_used:lockerUsed}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+    if(person?.locker)await api(`people?id=eq.${person.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+    loadData();
+  }
+  async function cancelRecord(id){await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});loadData();}
+  async function deleteRecord(id){await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});loadData();}
+  async function flagPerson(p,flagged,reason){
+    await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({flagged,flag_reason:reason||null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+    loadData();
+  }
+  async function dismissAlert(id){
+    await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+    setFlagAlerts(prev=>prev.filter(a=>a.id!==id));
+  }
+  function exportCSV(){
+    const hdr=["Name","Guest #","Type","Member ID","Service","Queue #","Check-in","Check-out","Duration","Notes"];
+    const rows=records.filter(r=>r.service!==FLAG_ALERT_SERVICE).map(r=>{
+      const p=people.find(x=>x.name===r.name);
+      const dur=duration(r.check_in,r.check_out,r.service);
+      return[r.name,p?p.guest_number:"",r.type,r.member_id||"",r.service,r.queue_position||"",fmt(r.check_in),r.check_out?fmt(r.check_out):"",dur||"",(r.notes||"").replace(/,/g," ")];
+    });
+    const csv=[hdr,...rows].map(r=>r.map(v=>`"${v}"`).join(",")).join("\n");
+    const a=document.createElement("a");
+    a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);
+    a.download="checkins.csv";a.click();
+  }
+  async function addService(){
+    const s=newService.trim();
+    if(!s||services.includes(s)){setNewService("");return;}
+    await api("checkin_services",{method:"POST",body:JSON.stringify({name:s}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+    setNewService("");loadData();
+  }
+  async function removeService(s){await api(`checkin_services?name=eq.${encodeURIComponent(s)}`,{method:"DELETE"});loadData();}
+
+  const realRecords=records.filter(r=>r.service!==FLAG_ALERT_SERVICE);
+  const todayCount=new Set(realRecords.filter(r=>r.check_in>=todayISO()).map(r=>r.name)).size;
+  const serviceOrder=["Day Center","Community Partnership","Drop-in"];
+  const availableServices=services.filter(s=>isServiceAvailableToday(s)&&!CAPPED_SERVICES[s]&&s!=="Volunteer").sort((a,b)=>{const ai=serviceOrder.indexOf(a),bi=serviceOrder.indexOf(b);if(ai===-1&&bi===-1)return 0;if(ai===-1)return 1;if(bi===-1)return -1;return ai-bi;});
+
+  if(queueAuth)return<QueueView records={records} people={people} onMarkComplete={markComplete} onCancel={cancelRecord} onLogout={()=>setQueueAuth(false)} loadData={loadData}/>;
+
+  const Tab=({id,label})=>(
+    <button onClick={()=>setView(id)} style={{flex:1,padding:"14px 0",border:"none",background:"transparent",borderBottom:view===id?"3px solid #46b4bf":"3px solid transparent",fontWeight:view===id?700:400,fontSize:16,cursor:"pointer",color:view===id?"#46b4bf":"#5A7070",fontFamily:"inherit",marginBottom:-2}}>
+      {label}
+    </button>
+  );
+
+  return(
+    <div style={{minHeight:"100vh",background:"#F7FAFA"}}>
+      <OfflineBanner/>
+      <FlagAlertPopup alerts={flagAlerts} onDismiss={dismissAlert}/>
+      <div style={{background:"#46b4bf",padding:"28px 24px 22px",textAlign:"center"}}>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:12}}><Logo/></div>
+        <LiveClock/>
+      </div>
+      <div style={{maxWidth:900,margin:"0 auto",padding:"28px 24px 4rem",overflowX:"hidden"}}>
+        {dbError&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:10,padding:"12px 16px",marginBottom:20,fontSize:15,color:"#C0392B"}}>{dbError}</div>}
+        <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:24,marginBottom:24}}>
+          <p style={{margin:"0 0 20px",fontWeight:700,fontSize:18}}>Admin panel</p>
+          <div style={{display:"flex",borderBottom:"2px solid #C0E8EC",marginBottom:28,flexWrap:"wrap"}}>
+            <Tab id="checkin" label="Check in"/>
+            <Tab id="log" label={`Visit log (${todayCount})`}/>
+            <Tab id="manage" label="People"/>
+            <Tab id="analytics" label="Analytics"/>
+          </div>
+
+          {view==="checkin"&&(
+            <div>
+              {scanResult&&<ScanToast result={scanResult} onDone={()=>setScanResult(null)}/>}
+              {!scanResult&&flagAlert&&(
+                <div style={{background:"#FFF0F0",border:"2px solid #C0392B",borderRadius:12,padding:"18px 20px",marginBottom:24}}>
+                  <p style={{margin:"0 0 6px",fontSize:18,fontWeight:700,color:"#C0392B"}}>⚑ This person is not allowed on the premises</p>
+                  <p style={{margin:"0 0 4px",fontSize:15,color:"#C0392B"}}><strong>{flagAlert.name}</strong></p>
+                  {flagAlert.flag_reason&&<p style={{margin:0,fontSize:14,color:"#C0392B"}}>Reason: {flagAlert.flag_reason}</p>}
+                  <p style={{margin:"10px 0 0",fontSize:14,color:"#5A7070"}}>Please contact a staff member. Check-in has been blocked.</p>
+                </div>
+              )}
+              {!scanResult&&success&&!flagAlert&&(
+                <div style={{background:"#EAF7F8",border:"1.5px solid #C0E8EC",borderRadius:12,padding:"18px 20px",marginBottom:24}}>
+                  <p style={{margin:"0 0 6px",fontSize:18,fontWeight:700,color:"#2E8A94"}}>{success.isNew?`Welcome, ${success.name}! You've been registered.`:`Welcome back, ${success.name}!`}</p>
+                  {success.position&&<p style={{margin:"0 0 4px",fontSize:15,color:"#46b4bf"}}>{success.service}: queue <strong>#{success.position}</strong></p>}
+                  {success.addOns&&success.addOns.map(a=>(
+                    <p key={a.service} style={{margin:"0 0 4px",fontSize:15,color:"#46b4bf"}}>{a.service==="Laundry"?"Laundry number will be assigned at the laundry station.":`Shower #${a.position}`}</p>
+                  ))}
+                </div>
+              )}
+              {errors.submit&&<div style={{background:"#FCECEA",border:"1px solid #F0A9A3",borderRadius:10,padding:"12px 16px",marginBottom:20,fontSize:15,color:"#C0392B"}}>{errors.submit}</div>}
+              <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Please Choose</p>
+              <div style={{display:"flex",gap:14,marginBottom:22}}>
+                {["Guest","Volunteer"].map(t=>(
+                  <button key={t} onClick={()=>setForm(f=>({...f,type:t,service:t==="Volunteer"?"Volunteer":f.service==="Volunteer"?"":f.service}))}
+                    style={{flex:1,padding:"14px 0",borderRadius:10,border:form.type===t?"2px solid #46b4bf":"1.5px solid #D0E6E5",background:form.type===t?"#EAF7F8":"#fff",fontWeight:form.type===t?700:400,fontSize:17,cursor:"pointer",color:form.type===t?"#2E8A94":"#5A7070",fontFamily:"inherit"}}>{t}</button>
+                ))}
+              </div>
+              <p style={{margin:"0 0 8px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Name — First time? Just enter your name and check in</p>
+              <div style={{marginBottom:6,position:"relative"}} ref={suggestRef}>
+                <div style={{position:"relative"}}>
+                  <input placeholder="Enter your full name…" value={form.name} onChange={e=>handleNameInput(e.target.value)} style={{...inpStyle,borderColor:errors.name?"#C0392B":"#D0E6E5",paddingRight:form.name?44:16}}/>
+                  {form.name&&(
+                    <button onClick={()=>{setForm(f=>({...f,name:"",guestNumber:""}));setSuggestions([]);setShowSuggestions(false);setFlagAlert(null);setErrors(e=>({...e,name:undefined}));}}
+                      style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"#D0E6E5",border:"none",borderRadius:"50%",width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:15,color:"#5A7070",lineHeight:1}}>×</button>
+                  )}
+                </div>
+                {errors.name&&<p style={{margin:"6px 0 0",fontSize:14,color:"#C0392B"}}>{errors.name}</p>}
+                {showSuggestions&&suggestions.length>0&&(
+                  <div style={{position:"absolute",top:"calc(100% + 2px)",left:0,right:0,background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,zIndex:10,boxShadow:"0 6px 20px rgba(70,180,191,0.15)",overflow:"hidden"}}>
+                    {suggestions.map(p=>{const av=avColor(p.name);return(
+                      <div key={p.id} onClick={()=>selectPerson(p)} style={{display:"flex",alignItems:"center",gap:12,padding:"13px 16px",cursor:"pointer",borderBottom:"1px solid #D0E6E5",background:p.flagged?"#FFF5F5":"#fff"}}
+                        onMouseEnter={e=>e.currentTarget.style.background=p.flagged?"#FFE8E8":"#EAF7F8"}
+                        onMouseLeave={e=>e.currentTarget.style.background=p.flagged?"#FFF5F5":"#fff"}>
+                        <div style={{width:40,height:40,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:14,flexShrink:0}}>{initials(p.name)||"?"}</div>
+                        <div style={{flex:1}}><p style={{margin:0,fontSize:16,fontWeight:600}}>{p.name}</p></div>
+                        {p.flagged&&<span style={{fontSize:13,padding:"3px 10px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600,flexShrink:0}}>⚑ Flagged</span>}
+                      </div>
+                    );})}
+                  </div>
+                )}
+              </div>
+              {form.type!=="Volunteer"&&<ServiceButtons availableServices={availableServices} form={form} setForm={setForm} setErrors={setErrors} countToday={countToday}/>}
+              {form.type!=="Volunteer"&&errors.service&&<p style={{margin:"-8px 0 10px",fontSize:14,color:"#C0392B"}}>{errors.service}</p>}
+              {form.service==="Day Center"&&(()=>{
+                const showersAvail=isServiceAvailableToday("Showers")&&countToday("Showers")<(CAPPED_SERVICES["Showers"]||Infinity);
+                const laundryAvail=isServiceAvailableToday("Laundry")&&countToday("Laundry")<(CAPPED_SERVICES["Laundry"]||Infinity);
+                if(!showersAvail&&!laundryAvail)return null;
+                return(
+                  <div style={{background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:10,padding:"16px 18px",marginBottom:18}}>
+                    <p style={{margin:"0 0 12px",fontSize:14,fontWeight:600,color:"#2E8A94",textTransform:"uppercase",letterSpacing:"0.05em"}}>CHECK IF YOU WOULD LIKE TO TAKE A SHOWER AND/OR DO LAUNDRY:</p>
+                    <div style={{display:"flex",gap:24,flexWrap:"wrap"}}>
+                      {showersAvail&&<label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:16,color:C.text}}><input type="checkbox" checked={form.addShowers} onChange={e=>setForm(f=>({...f,addShowers:e.target.checked}))} style={{width:20,height:20,accentColor:"#46b4bf",cursor:"pointer"}}/><span>Showers</span><span style={{fontSize:14,color:C.textMuted}}>({CAPPED_SERVICES["Showers"]-countToday("Showers")} spots left)</span></label>}
+                      {laundryAvail&&<label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:16,color:C.text}}><input type="checkbox" checked={form.addLaundry} onChange={e=>setForm(f=>({...f,addLaundry:e.target.checked}))} style={{width:20,height:20,accentColor:"#46b4bf",cursor:"pointer"}}/><span>Laundry</span><span style={{fontSize:14,color:C.textMuted}}>({CAPPED_SERVICES["Laundry"]-countToday("Laundry")} spots left)</span></label>}
+                    </div>
+                  </div>
+                );
+              })()}
+              <div style={{marginBottom:26}}>
+                <textarea placeholder="Notes (optional)" value={form.notes} onChange={ev=>setForm(f=>({...f,notes:ev.target.value}))} rows={3} style={{...inpStyle,resize:"vertical"}}/>
+              </div>
+              <button onClick={submit} disabled={saving||!!flagAlert} style={{...btnPrimary,width:"100%",padding:16,fontSize:18,opacity:(saving||!!flagAlert)?0.5:1,cursor:flagAlert?"not-allowed":"pointer"}}>
+                {saving?"Saving…":"Check in"}
+              </button>
+              {isServiceAvailableToday("Showers")&&(
+                <div style={{marginTop:28,borderTop:`2px solid ${C.border}`,paddingTop:24}}>
+                  <p style={{margin:"0 0 16px",fontSize:15,fontWeight:600,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.05em"}}>Showers & Laundry Queue</p>
+                  {Object.keys(CAPPED_SERVICES).map(svc=>{
+                    const cap=CAPPED_SERVICES[svc],used=countToday(svc),numLabel=svc==="Showers"?"Shower":"Laundry";
+                    return(
+                      <div key={svc} style={{marginBottom:12}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                          <span style={{fontSize:15,fontWeight:600}}>{svc}</span>
+                          <span style={{fontSize:13,fontWeight:600,color:used>=cap?C.danger:C.teal,background:used>=cap?C.dangerBg:C.tealLight,padding:"3px 12px",borderRadius:20}}>{used>=cap?"Full":`${cap-used} spots left`}</span>
+                        </div>
+                        <ManualAddToQueue svc={svc} people={people} records={records} numLabel={numLabel} onAdd={loadData}/>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {view==="log"&&(
+            <div style={{display:"grid",gridTemplateColumns:"1fr 320px",gap:20,alignItems:"start"}}>
+              <div>
+                <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+                  {["All","Day Center","Showers","Laundry","Volunteer","Community Partnership","Drop-in"].map(tab=>(
+                    <button key={tab} onClick={()=>setLogTab(tab)} style={{...btnGhost,fontSize:13,padding:"7px 14px",background:logTab===tab?"#46b4bf":"transparent",color:logTab===tab?"#fff":"#5A7070",borderColor:logTab===tab?"#46b4bf":"#D0E6E5"}}>{tab}</button>
+                  ))}
+                </div>
+                <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+                  <input placeholder="Search by name…" value={search} onChange={e=>setSearch(e.target.value)} style={{...inpStyle,flex:1,minWidth:160}}/>
+                  <select value={filterDate} onChange={e=>setFilterDate(e.target.value)} style={{...inpStyle,width:130}}>
+                    <option value="today">Today</option><option value="all">All time</option>
+                  </select>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                  <p style={{margin:0,fontSize:14,color:"#5A7070"}}>{people.length} people in directory</p>
+                  <button onClick={loadData} style={{...btnGhost,fontSize:14}}>Refresh ↻</button>
+                </div>
+                {loading?<p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>Loading…</p>:(()=>{
+                  const dateFiltered=records.filter(r=>{
+                    if(r.service===FLAG_ALERT_SERVICE)return false;
+                    if(filterDate==="today"&&r.check_in<todayISO())return false;
+                    if(search.trim()&&!r.name.toLowerCase().includes(search.toLowerCase()))return false;
+                    return true;
+                  });
+                  const byName={};
+                  dateFiltered.forEach(r=>{if(!byName[r.name])byName[r.name]={name:r.name,records:[]};if(!byName[r.name].records.find(x=>x.id===r.id))byName[r.name].records.push(r);});
+                  const grouped=Object.values(byName)
+                    .filter(g=>logTab==="All"?true:g.records.some(r=>r.service===logTab))
+                    .filter(g=>!search.trim()||g.name.toLowerCase().includes(search.toLowerCase()))
+                    .sort((a,b)=>{
+                      if(logTab==="All")return a.name.localeCompare(b.name);
+                      const ar=a.records.find(r=>r.service===logTab),br=b.records.find(r=>r.service===logTab);
+                      const aDone=ar?.check_out?1:0,bDone=br?.check_out?1:0;
+                      if(aDone!==bDone)return aDone-bDone;
+                      const statusOrder={in_process:0};
+                      const aStatus=statusOrder[ar?.status]??1,bStatus=statusOrder[br?.status]??1;
+                      if(aStatus!==bStatus)return aStatus-bStatus;
+                      return(ar?.queue_position||999)-(br?.queue_position||999);
+                    });
+                  if(grouped.length===0)return<p style={{color:"#5A7070",fontSize:16,textAlign:"center",padding:"2rem 0"}}>No records found.</p>;
+                  return grouped.map(g=>{
+                    const person=people.find(p=>p.name===g.name),isFlagged=person?.flagged,av=avColor(g.name);
+                    return(
+                      <div key={g.name} style={{background:isFlagged?"#FFF5F5":"#fff",border:`1.5px solid ${isFlagged?"#F0A9A3":"#D0E6E5"}`,borderRadius:14,marginBottom:12,overflow:"hidden"}}>
+                        <div style={{padding:"14px 18px",display:"flex",alignItems:"center",gap:14}}>
+                          <div style={{width:46,height:46,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:16,flexShrink:0}}>{initials(g.name)||"?"}</div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:6}}>
+                              <span style={{fontWeight:700,fontSize:16}}>{g.name}</span>
+                              {isFlagged&&<span style={{fontSize:13,padding:"2px 10px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600}}>⚑ Flagged</span>}
+                              <GroupNameEditor name={g.name} records={g.records} onUpdate={loadData}/>
+                            </div>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                              {g.records.filter(r=>r.service!==FLAG_ALERT_SERVICE&&(logTab==="All"||r.service===logTab)).map(r=>(
+                                <PersonServiceTag key={r.id} r={r} onCheckOut={checkOut} onMarkComplete={markComplete} onDelete={deleteRecord} onUpdate={loadData}/>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+              <div>
+                {isServiceAvailableToday("Showers")&&(
+                  <div style={{display:"flex",gap:8,marginBottom:12}}>
+                    {Object.keys(CAPPED_SERVICES).map(svc=>(
+                      <button key={svc} onClick={async()=>{
+                        const newVal=!closedServices[svc];
+                        await api(`checkin_services?name=eq.${encodeURIComponent(svc)}`,{method:"PATCH",body:JSON.stringify({closed:newVal}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                        loadData();
+                      }} style={{fontSize:12,fontWeight:600,padding:"7px 14px",borderRadius:10,border:"1px solid",borderColor:"#D0E6E5",cursor:"pointer",background:closedServices[svc]?"#fff":C.danger,color:closedServices[svc]?C.success:"#fff"}}>
+                        {closedServices[svc]?`↺ Reopen ${svc}`:`✕ Close ${svc}`}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Locker & Bin Availability</p>
+                <div style={{marginBottom:22}}>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:6,marginBottom:10}}>
+                    {Array.from({length:20},(_,i)=>String(i+1)).map(l=>{
+                      const todayStr=new Date().toISOString().slice(0,10);
+                      const occupant=people.find(p=>String(p.locker)===String(l)&&p.locker_date===todayStr&&p.locker!==null);
+                      return(
+                        <div key={l} style={{border:`1.5px solid ${occupant?"#F0A9A3":"#C0E8EC"}`,borderRadius:10,padding:"6px 8px",background:occupant?"#FFF5F5":"#EAF7F8",textAlign:"center"}}>
+                          <p style={{margin:"0 0 2px",fontSize:12,fontWeight:700,color:occupant?C.danger:C.tealDark}}>#{l}</p>
+                          <p style={{margin:"0 0 4px",fontSize:10,color:occupant?C.danger:C.tealDark,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{occupant?occupant.name:"Open"}</p>
+                          {occupant?(
+                            <button onClick={async()=>{await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}} style={{...btnGhost,fontSize:10,padding:"2px 6px",color:C.danger,borderColor:C.dangerBorder,width:"100%"}}>Clear</button>
+                          ):(
+                            <select value="" onChange={async e=>{
+                              const val=e.target.value;if(!val)return;
+                              const todayStr=new Date().toISOString().slice(0,10);
+                              const p=people.find(x=>x.name===val);
+                              if(p)await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:parseInt(l),locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                              loadData();
+                            }} style={{...inpStyle,padding:"2px 2px",fontSize:10,height:24,borderColor:C.tealMid}}>
+                              <option value="">Assign…</option>
+                              {people.filter(p=>{const todayStr=new Date().toISOString().slice(0,10);return records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE)&&(!p.locker||p.locker_date!==todayStr);}).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+                            </select>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}}>
+                    {["Bin A","Bin B"].map(l=>{
+                      const todayStr=new Date().toISOString().slice(0,10);
+                      const occupant=people.find(p=>p.locker===l&&p.locker_date===todayStr);
+                      return(
+                        <div key={l} style={{border:`1.5px solid ${occupant?"#F0A9A3":"#C0E8EC"}`,borderRadius:10,padding:"10px 14px",background:occupant?"#FFF5F5":"#EAF7F8"}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                            <span style={{fontSize:14,fontWeight:700,color:occupant?C.danger:C.tealDark}}>{l}</span>
+                            <span style={{fontSize:13,color:occupant?C.danger:C.tealDark,fontWeight:500}}>{occupant?occupant.name:"Open"}</span>
+                          </div>
+                          {occupant?(
+                            <button onClick={async()=>{await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}} style={{...btnGhost,fontSize:12,padding:"4px 8px",color:C.danger,borderColor:C.dangerBorder,width:"100%"}}>Clear</button>
+                          ):(
+                            <select value="" onChange={async e=>{
+                              const val=e.target.value;if(!val)return;
+                              const todayStr=new Date().toISOString().slice(0,10);
+                              const p=people.find(x=>x.name===val);
+                              if(p)await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:l,locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                              loadData();
+                            }} style={{...inpStyle,padding:"4px 8px",fontSize:12,height:30,borderColor:C.tealMid}}>
+                              <option value="">Assign…</option>
+                              {people.filter(p=>{const todayStr=new Date().toISOString().slice(0,10);return records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE)&&(!p.locker||p.locker_date!==todayStr);}).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+                            </select>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {view==="manage"&&(
+            <div>
+              <div style={{borderBottom:"1px solid #D0E6E5",paddingBottom:20,marginBottom:20}}>
+                <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Add person to system</p>
+                <AddPersonPanel people={people} onUpdate={loadData}/>
+              </div>
+              <div style={{borderBottom:"1px solid #D0E6E5",paddingBottom:20,marginBottom:20}}>
+                <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Manage people</p>
+                <PeopleRemover people={people} onRemove={async p=>{await api(`people?id=eq.${p.id}`,{method:"DELETE"});loadData();}} onFlag={flagPerson} onUpdate={loadData}/>
+              </div>
+              <div style={{borderBottom:"1px solid #D0E6E5",paddingBottom:20,marginBottom:20}}>
+                <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service types</p>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:12}}>
+                  {services.map(s=>(
+                    <span key={s} style={{display:"flex",alignItems:"center",gap:5,fontSize:14,padding:"6px 14px",background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:20,color:"#2E8A94",fontWeight:500}}>
+                      {s}
+                      {CAPPED_SERVICES[s]&&<span style={{fontSize:12,opacity:0.7}}> · {CAPPED_SERVICES[s]}</span>}
+                      <button onClick={()=>removeService(s)} style={{background:"none",border:"none",cursor:"pointer",color:"#2E8A94",padding:"0 2px",fontSize:16,lineHeight:1,opacity:0.6}}>×</button>
+                    </span>
+                  ))}
+                </div>
+                <div style={{display:"flex",gap:10}}>
+                  <input placeholder="Add new service…" value={newService} onChange={e=>setNewService(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addService()} style={{...inpStyle,flex:1}}/>
+                  <button onClick={addService} style={{...btnOutline,padding:"10px 20px",fontSize:15}}>Add</button>
+                </div>
+              </div>
+              <button onClick={exportCSV} style={{...btnOutline,width:"100%",textAlign:"center",padding:13,fontSize:15}}>Export all check-ins as CSV ↓</button>
+            </div>
+          )}
+
+          {view==="analytics"&&<AnalyticsTab records={records}/>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// ROOT
+// ─────────────────────────────────────────────────────────────
+
+function Root() {
+  const [records,setRecords]=useState([]);
+  const [services,setServices]=useState([]);
+  const [people,setPeople]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [dbError,setDbError]=useState(null);
+  const [closedServices,setClosedServices]=useState({});
+
+  const loadData=useCallback(async()=>{
+    try{
+      const[rRes,sRes,pRes]=await Promise.all([
+        api(`checkin_records?select=${LIVE_COLUMNS}&check_in=gte.${todayISO()}&order=check_in.desc`),
+        api("checkin_services?order=name.asc"),
+        api("people?order=name.asc")
+      ]);
+      if(!rRes.ok||!sRes.ok||!pRes.ok)throw new Error();
+      const[rData,sData,pData]=await Promise.all([rRes.json(),sRes.json(),pRes.json()]);
+      setRecords(rData);setServices(sData.map(s=>s.name));setPeople(pData);
+      const closedMap={};sData.forEach(s=>{if(s.closed)closedMap[s.name]=true;});
+      setClosedServices(closedMap);setDbError(null);
+    }catch(_){setDbError("Could not connect to database.");}
+    setLoading(false);
+  },[]);
+
+  useEffect(()=>{loadData();const t=setInterval(loadData,10000);return()=>clearInterval(t);},[loadData]);
+
+  if(IS_ADMIN_MODE)return<AdminApp/>;
+  if(IS_QUEUE_MODE)return(
+    <QueueView records={records} people={people}
+      onMarkComplete={async id=>{await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}}
+      onCancel={async id=>{await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});loadData();}}
+      onLogout={()=>{}} loadData={loadData}
+    />
+  );
+  return<PublicApp records={records} people={people} services={services} loading={loading} dbError={dbError} loadData={loadData} closedServices={closedServices}/>;
+}
+
+ReactDOM.render(<Root/>, document.getElementById("root"));
+</script>
+</body>
+</html>
