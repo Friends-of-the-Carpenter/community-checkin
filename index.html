@@ -51,6 +51,7 @@ const CHART_COLORS   = { "Showers":"#46b4bf","Laundry":"#2E8A94","Day Center":"#
 const GUEST_SERVICES     = ["Day Center","Community Partnership","Drop-in"];
 const FLAG_ALERT_SERVICE = "FLAG_ALERT";
 const LIVE_COLUMNS       = "id,name,type,service,notes,member_id,check_in,check_out,status,status_at,queue_position,locker_used";
+const ANALYTICS_COLUMNS  = "id,name,type,service,check_in,check_out";
 
 const ANALYTICS_RANGES = [
   { id:"today", label:"Today" }, { id:"7days", label:"7 days" }, { id:"30days", label:"30 days" },
@@ -1081,8 +1082,16 @@ function AnalyticsTab({records}) {
 
   useEffect(()=>{
     if(!range||range==="today"){setAllRecords(null);return;}
+    if(range==="custom"){setAllRecords(null);return;} // handled separately when dates are set
     setLoadingAll(true);
-    api(`checkin_records?select=${LIVE_COLUMNS}&order=check_in.desc`)
+    const now=new Date();let cutoff=new Date(0);
+    if(range==="7days"){cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-6);}
+    else if(range==="30days"){cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-29);}
+    else if(range==="month"){cutoff=new Date(now.getFullYear(),now.getMonth(),1);}
+    else if(range==="quarter"){const q=Math.floor(now.getMonth()/3);cutoff=new Date(now.getFullYear(),q*3,1);}
+    else if(range==="year"){cutoff=new Date(now.getFullYear(),0,1);}
+    cutoff.setHours(0,0,0,0);
+    api(`checkin_records?select=${ANALYTICS_COLUMNS}&check_in=gte.${cutoff.toISOString()}&service=neq.${FLAG_ALERT_SERVICE}&order=check_in.desc`)
       .then(r=>r.json()).then(d=>{setAllRecords(d);setLoadingAll(false);}).catch(()=>setLoadingAll(false));
   },[range]);
 
@@ -1118,6 +1127,16 @@ function AnalyticsTab({records}) {
     recs.filter(r=>r.service==="Volunteer"&&r.check_out).forEach(r=>{const k=getKey(r);if(!map[k])map[k]={date:k,hours:0};map[k].hours+=(new Date(r.check_out)-new Date(r.check_in))/3600000;});
     return Object.values(map).sort((a,b)=>new Date(a.date)>new Date(b.date)?1:-1);
   }
+
+  // Custom range: fetch server-side when both dates are set
+  useEffect(()=>{
+    if(range!=="custom"||!customStart||!customEnd)return;
+    setLoadingAll(true);
+    const start=new Date(customStart+"T00:00:00").toISOString();
+    const end=new Date(customEnd+"T23:59:59").toISOString();
+    api(`checkin_records?select=${ANALYTICS_COLUMNS}&check_in=gte.${start}&check_in=lte.${end}&service=neq.${FLAG_ALERT_SERVICE}&order=check_in.desc`)
+      .then(r=>r.json()).then(d=>{setAllRecords(d);setLoadingAll(false);}).catch(()=>setLoadingAll(false));
+  },[range,customStart,customEnd]);
 
   const hasData=range&&(range!=="custom"||(customStart&&customEnd));
   const filtered=hasData?getFiltered().filter(meetsMinDuration):[];
@@ -1597,8 +1616,28 @@ function AdminApp() {
   useEffect(()=>{peopleRef.current=people;},[people]);
   useEffect(()=>{recordsRef.current=records;},[records]);
 
-  const loadData=useCallback(async()=>{
+  const lastKnownCheckIn=useRef(null);
+  const lastKnownPeopleCount=useRef(null);
+
+  const loadData=useCallback(async(force=false)=>{
     try{
+      // Lightweight change detection — fetch only the latest check_in timestamp + people count
+      const[pingR,pingP]=await Promise.all([
+        api(`checkin_records?select=check_in&check_in=gte.${todayISO()}&order=check_in.desc&limit=1`),
+        api(`people?select=id&order=id.desc&limit=1`)
+      ]);
+      if(!pingR.ok||!pingP.ok)throw new Error();
+      const[pingRData,pingPData]=await Promise.all([pingR.json(),pingP.json()]);
+      const latestCheckIn=pingRData[0]?.check_in||null;
+      const latestPersonId=pingPData[0]?.id||null;
+
+      const changed=force||latestCheckIn!==lastKnownCheckIn.current||latestPersonId!==lastKnownPeopleCount.current;
+      if(!changed){setLoading(false);return;}
+
+      lastKnownCheckIn.current=latestCheckIn;
+      lastKnownPeopleCount.current=latestPersonId;
+
+      // Something changed — do the full fetch
       const[rRes,sRes,pRes]=await Promise.all([
         api(`checkin_records?select=${LIVE_COLUMNS}&check_in=gte.${todayISO()}&order=check_in.desc`),
         api("checkin_services?order=name.asc"),
@@ -1618,7 +1657,7 @@ function AdminApp() {
     setLoading(false);
   },[]);
 
-  useEffect(()=>{loadData();const t=setInterval(loadData,10000);return()=>clearInterval(t);},[loadData]);
+  useEffect(()=>{loadData(true);const t=setInterval(()=>loadData(false),10000);return()=>clearInterval(t);},[loadData]);
 
   useEffect(()=>{
     const h=e=>{if(suggestRef.current&&!suggestRef.current.contains(e.target))setShowSuggestions(false);};
