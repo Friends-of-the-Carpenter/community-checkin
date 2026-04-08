@@ -32,10 +32,6 @@
 <script type="text/babel">
 const { useState, useEffect, useCallback, useRef } = React;
 
-// ─────────────────────────────────────────────────────────────
-// CONFIGURATION
-// ─────────────────────────────────────────────────────────────
-
 const SUPABASE_URL = "https://bnkdmdcinmbcuueakhug.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJua2RtZGNpbm1iY3V1ZWFraHVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMzQyNTYsImV4cCI6MjA4ODkxMDI1Nn0.UnURxxIweDAYik0UXfZLtdB33q-9DPah2kwUQKL9oVY";
 const HEADERS = { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` };
@@ -67,10 +63,6 @@ const IS_QUEUE_MODE = new URLSearchParams(window.location.search).get("mode") ==
 
 const EMPTY_FORM = { name:"", guestNumber:"", memberId:"", type:"Guest", service:"", notes:"", addShowers:false, addLaundry:false };
 
-// ─────────────────────────────────────────────────────────────
-// DESIGN TOKENS
-// ─────────────────────────────────────────────────────────────
-
 const C = {
   teal:"#46b4bf", tealDark:"#2E8A94", tealLight:"#EAF7F8", tealMid:"#C0E8EC",
   white:"#FFFFFF", bg:"#F7FAFA", text:"#1D2B2B", textMuted:"#5A7070", textLight:"#8AA5A5",
@@ -84,121 +76,67 @@ const btnOutline = { background:"transparent", color:"#46b4bf", border:"1.5px so
 const btnGhost   = { background:"transparent", color:"#5A7070", border:"1px solid #D0E6E5", borderRadius:10, padding:"9px 16px", fontSize:14, cursor:"pointer", fontFamily:"inherit" };
 const btnSuccess = { background:"#3A9C6A", color:"#fff", border:"none", borderRadius:10, padding:"9px 18px", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"inherit" };
 
-// ─────────────────────────────────────────────────────────────
-// OFFLINE QUEUE
-// ─────────────────────────────────────────────────────────────
-
+// ── OFFLINE QUEUE ──
 const _offlineQueue    = [];
 let   _isOnline        = true;
 const _onlineListeners = new Set();
-
-function notifyOnlineState(state) {
-  _isOnline = state;
-  _onlineListeners.forEach(fn => fn(state));
-}
-
+function notifyOnlineState(state) { _isOnline = state; _onlineListeners.forEach(fn => fn(state)); }
 function useOnlineState() {
-  const [online, setOnline] = useState(_isOnline);
-  useEffect(() => {
-    _onlineListeners.add(setOnline);
-    return () => _onlineListeners.delete(setOnline);
-  }, []);
+  const [online,setOnline]=useState(_isOnline);
+  useEffect(()=>{ _onlineListeners.add(setOnline); return()=>_onlineListeners.delete(setOnline); },[]);
   return online;
 }
-
 async function flushOfflineQueue() {
-  if (_offlineQueue.length === 0) return;
-  const pending = [..._offlineQueue];
-  _offlineQueue.length = 0;
-  for (const { path, opts } of pending) {
-    try {
-      await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: HEADERS, ...opts });
-    } catch(_) {
-      _offlineQueue.unshift({ path, opts });
-      notifyOnlineState(false);
-      return;
-    }
+  if(_offlineQueue.length===0)return;
+  const pending=[..._offlineQueue]; _offlineQueue.length=0;
+  for(const{path,opts}of pending){
+    try{ await fetch(`${SUPABASE_URL}/rest/v1/${path}`,{headers:HEADERS,...opts}); }
+    catch(_){ _offlineQueue.unshift({path,opts}); notifyOnlineState(false); return; }
   }
 }
-
-async function apiWithFallback(path, opts = {}) {
-  const isWrite = opts.method && opts.method !== "GET";
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: HEADERS, ...opts });
-    if (!res.ok && res.status >= 500) throw new Error(`Server error ${res.status}`);
-    if (_isOnline === false) { notifyOnlineState(true); flushOfflineQueue(); }
+async function apiWithFallback(path,opts={}) {
+  const isWrite=opts.method&&opts.method!=="GET";
+  try{
+    const res=await fetch(`${SUPABASE_URL}/rest/v1/${path}`,{headers:HEADERS,...opts});
+    if(!res.ok&&res.status>=500)throw new Error(`Server error ${res.status}`);
+    if(_isOnline===false){notifyOnlineState(true);flushOfflineQueue();}
     return res;
-  } catch(e) {
-    if (isWrite) {
-      _offlineQueue.push({ path, opts });
-      notifyOnlineState(false);
-      return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
-    }
-    notifyOnlineState(false);
-    throw e;
+  }catch(e){
+    if(isWrite){ _offlineQueue.push({path,opts}); notifyOnlineState(false); return new Response(JSON.stringify([]),{status:200,headers:{"Content-Type":"application/json"}}); }
+    notifyOnlineState(false); throw e;
   }
 }
-
 function OfflineBanner() {
-  const online = useOnlineState();
-  const [syncing, setSyncing]   = useState(false);
-  const [justBack, setJustBack] = useState(false);
-  const prevOnline = useRef(_isOnline);
-
-  useEffect(() => {
-    if (!prevOnline.current && online) {
-      setSyncing(true);
-      setTimeout(() => { setSyncing(false); setJustBack(true); }, 2000);
-      setTimeout(() => setJustBack(false), 5000);
-    }
-    prevOnline.current = online;
-  }, [online]);
-
-  if (online && !syncing && !justBack) return null;
-  const bg      = !online ? "#C0392B" : syncing ? "#E6A817" : "#3A9C6A";
-  const message = !online
-    ? "⚠ Offline — check-ins are being saved locally and will sync when connection is restored"
-    : syncing ? "↻ Back online — syncing queued check-ins…"
-    : "✓ All check-ins synced successfully";
-
-  return (
-    <div style={{ position:"fixed", top:0, left:0, right:0, zIndex:2000, background:bg, color:"#fff", textAlign:"center", padding:"10px 16px", fontSize:14, fontWeight:600, animation:"slideIn 0.3s ease" }}>
-      {message}
-    </div>
-  );
+  const online=useOnlineState();
+  const [syncing,setSyncing]=useState(false);
+  const [justBack,setJustBack]=useState(false);
+  const prevOnline=useRef(_isOnline);
+  useEffect(()=>{
+    if(!prevOnline.current&&online){ setSyncing(true); setTimeout(()=>{setSyncing(false);setJustBack(true);},2000); setTimeout(()=>setJustBack(false),5000); }
+    prevOnline.current=online;
+  },[online]);
+  if(online&&!syncing&&!justBack)return null;
+  const bg=!online?"#C0392B":syncing?"#E6A817":"#3A9C6A";
+  const message=!online?"⚠ Offline — check-ins are being saved locally and will sync when connection is restored":syncing?"↻ Back online — syncing queued check-ins…":"✓ All check-ins synced successfully";
+  return <div style={{position:"fixed",top:0,left:0,right:0,zIndex:2000,background:bg,color:"#fff",textAlign:"center",padding:"10px 16px",fontSize:14,fontWeight:600,animation:"slideIn 0.3s ease"}}>{message}</div>;
 }
 
-// ─────────────────────────────────────────────────────────────
-// API HELPER
-// ─────────────────────────────────────────────────────────────
+function api(path,opts={}) { return fetch(`${SUPABASE_URL}/rest/v1/${path}`,{headers:HEADERS,...opts}); }
 
-function api(path, opts = {}) {
-  return fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: HEADERS, ...opts });
-}
-
-// ─────────────────────────────────────────────────────────────
-// UTILITY FUNCTIONS
-// ─────────────────────────────────────────────────────────────
-
+// ── UTILS ──
 function isServiceAvailableToday(s) {
-  const days = CAPPED_SERVICES_DAYS[s];
-  if (!days) return true;
-  if (!days.includes(new Date().getDay())) return false;
-  const cutoff = CAPPED_SERVICES_CUTOFF[s];
-  if (cutoff) {
-    const [h, m] = cutoff.split(":").map(Number);
-    const ct = new Date(); ct.setHours(h, m, 0, 0);
-    if (new Date() > ct) return false;
-  }
+  const days=CAPPED_SERVICES_DAYS[s]; if(!days)return true;
+  if(!days.includes(new Date().getDay()))return false;
+  const cutoff=CAPPED_SERVICES_CUTOFF[s];
+  if(cutoff){ const[h,m]=cutoff.split(":").map(Number),ct=new Date(); ct.setHours(h,m,0,0); if(new Date()>ct)return false; }
   return true;
 }
-
-function todayISO() { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString(); }
-function initials(name) { return name.trim().split(" ").filter(Boolean).map(w => w[0].toUpperCase()).slice(0,2).join(""); }
+function todayISO() { const d=new Date(); d.setHours(0,0,0,0); return d.toISOString(); }
+function initials(name) { return name.trim().split(" ").filter(Boolean).map(w=>w[0].toUpperCase()).slice(0,2).join(""); }
 function fmt(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}) + " " + d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+  if(!iso)return"";
+  const d=new Date(iso);
+  return d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})+" "+d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
 }
 function fmtDate(iso) { if(!iso)return""; return new Date(iso).toLocaleDateString("en-US",{month:"short",day:"numeric"}); }
 function fmtMonth(iso) { return new Date(iso).toLocaleDateString("en-US",{month:"short",year:"numeric"}); }
@@ -208,8 +146,7 @@ function duration(inT,outT,service) {
   return m<60?`${m}m`:`${Math.floor(m/60)}h ${m%60}m`;
 }
 function isoToLocalInput(iso) {
-  if(!iso)return"";
-  const d=new Date(iso),pad=n=>String(n).padStart(2,"0");
+  if(!iso)return""; const d=new Date(iso),pad=n=>String(n).padStart(2,"0");
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 function localInputToIso(val) { if(!val)return null; return new Date(val).toISOString(); }
@@ -224,36 +161,25 @@ function nextAvailablePosition(service,records) {
   return next;
 }
 
-// ─────────────────────────────────────────────────────────────
-// AVATAR COLOURS
-// ─────────────────────────────────────────────────────────────
-
 const AV_COLORS = [
   {bg:"#C2E8E6",color:"#1D5C5A"},{bg:"#B8DFE8",color:"#1A4A5C"},
   {bg:"#C8E6D4",color:"#1A5C35"},{bg:"#E6D4C8",color:"#5C3A1A"},{bg:"#D4C8E6",color:"#3A1A5C"}
 ];
 function avColor(name) { let h=0; for(let c of name)h=(h*31+c.charCodeAt(0))&0xffff; return AV_COLORS[h%AV_COLORS.length]; }
 
-// ─────────────────────────────────────────────────────────────
-// SHARED UI COMPONENTS
-// ─────────────────────────────────────────────────────────────
-
+// ── SHARED UI ──
 function LiveClock() {
   const [now,setNow]=useState(new Date());
   useEffect(()=>{const t=setInterval(()=>setNow(new Date()),1000);return()=>clearInterval(t);},[]);
   return <p style={{margin:"12px 0 4px",fontSize:20,color:"#fff",fontWeight:900}}>{now.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"})} | {now.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}</p>;
 }
-
 function Logo() {
   return <img src="https://cdn.shopify.com/s/files/1/0582/8719/4214/files/FOC_Logo_white.png?v=1773347276" alt="Friends of the Carpenter" style={{height:120,width:"auto"}}/>;
 }
-
 function QRCodeDisplay({guestNumber}) {
-  const divRef=useRef(null);
-  const code=`${QR_PREFIX}${guestNumber}`;
+  const divRef=useRef(null),code=`${QR_PREFIX}${guestNumber}`;
   useEffect(()=>{
-    if(!divRef.current)return;
-    divRef.current.innerHTML="";
+    if(!divRef.current)return; divRef.current.innerHTML="";
     if(typeof QRCode==="undefined"){divRef.current.innerHTML='<p style="color:red;font-size:14px">QR library not loaded</p>';return;}
     try{new QRCode(divRef.current,{text:code,width:200,height:200,colorDark:"#1D2B2B",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.M});}
     catch(e){divRef.current.innerHTML=`<p style="color:red;font-size:14px">QR error: ${e.message}</p>`;}
@@ -261,11 +187,10 @@ function QRCodeDisplay({guestNumber}) {
   function download(){
     if(!divRef.current)return;
     const img=divRef.current.querySelector("img"),canvas=divRef.current.querySelector("canvas");
-    const src=img?img.src:canvas?canvas.toDataURL("image/png"):null;
-    if(!src)return;
+    const src=img?img.src:canvas?canvas.toDataURL("image/png"):null; if(!src)return;
     const a=document.createElement("a");a.href=src;a.download=`${guestNumber}-qr.png`;a.click();
   }
-  return (
+  return(
     <div style={{textAlign:"center"}}>
       <div ref={divRef} style={{display:"inline-block",borderRadius:10,border:"1.5px solid #D0E6E5",overflow:"hidden"}}/>
       <p style={{margin:"8px 0 0",fontSize:13,color:"#8AA5A5"}}>{code}</p>
@@ -273,11 +198,10 @@ function QRCodeDisplay({guestNumber}) {
     </div>
   );
 }
-
 function ScanToast({result,onDone}) {
   useEffect(()=>{const t=setTimeout(onDone,4000);return()=>clearTimeout(t);},[]);
   const isCheckOut=result.action==="checkout",isError=result.action==="error";
-  return (
+  return(
     <div className="scan-toast" style={{background:isError?"#FCECEA":isCheckOut?"#FEF7E6":"#EAF7F8",border:`2px solid ${isError?"#F0A9A3":isCheckOut?"#F5D48A":"#C0E8EC"}`,borderRadius:14,padding:"20px 22px",marginBottom:24}}>
       <p style={{margin:"0 0 4px",fontSize:19,fontWeight:700,color:isError?"#C0392B":isCheckOut?"#8A5A00":"#2E8A94"}}>{isError?"⚠ Not found":isCheckOut?"👋 Checked out":"✓ Checked in"}</p>
       {!isError&&<p style={{margin:0,fontSize:16,color:"#1D2B2B"}}><strong>{result.name}</strong> — #{result.guestNumber}</p>}
@@ -286,10 +210,9 @@ function ScanToast({result,onDone}) {
     </div>
   );
 }
-
 function FlagAlertPopup({alerts,onDismiss}) {
   if(!alerts||alerts.length===0)return null;
-  return (
+  return(
     <div style={{position:"fixed",top:20,right:20,zIndex:1000,display:"flex",flexDirection:"column",gap:12,maxWidth:360}}>
       {alerts.map(a=>(
         <div key={a.id} className="scan-toast" style={{background:"#FFF0F0",border:"2px solid #C0392B",borderRadius:14,padding:"18px 20px",boxShadow:"0 8px 32px rgba(192,57,43,0.18)"}}>
@@ -308,24 +231,20 @@ function FlagAlertPopup({alerts,onDismiss}) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// ANALYTICS CHARTS
-// ─────────────────────────────────────────────────────────────
-
+// ── ANALYTICS CHARTS ──
 function SimpleBarChart({data,keys,colors,height=200}) {
   const containerRef=useRef(null);
   const [containerWidth,setContainerWidth]=useState(320);
   useEffect(()=>{
     if(!containerRef.current)return;
     const ro=new ResizeObserver(entries=>{for(let e of entries)setContainerWidth(e.contentRect.width);});
-    ro.observe(containerRef.current);
-    return()=>ro.disconnect();
+    ro.observe(containerRef.current); return()=>ro.disconnect();
   },[]);
   if(!data||data.length===0)return<p style={{textAlign:"center",color:"#5A7070",fontSize:15,padding:"1rem 0"}}>No data for this period.</p>;
   const maxVal=Math.max(1,...data.flatMap(d=>keys.map(k=>d[k]||0)));
   const groupW=Math.max(keys.length*16+8,Math.floor(containerWidth/data.length)-4);
   const barW=Math.max(8,Math.floor((groupW-8)/keys.length));
-  return (
+  return(
     <div ref={containerRef} style={{overflowX:"auto"}}>
       <div style={{display:"flex",alignItems:"flex-end",gap:4,height,minWidth:data.length*(groupW+4),paddingBottom:15}}>
         {data.map((d,i)=>(
@@ -345,7 +264,6 @@ function SimpleBarChart({data,keys,colors,height=200}) {
     </div>
   );
 }
-
 function SimpleLineChart({data,height=200}) {
   const fmtH=hrs=>{const hh=Math.floor(hrs),mm=Math.round((hrs%1)*60);return mm>0?`${hh}h ${mm}m`:`${hh}h`;};
   if(!data||data.length===0)return<p style={{textAlign:"center",color:"#5A7070",fontSize:15,padding:"1rem 0"}}>No completed volunteer check-outs for this period.</p>;
@@ -354,7 +272,7 @@ function SimpleLineChart({data,height=200}) {
   const w=600,h=height-30,pad=10;
   const pts=data.map((d,i)=>({x:pad+(i/Math.max(data.length-1,1))*(w-pad*2),y:h-(d.hours/maxVal)*(h-pad*2)-pad,d}));
   const pathD=pts.map((p,i)=>`${i===0?"M":"L"}${p.x},${p.y}`).join(" ");
-  return (
+  return(
     <div style={{overflowX:"auto",overflowY:"visible"}}>
       <svg viewBox={`0 0 ${w} ${height}`} style={{width:"100%",height,paddingTop:16}} overflow="visible">
         {[0,0.25,0.5,0.75,1].map(t=><line key={t} x1={pad} x2={w-pad} y1={h-t*(h-pad*2)-pad} y2={h-t*(h-pad*2)-pad} stroke="#D0E6E5" strokeDasharray="3 3"/>)}
@@ -371,10 +289,7 @@ function SimpleLineChart({data,height=200}) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// SHOWERS & LAUNDRY QUEUE COMPONENTS
-// ─────────────────────────────────────────────────────────────
-
+// ── SHOWERS & LAUNDRY ──
 function ManualAddToQueue({svc,people,records,numLabel,onAdd}) {
   const [open,setOpen]=useState(false);
   const [query,setQuery]=useState("");
@@ -386,28 +301,23 @@ function ManualAddToQueue({svc,people,records,numLabel,onAdd}) {
   const [err,setErr]=useState(null);
   const ref=useRef(null);
   const nextPos=nextAvailablePosition(svc,records);
-
   useEffect(()=>{
     const h=e=>{if(ref.current&&!ref.current.contains(e.target))setShowSug(false);};
-    document.addEventListener("mousedown",h);
-    return()=>document.removeEventListener("mousedown",h);
+    document.addEventListener("mousedown",h); return()=>document.removeEventListener("mousedown",h);
   },[]);
-
   function handleQuery(val) {
     setQuery(val);setSelected(null);setErr(null);
     if(!val.trim()){setSuggestions([]);setShowSug(false);return;}
     const m=people.filter(p=>p.name.toLowerCase().includes(val.toLowerCase())||String(p.guest_number).includes(val)).slice(0,6);
     setSuggestions(m);setShowSug(m.length>0);
   }
-
   function selectPerson(p){setQuery(p.name);setSelected(p);setSuggestions([]);setShowSug(false);setErr(null);}
-
   async function handleAdd() {
     if(!query.trim()){setErr("Please enter a name.");return;}
     const pos=customPos!==""?parseInt(customPos,10):nextPos;
     if(!pos||pos<1){setErr("Please enter a valid position number.");return;}
     setSaving(true);
-    try {
+    try{
       let personToAdd=selected;
       if(!personToAdd){
         const existing=people.find(p=>p.name.toLowerCase()===query.trim().toLowerCase());
@@ -425,10 +335,8 @@ function ManualAddToQueue({svc,people,records,numLabel,onAdd}) {
     }catch(e){setErr(e.message||"Failed to add. Please try again.");}
     setSaving(false);
   }
-
   function reset(){setOpen(false);setQuery("");setSelected(null);setCustomPos("");setErr(null);}
-
-  return (
+  return(
     <div style={{marginTop:14,borderTop:"1px solid #D0E6E5",paddingTop:14}}>
       {!open?(
         <button onClick={()=>setOpen(true)} style={{...btnOutline,width:"100%",fontSize:15,padding:"11px 0"}}>+ Add to {svc} queue</button>
@@ -465,18 +373,15 @@ function ManualAddToQueue({svc,people,records,numLabel,onAdd}) {
     </div>
   );
 }
-
 function AssignQueueNumber({r,numLabel,onUpdate}) {
   const [editing,setEditing]=useState(!r.queue_position);
   const [val,setVal]=useState(r.queue_position||"");
   const [saving,setSaving]=useState(false);
-
   async function save() {
     if(!val)return;setSaving(true);
     await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({queue_position:parseInt(val)}),headers:{...HEADERS,"Prefer":"return=minimal"}});
     setEditing(false);onUpdate&&onUpdate();setSaving(false);
   }
-
   if(!editing)return(
     <p style={{margin:"2px 0 0",fontSize:13,color:"#5A7070"}}>
       {numLabel} #{r.queue_position}
@@ -494,17 +399,13 @@ function AssignQueueNumber({r,numLabel,onUpdate}) {
     </div>
   );
 }
-
 function WaitingButton({r,onComplete,onUpdate}) {
   const [saving,setSaving]=useState(false);
   const [timeLeft,setTimeLeft]=useState(null);
   const [elapsed,setElapsed]=useState(0);
   const timerRef=useRef(null);
-  const inProcess=r.status==="in_process";
-  const isShower=r.service==="Showers";
-  const isLaundry=r.service==="Laundry";
+  const inProcess=r.status==="in_process",isShower=r.service==="Showers",isLaundry=r.service==="Laundry";
   const SHOWER_LIMIT=20*60;
-
   useEffect(()=>{
     if(inProcess){
       const elapsedSecs=r.status_at?Math.floor((Date.now()-new Date(r.status_at))/1000):0;
@@ -514,15 +415,10 @@ function WaitingButton({r,onComplete,onUpdate}) {
     }
     return()=>{if(timerRef.current)clearInterval(timerRef.current);};
   },[]);
-
   function startTick(startElapsed=0){
     let e=startElapsed;
-    timerRef.current=setInterval(()=>{
-      e+=1;setElapsed(e);
-      if(isShower)setTimeLeft(Math.max(0,SHOWER_LIMIT-e));
-    },1000);
+    timerRef.current=setInterval(()=>{e+=1;setElapsed(e);if(isShower)setTimeLeft(Math.max(0,SHOWER_LIMIT-e));},1000);
   }
-
   async function toggleStatus(){
     setSaving(true);
     if(inProcess){
@@ -538,28 +434,21 @@ function WaitingButton({r,onComplete,onUpdate}) {
     }
     setSaving(false);
   }
-
   function fmtTime(s){const m=Math.floor(Math.abs(s)/60),sec=Math.abs(s)%60;return`${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;}
-
-  const isOver=isShower&&inProcess&&timeLeft===0;
-  const overBy=isOver?elapsed-SHOWER_LIMIT:0;
+  const isOver=isShower&&inProcess&&timeLeft===0,overBy=isOver?elapsed-SHOWER_LIMIT:0;
   let label,bgColor;
   if(!inProcess){label="Waiting";bgColor=C.danger;}
   else if(isLaundry){label=fmtTime(elapsed);bgColor="#E6A817";}
   else if(isOver){label=`+${fmtTime(overBy)}`;bgColor="#E6A817";}
   else{label=fmtTime(timeLeft);bgColor="#E6A817";}
-
   return(
     <>
-      <button onClick={toggleStatus} disabled={saving} style={{fontSize:inProcess?15:14,padding:"5px 14px",borderRadius:20,minWidth:90,background:bgColor,color:"#fff",fontWeight:700,border:"none",cursor:"pointer",flexShrink:0,opacity:saving?0.5:1,animation:isOver?"pulse 0.8s infinite":"none"}}>
-        {label}
-      </button>
+      <button onClick={toggleStatus} disabled={saving} style={{fontSize:inProcess?15:14,padding:"5px 14px",borderRadius:20,minWidth:90,background:bgColor,color:"#fff",fontWeight:700,border:"none",cursor:"pointer",flexShrink:0,opacity:saving?0.5:1,animation:isOver?"pulse 0.8s infinite":"none"}}>{label}</button>
       <button onClick={onComplete} style={{...btnSuccess,flexShrink:0}}>✓</button>
       <style>{`@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}`}</style>
     </>
   );
 }
-
 function ShowerLaundryPanel({records,people,onMarkComplete,onCancel,onManualAdd}) {
   return(
     <>
@@ -571,15 +460,12 @@ function ShowerLaundryPanel({records,people,onMarkComplete,onCancel,onManualAdd}
           return a.queue_position-b.queue_position;
         });
         const active=queue.filter(r=>!r.check_out),done=queue.filter(r=>r.check_out);
-        const used=queue.length,pct=Math.round(used/cap*100);
-        const numLabel=svc==="Showers"?"Shower":"Laundry";
+        const used=queue.length,pct=Math.round(used/cap*100),numLabel=svc==="Showers"?"Shower":"Laundry";
         return(
           <div key={svc} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:24,marginBottom:20}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
               <h3 style={{margin:0,fontSize:20,fontWeight:700}}>{svc}</h3>
-              <span style={{fontSize:15,fontWeight:600,color:used>=cap?"#C0392B":"#46b4bf",background:used>=cap?"#FCECEA":"#EAF7F8",padding:"5px 14px",borderRadius:20}}>
-                {used>=cap?"Full":`${cap-used} spots left`}
-              </span>
+              <span style={{fontSize:15,fontWeight:600,color:used>=cap?"#C0392B":"#46b4bf",background:used>=cap?"#FCECEA":"#EAF7F8",padding:"5px 14px",borderRadius:20}}>{used>=cap?"Full":`${cap-used} spots left`}</span>
             </div>
             <div style={{height:10,borderRadius:5,background:"#EAF7F8",marginBottom:16}}>
               <div style={{height:10,borderRadius:5,width:`${pct}%`,background:used>=cap?"#C0392B":used/cap>0.8?"#E6A817":"#46b4bf",transition:"width 0.3s"}}/>
@@ -629,10 +515,7 @@ function ShowerLaundryPanel({records,people,onMarkComplete,onCancel,onManualAdd}
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// ADMIN-ONLY EDITOR COMPONENTS
-// ─────────────────────────────────────────────────────────────
-
+// ── ADMIN EDITOR COMPONENTS ──
 function CheckoutTimeEditor({records,onUpdate}) {
   const [search,setSearch]=useState("");
   const [editingId,setEditingId]=useState(null);
@@ -641,7 +524,6 @@ function CheckoutTimeEditor({records,onUpdate}) {
   const [saveMsg,setSaveMsg]=useState(null);
   const q=search.trim().toLowerCase();
   const matched=q.length>0?records.filter(r=>r.name.toLowerCase().includes(q)).slice(0,8):[];
-
   async function save(r) {
     if(!editVal)return;
     const newOut=localInputToIso(editVal);
@@ -654,7 +536,6 @@ function CheckoutTimeEditor({records,onUpdate}) {
     }catch(_){setSaveMsg({id:r.id,type:"error",text:"Failed to save. Try again."});}
     setSaving(false);
   }
-
   async function clearCheckout(r) {
     setSaving(true);
     try{
@@ -664,7 +545,6 @@ function CheckoutTimeEditor({records,onUpdate}) {
     }catch(_){setSaveMsg({id:r.id,type:"error",text:"Failed to clear. Try again."});}
     setSaving(false);
   }
-
   return(
     <div>
       <input placeholder="Search by name…" value={search} onChange={e=>{setSearch(e.target.value);setEditingId(null);setSaveMsg(null);}} style={{...inpStyle,marginBottom:10}}/>
@@ -683,9 +563,7 @@ function CheckoutTimeEditor({records,onUpdate}) {
                 </div>
                 <p style={{margin:"3px 0 0",fontSize:13,color:C.textLight}}>In: {fmt(r.check_in)}{r.check_out?` · Out: ${fmt(r.check_out)}`:" · No check-out yet"}</p>
               </div>
-              <button onClick={()=>{setEditingId(isEditing?null:r.id);setEditVal(isoToLocalInput(r.check_out));setSaveMsg(null);}} style={{...btnGhost,fontSize:14,color:C.teal,borderColor:C.tealMid,flexShrink:0}}>
-                {isEditing?"Cancel":r.check_out?"Edit time":"Set time"}
-              </button>
+              <button onClick={()=>{setEditingId(isEditing?null:r.id);setEditVal(isoToLocalInput(r.check_out));setSaveMsg(null);}} style={{...btnGhost,fontSize:14,color:C.teal,borderColor:C.tealMid,flexShrink:0}}>{isEditing?"Cancel":r.check_out?"Edit time":"Set time"}</button>
             </div>
             {isEditing&&(
               <div style={{padding:"12px 16px",borderTop:`1px solid ${C.border}`,background:C.bg}}>
@@ -702,6 +580,135 @@ function CheckoutTimeEditor({records,onUpdate}) {
         );
       })}
       {q.length===0&&<p style={{fontSize:14,color:C.textLight,textAlign:"center",padding:"10px 0"}}>Search for a visitor to edit their check-out time.</p>}
+    </div>
+  );
+}
+
+// ── LAST VISIT SEARCH ──
+function LastVisitSearch({people}) {
+  const [query,setQuery]=useState("");
+  const [results,setResults]=useState(null);
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState(null);
+  const debounceRef=useRef(null);
+
+  useEffect(()=>{
+    if(debounceRef.current)clearTimeout(debounceRef.current);
+    if(!query.trim()){setResults(null);setError(null);return;}
+    debounceRef.current=setTimeout(()=>doSearch(query.trim()),400);
+    return()=>{if(debounceRef.current)clearTimeout(debounceRef.current);};
+  },[query]);
+
+  async function doSearch(q) {
+    setLoading(true);setError(null);
+    try {
+      // Find matching people
+      const matched=people.filter(p=>p.name.toLowerCase().includes(q.toLowerCase())).slice(0,10);
+      if(matched.length===0){setResults([]);setLoading(false);return;}
+
+      // Fetch all historical records for matched people (name filter)
+      const nameFilter=matched.map(p=>`name=eq.${encodeURIComponent(p.name)}`).join(",");
+      const res=await api(`checkin_records?select=name,service,check_in,check_out&or=(${nameFilter})&service=neq.${FLAG_ALERT_SERVICE}&order=check_in.desc`);
+      if(!res.ok)throw new Error();
+      const allRecs=await res.json();
+
+      const out=matched.map(p=>{
+        const recs=allRecs.filter(r=>r.name===p.name&&r.service!==FLAG_ALERT_SERVICE);
+        if(recs.length===0)return{person:p,lastVisit:null,lastService:null,totalVisits:0,daysSince:null,serviceBreakdown:{}};
+        // most recent
+        const latest=recs[0];
+        const daysSince=Math.floor((Date.now()-new Date(latest.check_in))/86400000);
+        // breakdown by service
+        const breakdown={};
+        recs.forEach(r=>{breakdown[r.service]=(breakdown[r.service]||0)+1;});
+        return{person:p,lastVisit:latest.check_in,lastService:latest.service,totalVisits:recs.length,daysSince,serviceBreakdown:breakdown};
+      }).sort((a,b)=>{
+        if(!a.lastVisit&&!b.lastVisit)return a.person.name.localeCompare(b.person.name);
+        if(!a.lastVisit)return 1;if(!b.lastVisit)return -1;
+        return new Date(b.lastVisit)-new Date(a.lastVisit);
+      });
+      setResults(out);
+    }catch(e){setError("Failed to load visit history.");}
+    setLoading(false);
+  }
+
+  function daysSinceLabel(d) {
+    if(d===null)return null;
+    if(d===0)return{text:"Today",color:C.success,bg:C.successBg};
+    if(d===1)return{text:"Yesterday",color:C.tealDark,bg:C.tealLight};
+    if(d<=7)return{text:`${d} days ago`,color:C.tealDark,bg:C.tealLight};
+    if(d<=30)return{text:`${d} days ago`,color:"#7B61C4",bg:"#F0EDFB"};
+    if(d<=90)return{text:`${d} days ago`,color:"#E6A817",bg:"#FEF7E6"};
+    return{text:`${d} days ago`,color:C.danger,bg:C.dangerBg};
+  }
+
+  return(
+    <div>
+      <div style={{position:"relative",marginBottom:16}}>
+        <input
+          placeholder="Search by name to see visit history…"
+          value={query}
+          onChange={e=>setQuery(e.target.value)}
+          style={{...inpStyle,paddingRight:query?44:16}}
+        />
+        {query&&(
+          <button onClick={()=>{setQuery("");setResults(null);}} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"#D0E6E5",border:"none",borderRadius:"50%",width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:15,color:"#5A7070"}}>×</button>
+        )}
+      </div>
+
+      {loading&&<div style={{textAlign:"center",padding:"20px 0",color:C.textMuted,fontSize:15}}>Searching visit history…</div>}
+      {error&&<p style={{fontSize:14,color:C.danger}}>⚠ {error}</p>}
+      {!loading&&results&&results.length===0&&<p style={{fontSize:15,color:C.textMuted,textAlign:"center",padding:"16px 0"}}>No people found matching "{query}".</p>}
+
+      {!loading&&results&&results.length>0&&(
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {results.map(({person:p,lastVisit,lastService,totalVisits,daysSince,serviceBreakdown})=>{
+            const av=avColor(p.name),badge=daysSinceLabel(daysSince);
+            return(
+              <div key={p.id} style={{background:p.flagged?"#FFF5F5":C.white,border:`1.5px solid ${p.flagged?C.dangerBorder:C.border}`,borderRadius:14,padding:"16px 18px"}}>
+                <div style={{display:"flex",alignItems:"flex-start",gap:14}}>
+                  <div style={{width:46,height:46,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:16,flexShrink:0}}>{initials(p.name)||"?"}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:6}}>
+                      <span style={{fontWeight:700,fontSize:16}}>{p.name}</span>
+                      {p.flagged&&<span style={{fontSize:12,padding:"2px 8px",borderRadius:20,background:C.dangerBg,color:C.danger,fontWeight:600}}>⚑ Flagged</span>}
+                    </div>
+
+                    {!lastVisit?(
+                      <p style={{margin:0,fontSize:14,color:C.textMuted,fontStyle:"italic"}}>No visit history on record.</p>
+                    ):(
+                      <>
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:8}}>
+                          <span style={{fontSize:14,color:C.textMuted}}>Last visit:</span>
+                          <span style={{fontSize:14,fontWeight:600,color:C.text}}>{fmt(lastVisit)}</span>
+                          <span style={{fontSize:13,padding:"2px 10px",borderRadius:20,background:C.tealLight,color:C.tealDark,fontWeight:500}}>{lastService}</span>
+                          {badge&&<span style={{fontSize:13,padding:"2px 10px",borderRadius:20,background:badge.bg,color:badge.color,fontWeight:600}}>{badge.text}</span>}
+                        </div>
+                        <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+                          <span style={{fontSize:13,color:C.textMuted}}>Total visits: <strong style={{color:C.text}}>{totalVisits}</strong></span>
+                          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                            {Object.entries(serviceBreakdown).sort((a,b)=>b[1]-a[1]).map(([svc,cnt])=>(
+                              <span key={svc} style={{fontSize:12,padding:"2px 10px",borderRadius:20,background:"#F0F4F4",color:C.textMuted,fontWeight:500}}>
+                                {svc}: {cnt}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {!query&&(
+        <p style={{fontSize:14,color:C.textLight,textAlign:"center",padding:"10px 0"}}>
+          Start typing a name to search across all visit history.
+        </p>
+      )}
     </div>
   );
 }
@@ -793,10 +800,7 @@ function PeopleRemover({people,onRemove,onFlag,onUpdate}) {
                   {p.flagged?"Unflag":"Flag"}
                 </button>
                 {confirm===p.id?(
-                  <>
-                    <button onClick={()=>{onRemove(p);setConfirm(null);}} style={{...btnGhost,color:C.danger,borderColor:C.dangerBorder,fontSize:13,padding:"6px 12px"}}>Confirm</button>
-                    <button onClick={()=>setConfirm(null)} style={{...btnGhost,fontSize:13,padding:"6px 12px"}}>Cancel</button>
-                  </>
+                  <><button onClick={()=>{onRemove(p);setConfirm(null);}} style={{...btnGhost,color:C.danger,borderColor:C.dangerBorder,fontSize:13,padding:"6px 12px"}}>Confirm</button><button onClick={()=>setConfirm(null)} style={{...btnGhost,fontSize:13,padding:"6px 12px"}}>Cancel</button></>
                 ):(
                   <button onClick={()=>{setConfirm(p.id);setFlagging(null);}} style={{...btnGhost,color:C.danger,borderColor:C.dangerBorder,fontSize:13,padding:"6px 12px"}}>Remove</button>
                 )}
@@ -831,16 +835,12 @@ function TypeServiceEditor({r,onSave,onCancel}) {
   const [service,setService]=useState(r.service);
   const [saving,setSaving]=useState(false);
   const [msg,setMsg]=useState(null);
-
   async function save() {
     setSaving(true);
-    try{
-      const res=await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({type,service}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-      if(!res.ok)throw new Error();onSave();
-    }catch(_){setMsg("Failed to save. Try again.");}
+    try{const res=await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({type,service}),headers:{...HEADERS,"Prefer":"return=minimal"}});if(!res.ok)throw new Error();onSave();}
+    catch(_){setMsg("Failed to save. Try again.");}
     setSaving(false);
   }
-
   return(
     <div>
       <p style={{margin:"0 0 10px",fontSize:14,color:C.textMuted}}>Edit type & service</p>
@@ -866,7 +866,6 @@ function GroupNameEditor({name,records,onUpdate}) {
   const [val,setVal]=useState(name);
   const [saving,setSaving]=useState(false);
   const [msg,setMsg]=useState(null);
-
   async function save() {
     if(!val.trim()||val.trim()===name){setEditing(false);return;}
     setSaving(true);
@@ -877,7 +876,6 @@ function GroupNameEditor({name,records,onUpdate}) {
     }catch(_){setMsg("Failed to save.");}
     setSaving(false);
   }
-
   if(!editing)return<button onClick={()=>setEditing(true)} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.teal,textDecoration:"underline dotted",fontFamily:"inherit",padding:0}}>Edit name</button>;
   return(
     <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
@@ -998,7 +996,6 @@ function LogRecord({r,av,dur,person,isFlagged,onCheckOut,onDelete,onUpdate}) {
   const [saving,setSaving]=useState(false);
   const [msg,setMsg]=useState(null);
   function startEdit(field){setEditing(field);setEditVal(isoToLocalInput(r[field]));setMsg(null);}
-
   async function save() {
     const newVal=localInputToIso(editVal);
     const inTime=editing==="check_in"?newVal:r.check_in,outTime=editing==="check_out"?newVal:r.check_out;
@@ -1011,13 +1008,11 @@ function LogRecord({r,av,dur,person,isFlagged,onCheckOut,onDelete,onUpdate}) {
     }catch(_){setMsg({type:"error",text:"Failed to save."});}
     setSaving(false);
   }
-
   async function clearOut() {
     setSaving(true);
     try{const res=await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});if(!res.ok)throw new Error();setEditing(null);onUpdate();}catch(_){setMsg({type:"error",text:"Failed to clear."});}
     setSaving(false);
   }
-
   const isShowerLaundry=NO_DURATION_SERVICES.includes(r.service);
   const numLabel=r.service==="Showers"?"Shower":r.service==="Laundry"?"Laundry":"Queue";
   const timeRow=(
@@ -1029,7 +1024,6 @@ function LogRecord({r,av,dur,person,isFlagged,onCheckOut,onDelete,onUpdate}) {
       {isShowerLaundry&&r.check_out&&<span style={{marginLeft:4,fontSize:13,padding:"2px 10px",borderRadius:20,background:C.successBg,color:C.success,fontWeight:600}}>✓ Completed</span>}
     </p>
   );
-
   return(
     <div style={{background:isFlagged?"#FFF5F5":"#fff",border:`1.5px solid ${isFlagged?"#F0A9A3":"#D0E6E5"}`,borderRadius:14,marginBottom:12,overflow:"hidden"}}>
       <div style={{padding:"16px 18px",display:"flex",alignItems:"flex-start",gap:14}}>
@@ -1053,16 +1047,6 @@ function LogRecord({r,av,dur,person,isFlagged,onCheckOut,onDelete,onUpdate}) {
         <div style={{display:"flex",flexDirection:"column",gap:8,flexShrink:0,alignItems:"flex-end"}}>
           {isShowerLaundry&&!r.check_out&&<button onClick={()=>onCheckOut(r.id)} style={{...btnSuccess,fontSize:14,padding:"7px 16px"}}>✓ Done</button>}
           {!isShowerLaundry&&!r.check_out&&<button onClick={()=>onCheckOut(r.id)} style={{...btnOutline,fontSize:14,padding:"7px 14px"}}>Check out</button>}
-          {person&&(
-            <select value={person.locker&&person.locker_date===new Date().toISOString().slice(0,10)?person.locker:""} onChange={async e=>{
-              const todayStr=new Date().toISOString().slice(0,10),val=e.target.value;
-              await api(`people?id=eq.${person.id}`,{method:"PATCH",body:JSON.stringify(val?{locker:val,locker_date:todayStr}:{locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-              onUpdate();
-            }} style={{...inpStyle,width:"auto",padding:"4px 8px",fontSize:12,height:32,color:person.locker&&person.locker_date===new Date().toISOString().slice(0,10)?C.tealDark:C.textMuted,borderColor:person.locker&&person.locker_date===new Date().toISOString().slice(0,10)?C.tealMid:C.border}}>
-              <option value="">Locker…</option>
-              {[...Array.from({length:20},(_,i)=>String(i+1)),"Bin A","Bin B"].map(l=><option key={l} value={l}>{l==="Bin A"||l==="Bin B"?l:"#"+l}</option>)}
-            </select>
-          )}
           <button onClick={()=>onDelete(r.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#8AA5A5",fontSize:22,padding:"0 4px",lineHeight:1}}>×</button>
         </div>
       </div>
@@ -1087,10 +1071,7 @@ function LogRecord({r,av,dur,person,isFlagged,onCheckOut,onDelete,onUpdate}) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// ANALYTICS TAB
-// ─────────────────────────────────────────────────────────────
-
+// ── ANALYTICS ──
 function AnalyticsTab({records}) {
   const [range,setRange]=useState(null);
   const [customStart,setCustomStart]=useState("");
@@ -1229,10 +1210,7 @@ function AnalyticsTab({records}) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// QUEUE VIEW
-// ─────────────────────────────────────────────────────────────
-
+// ── QUEUE VIEW ──
 function QueueView({records,people,onMarkComplete,onCancel,onLogout,loadData}) {
   return(
     <div style={{minHeight:"100vh",background:"#F7FAFA"}}>
@@ -1250,10 +1228,7 @@ function QueueView({records,people,onMarkComplete,onCancel,onLogout,loadData}) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// SERVICE BUTTONS
-// ─────────────────────────────────────────────────────────────
-
+// ── SERVICE BUTTONS ──
 function ServiceButtons({availableServices,form,setForm,setErrors,countToday}) {
   return(
     <div style={{marginBottom:18,marginTop:14}}>
@@ -1274,15 +1249,11 @@ function ServiceButtons({availableServices,form,setForm,setErrors,countToday}) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// CHECK-OUT PANEL
-// ─────────────────────────────────────────────────────────────
-
+// ── CHECK-OUT PANEL ──
 function CheckOutPanel({records,people,loadData}) {
   const [checking,setChecking]=useState(null);
   const [done,setDone]=useState(null);
   const activeToday=records.filter(r=>r.check_in>=todayISO()&&!r.check_out&&r.service!==FLAG_ALERT_SERVICE&&!NO_DURATION_SERVICES.includes(r.service)).sort((a,b)=>a.name.localeCompare(b.name));
-
   async function handleCheckOut(r) {
     setChecking(r.id);
     const person=people.find(p=>p.name===r.name);
@@ -1291,7 +1262,6 @@ function CheckOutPanel({records,people,loadData}) {
     if(person?.locker)await api(`people?id=eq.${person.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
     await loadData();setDone(r.name);setChecking(null);setTimeout(()=>setDone(null),4000);
   }
-
   return(
     <div>
       {done&&<div style={{background:C.successBg,border:`1.5px solid ${C.successBorder}`,borderRadius:10,padding:"12px 16px",marginBottom:16}}><p style={{margin:0,fontSize:15,fontWeight:600,color:C.success}}>✓ {done} checked out successfully!</p></div>}
@@ -1310,10 +1280,7 @@ function CheckOutPanel({records,people,loadData}) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// PUBLIC APP
-// ─────────────────────────────────────────────────────────────
-
+// ── PUBLIC APP ──
 function PublicApp({records,people,services,loading,dbError,loadData,closedServices={}}) {
   const [pubView,setPubView]=useState("checkin");
   const [form,setForm]=useState(EMPTY_FORM);
@@ -1333,8 +1300,7 @@ function PublicApp({records,people,services,loading,dbError,loadData,closedServi
 
   useEffect(()=>{
     const h=e=>{if(suggestRef.current&&!suggestRef.current.contains(e.target))setShowSuggestions(false);};
-    document.addEventListener("mousedown",h);
-    return()=>document.removeEventListener("mousedown",h);
+    document.addEventListener("mousedown",h); return()=>document.removeEventListener("mousedown",h);
   },[]);
 
   useEffect(()=>{
@@ -1470,9 +1436,7 @@ function PublicApp({records,people,services,loading,dbError,loadData,closedServi
                 return(
                   <div key={svc} style={{flex:1,background:closed?"#F7FAFA":full?"#FCECEA":"#EAF7F8",border:`1.5px solid ${closed?"#D0E6E5":full?"#F0A9A3":"#C0E8EC"}`,borderRadius:12,padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <span style={{fontSize:15,fontWeight:600,color:closed?C.textMuted:full?"#C0392B":"#2E8A94"}}>{svc}</span>
-                    <span style={{fontSize:14,fontWeight:500,color:closed?"#fff":full?"#C0392B":"#46b4bf",background:closed?"#C0392B":full?"transparent":"#fff",padding:"4px 14px",borderRadius:20,border:`1px solid ${closed?"#C0392B":full?"#F0A9A3":"#C0E8EC"}`}}>
-                      {closed?"Closed":full?"Full":`${cap-used} left`}
-                    </span>
+                    <span style={{fontSize:14,fontWeight:500,color:closed?"#fff":full?"#C0392B":"#46b4bf",background:closed?"#C0392B":full?"transparent":"#fff",padding:"4px 14px",borderRadius:20,border:`1px solid ${closed?"#C0392B":full?"#F0A9A3":"#C0E8EC"}`}}>{closed?"Closed":full?"Full":`${cap-used} left`}</span>
                   </div>
                 );
               })}
@@ -1571,15 +1535,11 @@ function PublicApp({records,people,services,loading,dbError,loadData,closedServi
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// ADMIN APP
-// ─────────────────────────────────────────────────────────────
-
+// ── ADMIN APP ──
 function AddPersonPanel({people,onUpdate}) {
   const [name,setName]=useState("");
   const [saving,setSaving]=useState(false);
   const [msg,setMsg]=useState(null);
-
   async function handleAdd() {
     if(!name.trim())return;
     if(people.find(p=>p.name.toLowerCase()===name.trim().toLowerCase())){setMsg({type:"error",text:`${name.trim()} is already in the system.`});return;}
@@ -1591,7 +1551,6 @@ function AddPersonPanel({people,onUpdate}) {
     }catch(_){setMsg({type:"error",text:"Failed to add person. Try again."});}
     setSaving(false);
   }
-
   return(
     <div>
       <div style={{display:"flex",gap:10}}>
@@ -1605,6 +1564,7 @@ function AddPersonPanel({people,onUpdate}) {
 
 function AdminApp() {
   const [view,setView]=useState("checkin");
+  const [manageSubTab,setManageSubTab]=useState("people"); // "people" | "lastvisit"
   const [form,setForm]=useState(EMPTY_FORM);
   const [records,setRecords]=useState([]);
   const [services,setServices]=useState([]);
@@ -1662,11 +1622,9 @@ function AdminApp() {
 
   useEffect(()=>{
     const h=e=>{if(suggestRef.current&&!suggestRef.current.contains(e.target))setShowSuggestions(false);};
-    document.addEventListener("mousedown",h);
-    return()=>document.removeEventListener("mousedown",h);
+    document.addEventListener("mousedown",h); return()=>document.removeEventListener("mousedown",h);
   },[]);
 
-  // Flag alert polling — runs every 3 seconds
   useEffect(()=>{
     async function checkFlags(){
       try{
@@ -1680,11 +1638,9 @@ function AdminApp() {
         }
       }catch(_){}
     }
-    const t=setInterval(checkFlags,3000);
-    return()=>clearInterval(t);
+    const t=setInterval(checkFlags,3000); return()=>clearInterval(t);
   },[]);
 
-  // QR scanner
   useEffect(()=>{
     async function handleScan(code){
       if(!code.startsWith(QR_PREFIX))return;
@@ -1711,8 +1667,7 @@ function AdminApp() {
       if(e.key==="Enter"){const code=scanBuffer.current.trim();scanBuffer.current="";if(scanTimer.current)clearTimeout(scanTimer.current);if(code.length>3)handleScan(code);return;}
       if(e.key.length===1){if(scanTimer.current)clearTimeout(scanTimer.current);scanBuffer.current+=e.key;scanTimer.current=setTimeout(()=>{scanBuffer.current="";},SCANNER_TIMEOUT_MS);}
     }
-    document.addEventListener("keydown",onKeyDown);
-    return()=>document.removeEventListener("keydown",onKeyDown);
+    document.addEventListener("keydown",onKeyDown); return()=>document.removeEventListener("keydown",onKeyDown);
   },[loadData]);
 
   function handleNameInput(val){
@@ -1817,9 +1772,7 @@ function AdminApp() {
   if(queueAuth)return<QueueView records={records} people={people} onMarkComplete={markComplete} onCancel={cancelRecord} onLogout={()=>setQueueAuth(false)} loadData={loadData}/>;
 
   const Tab=({id,label})=>(
-    <button onClick={()=>setView(id)} style={{flex:1,padding:"14px 0",border:"none",background:"transparent",borderBottom:view===id?"3px solid #46b4bf":"3px solid transparent",fontWeight:view===id?700:400,fontSize:16,cursor:"pointer",color:view===id?"#46b4bf":"#5A7070",fontFamily:"inherit",marginBottom:-2}}>
-      {label}
-    </button>
+    <button onClick={()=>setView(id)} style={{flex:1,padding:"14px 0",border:"none",background:"transparent",borderBottom:view===id?"3px solid #46b4bf":"3px solid transparent",fontWeight:view===id?700:400,fontSize:16,cursor:"pointer",color:view===id?"#46b4bf":"#5A7070",fontFamily:"inherit",marginBottom:-2}}>{label}</button>
   );
 
   return(
@@ -2077,31 +2030,53 @@ function AdminApp() {
 
           {view==="manage"&&(
             <div>
-              <div style={{borderBottom:"1px solid #D0E6E5",paddingBottom:20,marginBottom:20}}>
-                <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Add person to system</p>
-                <AddPersonPanel people={people} onUpdate={loadData}/>
+              {/* Sub-tabs */}
+              <div style={{display:"flex",gap:0,marginBottom:24,borderBottom:"2px solid #C0E8EC"}}>
+                {[["people","Manage People"],["lastvisit","Last Visit Search"]].map(([id,label])=>(
+                  <button key={id} onClick={()=>setManageSubTab(id)}
+                    style={{padding:"10px 20px",border:"none",background:"transparent",borderBottom:manageSubTab===id?"3px solid #46b4bf":"3px solid transparent",fontWeight:manageSubTab===id?700:400,fontSize:15,cursor:"pointer",color:manageSubTab===id?"#46b4bf":"#5A7070",fontFamily:"inherit",marginBottom:-2}}>
+                    {label}
+                  </button>
+                ))}
               </div>
-              <div style={{borderBottom:"1px solid #D0E6E5",paddingBottom:20,marginBottom:20}}>
-                <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Manage people</p>
-                <PeopleRemover people={people} onRemove={async p=>{await api(`people?id=eq.${p.id}`,{method:"DELETE"});loadData();}} onFlag={flagPerson} onUpdate={loadData}/>
-              </div>
-              <div style={{borderBottom:"1px solid #D0E6E5",paddingBottom:20,marginBottom:20}}>
-                <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service types</p>
-                <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:12}}>
-                  {services.map(s=>(
-                    <span key={s} style={{display:"flex",alignItems:"center",gap:5,fontSize:14,padding:"6px 14px",background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:20,color:"#2E8A94",fontWeight:500}}>
-                      {s}
-                      {CAPPED_SERVICES[s]&&<span style={{fontSize:12,opacity:0.7}}> · {CAPPED_SERVICES[s]}</span>}
-                      <button onClick={()=>removeService(s)} style={{background:"none",border:"none",cursor:"pointer",color:"#2E8A94",padding:"0 2px",fontSize:16,lineHeight:1,opacity:0.6}}>×</button>
-                    </span>
-                  ))}
+
+              {manageSubTab==="people"&&(
+                <>
+                  <div style={{borderBottom:"1px solid #D0E6E5",paddingBottom:20,marginBottom:20}}>
+                    <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Add person to system</p>
+                    <AddPersonPanel people={people} onUpdate={loadData}/>
+                  </div>
+                  <div style={{borderBottom:"1px solid #D0E6E5",paddingBottom:20,marginBottom:20}}>
+                    <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Manage people</p>
+                    <PeopleRemover people={people} onRemove={async p=>{await api(`people?id=eq.${p.id}`,{method:"DELETE"});loadData();}} onFlag={flagPerson} onUpdate={loadData}/>
+                  </div>
+                  <div style={{borderBottom:"1px solid #D0E6E5",paddingBottom:20,marginBottom:20}}>
+                    <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service types</p>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:12}}>
+                      {services.map(s=>(
+                        <span key={s} style={{display:"flex",alignItems:"center",gap:5,fontSize:14,padding:"6px 14px",background:"#EAF7F8",border:"1px solid #C0E8EC",borderRadius:20,color:"#2E8A94",fontWeight:500}}>
+                          {s}
+                          {CAPPED_SERVICES[s]&&<span style={{fontSize:12,opacity:0.7}}> · {CAPPED_SERVICES[s]}</span>}
+                          <button onClick={()=>removeService(s)} style={{background:"none",border:"none",cursor:"pointer",color:"#2E8A94",padding:"0 2px",fontSize:16,lineHeight:1,opacity:0.6}}>×</button>
+                        </span>
+                      ))}
+                    </div>
+                    <div style={{display:"flex",gap:10}}>
+                      <input placeholder="Add new service…" value={newService} onChange={e=>setNewService(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addService()} style={{...inpStyle,flex:1}}/>
+                      <button onClick={addService} style={{...btnOutline,padding:"10px 20px",fontSize:15}}>Add</button>
+                    </div>
+                  </div>
+                  <button onClick={exportCSV} style={{...btnOutline,width:"100%",textAlign:"center",padding:13,fontSize:15}}>Export all check-ins as CSV ↓</button>
+                </>
+              )}
+
+              {manageSubTab==="lastvisit"&&(
+                <div>
+                  <p style={{margin:"0 0 6px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Last Visit Search</p>
+                  <p style={{margin:"0 0 20px",fontSize:14,color:C.textMuted}}>Search across all historical visit records to see when someone last visited, which services they used, and their total visit count.</p>
+                  <LastVisitSearch people={people}/>
                 </div>
-                <div style={{display:"flex",gap:10}}>
-                  <input placeholder="Add new service…" value={newService} onChange={e=>setNewService(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addService()} style={{...inpStyle,flex:1}}/>
-                  <button onClick={addService} style={{...btnOutline,padding:"10px 20px",fontSize:15}}>Add</button>
-                </div>
-              </div>
-              <button onClick={exportCSV} style={{...btnOutline,width:"100%",textAlign:"center",padding:13,fontSize:15}}>Export all check-ins as CSV ↓</button>
+              )}
             </div>
           )}
 
@@ -2112,10 +2087,7 @@ function AdminApp() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// ROOT
-// ─────────────────────────────────────────────────────────────
-
+// ── ROOT ──
 function Root() {
   const [records,setRecords]=useState([]);
   const [services,setServices]=useState([]);
