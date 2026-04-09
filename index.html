@@ -1657,7 +1657,12 @@ function AdminApp() {
     setLoading(false);
   },[]);
 
-  useEffect(()=>{loadData(true);const t=setInterval(()=>loadData(false),10000);return()=>clearInterval(t);},[loadData]);
+  useEffect(()=>{
+    loadData(true);
+    const interval = (view==="checkin"||view==="log") ? 3000 : 10000;
+    const t=setInterval(()=>loadData(false),interval);
+    return()=>clearInterval(t);
+  },[loadData,view]);
 
   useEffect(()=>{
     const h=e=>{if(suggestRef.current&&!suggestRef.current.contains(e.target))setShowSuggestions(false);};
@@ -1764,20 +1769,20 @@ function AdminApp() {
     setSaving(false);
   }
 
-  async function markComplete(id){await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}
+  async function markComplete(id){await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData(true);}
   async function checkOut(id){
     const record=recordsRef.current.find(r=>r.id===id);
     const person=record?peopleRef.current.find(p=>p.name===record.name):null;
     const lockerUsed=person?.locker&&person?.locker_date===new Date().toISOString().slice(0,10)?person.locker:null;
     await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString(),locker_used:lockerUsed}),headers:{...HEADERS,"Prefer":"return=minimal"}});
     if(person?.locker)await api(`people?id=eq.${person.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-    loadData();
+    loadData(true);
   }
-  async function cancelRecord(id){await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});loadData();}
-  async function deleteRecord(id){await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});loadData();}
+  async function cancelRecord(id){await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});loadData(true);}
+  async function deleteRecord(id){await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});loadData(true);}
   async function flagPerson(p,flagged,reason){
     await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({flagged,flag_reason:reason||null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-    loadData();
+    loadData(true);
   }
   async function dismissAlert(id){
     await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
@@ -1799,9 +1804,9 @@ function AdminApp() {
     const s=newService.trim();
     if(!s||services.includes(s)){setNewService("");return;}
     await api("checkin_services",{method:"POST",body:JSON.stringify({name:s}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-    setNewService("");loadData();
+    setNewService("");loadData(true);
   }
-  async function removeService(s){await api(`checkin_services?name=eq.${encodeURIComponent(s)}`,{method:"DELETE"});loadData();}
+  async function removeService(s){await api(`checkin_services?name=eq.${encodeURIComponent(s)}`,{method:"DELETE"});loadData(true);}
 
   const realRecords=records.filter(r=>r.service!==FLAG_ALERT_SERVICE);
   const todayCount=new Set(realRecords.filter(r=>r.check_in>=todayISO()).map(r=>r.name)).size;
