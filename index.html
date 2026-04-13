@@ -2022,14 +2022,14 @@ function AdminApp() {
                           <p style={{margin:"0 0 2px",fontSize:12,fontWeight:700,color:occupant?C.danger:C.tealDark}}>#{l}</p>
                           <p style={{margin:"0 0 4px",fontSize:10,color:occupant?C.danger:C.tealDark,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{occupant?occupant.name:"Open"}</p>
                           {occupant?(
-                            <button onClick={async()=>{await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}} style={{...btnGhost,fontSize:10,padding:"2px 6px",color:C.danger,borderColor:C.dangerBorder,width:"100%"}}>Clear</button>
+                            <button onClick={async()=>{await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData(true);}} style={{...btnGhost,fontSize:10,padding:"2px 6px",color:C.danger,borderColor:C.dangerBorder,width:"100%"}}>Clear</button>
                           ):(
                             <select value="" onChange={async e=>{
                               const val=e.target.value;if(!val)return;
                               const todayStr=new Date().toISOString().slice(0,10);
                               const p=people.find(x=>x.name===val);
                               if(p)await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:parseInt(l),locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-                              loadData();
+                              loadData(true);
                             }} style={{...inpStyle,padding:"2px 2px",fontSize:10,height:24,borderColor:C.tealMid}}>
                               <option value="">Assign…</option>
                               {people.filter(p=>{const todayStr=new Date().toISOString().slice(0,10);return records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE)&&(!p.locker||p.locker_date!==todayStr);}).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
@@ -2050,14 +2050,14 @@ function AdminApp() {
                             <span style={{fontSize:13,color:occupant?C.danger:C.tealDark,fontWeight:500}}>{occupant?occupant.name:"Open"}</span>
                           </div>
                           {occupant?(
-                            <button onClick={async()=>{await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}} style={{...btnGhost,fontSize:12,padding:"4px 8px",color:C.danger,borderColor:C.dangerBorder,width:"100%"}}>Clear</button>
+                            <button onClick={async()=>{await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData(true);}} style={{...btnGhost,fontSize:12,padding:"4px 8px",color:C.danger,borderColor:C.dangerBorder,width:"100%"}}>Clear</button>
                           ):(
                             <select value="" onChange={async e=>{
                               const val=e.target.value;if(!val)return;
                               const todayStr=new Date().toISOString().slice(0,10);
                               const p=people.find(x=>x.name===val);
                               if(p)await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:l,locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-                              loadData();
+                              loadData(true);
                             }} style={{...inpStyle,padding:"4px 8px",fontSize:12,height:30,borderColor:C.tealMid}}>
                               <option value="">Assign…</option>
                               {people.filter(p=>{const todayStr=new Date().toISOString().slice(0,10);return records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE)&&(!p.locker||p.locker_date!==todayStr);}).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
