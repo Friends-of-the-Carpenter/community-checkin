@@ -1805,6 +1805,7 @@ async function exportCSV(){
         const p=people.find(x=>x.name===r.name);
         const dur=duration(r.check_in,r.check_out,r.service);
         const flagged=r.service===FLAG_ALERT_SERVICE?"Yes":"";
+        const locker=r.locker_used||"";
         return[r.name,p?p.guest_number:"",r.type,r.member_id||"",r.service===FLAG_ALERT_SERVICE?"Flag Alert":r.service,r.queue_position||"",fmt(r.check_in),r.check_out?fmt(r.check_out):"",dur||"",(r.notes||"").replace(/,/g," "),flagged];
       });
       const csv=[hdr,...rows].map(r=>r.map(v=>`"${v}"`).join(",")).join("\n");
