@@ -1289,7 +1289,7 @@ function CheckOutPanel({records,people,loadData}) {
     const lockerUsed=person?.locker&&person?.locker_date===new Date().toISOString().slice(0,10)?person.locker:null;
     await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString(),locker_used:lockerUsed}),headers:{...HEADERS,"Prefer":"return=minimal"}});
     if(person?.locker)await api(`people?id=eq.${person.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-    await loadData();setDone(r.name);setChecking(null);setTimeout(()=>setDone(null),4000);
+    await loadData();setDone(r.name);setChecking(null);setTimeout(()=>setDone(null),3000);
   }
   return(
     <div>
@@ -1666,7 +1666,7 @@ const rootLastCheckIn=useRef(null);
 
   useEffect(()=>{
     loadData(true);
-    const interval = (view==="checkin"||view==="log") ? 3000 : 10000;
+    const interval = (view==="checkin"||view==="log") ? 3000 : 3000;
     const t=setInterval(()=>loadData(false),interval);
     return()=>clearInterval(t);
   },[loadData,view]);
@@ -2185,7 +2185,7 @@ const lastKnownCheckIn=useRef(null);
     setLoading(false);
   },[]);
 
-  useEffect(()=>{loadData(true);const t=setInterval(()=>loadData(false),10000);return()=>clearInterval(t);},[loadData]);
+  useEffect(()=>{loadData(true);const t=setInterval(()=>loadData(false),3000);return()=>clearInterval(t);},[loadData]);
 
   if(IS_ADMIN_MODE)return<AdminApp/>;
   if(IS_QUEUE_MODE)return(
