@@ -1080,9 +1080,9 @@ function AnalyticsTab({records}) {
   const [allRecords,setAllRecords]=useState(null);
   const [loadingAll,setLoadingAll]=useState(false);
 
-  useEffect(()=>{
+useEffect(()=>{
     if(!range||range==="today"){setAllRecords(null);return;}
-    if(range==="custom"){setAllRecords(null);return;} // handled separately when dates are set
+    if(range==="custom"){setAllRecords(null);return;}
     setLoadingAll(true);
     const now=new Date();let cutoff=new Date(0);
     if(range==="7days"){cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-6);}
@@ -1129,6 +1129,16 @@ function AnalyticsTab({records}) {
   }
 
   // Custom range: fetch server-side when both dates are set
+  useEffect(()=>{
+    if(range!=="custom"||!customStart||!customEnd)return;
+    setLoadingAll(true);
+    const start=new Date(customStart+"T00:00:00").toISOString();
+    const end=new Date(customEnd+"T23:59:59").toISOString();
+    api(`checkin_records?select=${ANALYTICS_COLUMNS}&check_in=gte.${start}&check_in=lte.${end}&service=neq.${FLAG_ALERT_SERVICE}&order=check_in.desc`)
+      .then(r=>r.json()).then(d=>{setAllRecords(d);setLoadingAll(false);}).catch(()=>setLoadingAll(false));
+  },[range,customStart,customEnd]);
+
+// Custom range: fetch server-side when both dates are set
   useEffect(()=>{
     if(range!=="custom"||!customStart||!customEnd)return;
     setLoadingAll(true);
@@ -1788,17 +1798,23 @@ function AdminApp() {
     await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
     setFlagAlerts(prev=>prev.filter(a=>a.id!==id));
   }
-  function exportCSV(){
-    const hdr=["Name","Guest #","Type","Member ID","Service","Queue #","Check-in","Check-out","Duration","Notes"];
-    const rows=records.filter(r=>r.service!==FLAG_ALERT_SERVICE).map(r=>{
-      const p=people.find(x=>x.name===r.name);
-      const dur=duration(r.check_in,r.check_out,r.service);
-      return[r.name,p?p.guest_number:"",r.type,r.member_id||"",r.service,r.queue_position||"",fmt(r.check_in),r.check_out?fmt(r.check_out):"",dur||"",(r.notes||"").replace(/,/g," ")];
-    });
-    const csv=[hdr,...rows].map(r=>r.map(v=>`"${v}"`).join(",")).join("\n");
-    const a=document.createElement("a");
-    a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);
-    a.download="checkins.csv";a.click();
+async function exportCSV(){
+    try{
+      const res=await api(`checkin_records?select=${LIVE_COLUMNS}&order=check_in.desc`);
+      if(!res.ok)throw new Error();
+      const allRecords=await res.json();
+      const hdr=["Name","Guest #","Type","Member ID","Service","Queue #","Check-in","Check-out","Duration","Notes","Flagged"];
+      const rows=allRecords.map(r=>{
+        const p=people.find(x=>x.name===r.name);
+        const dur=duration(r.check_in,r.check_out,r.service);
+        const flagged=r.service===FLAG_ALERT_SERVICE?"Yes":"";
+        return[r.name,p?p.guest_number:"",r.type,r.member_id||"",r.service===FLAG_ALERT_SERVICE?"Flag Alert":r.service,r.queue_position||"",fmt(r.check_in),r.check_out?fmt(r.check_out):"",dur||"",(r.notes||"").replace(/,/g," "),flagged];
+      });
+      const csv=[hdr,...rows].map(r=>r.map(v=>`"${v}"`).join(",")).join("\n");
+      const a=document.createElement("a");
+      a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);
+      a.download="checkins.csv";a.click();
+    }catch(_){alert("Failed to export. Please try again.");}
   }
   async function addService(){
     const s=newService.trim();
@@ -2140,8 +2156,26 @@ function Root() {
   const [dbError,setDbError]=useState(null);
   const [closedServices,setClosedServices]=useState({});
 
-  const loadData=useCallback(async()=>{
+const lastKnownCheckIn=useRef(null);
+  const lastKnownPeopleId=useRef(null);
+
+const lastKnownCheckIn=useRef(null);
+  const lastKnownPeopleId=useRef(null);
+
+  const loadData=useCallback(async(force=false)=>{
     try{
+      const[pingR,pingP]=await Promise.all([
+        api(`checkin_records?select=check_in&check_in=gte.${todayISO()}&order=check_in.desc&limit=1`),
+        api(`people?select=id&order=id.desc&limit=1`)
+      ]);
+      if(!pingR.ok||!pingP.ok)throw new Error();
+      const[pingRData,pingPData]=await Promise.all([pingR.json(),pingP.json()]);
+      const latestCheckIn=pingRData[0]?.check_in||null;
+      const latestPersonId=pingPData[0]?.id||null;
+      const changed=force||latestCheckIn!==lastKnownCheckIn.current||latestPersonId!==lastKnownPeopleId.current;
+      if(!changed){setLoading(false);return;}
+      lastKnownCheckIn.current=latestCheckIn;
+      lastKnownPeopleId.current=latestPersonId;
       const[rRes,sRes,pRes]=await Promise.all([
         api(`checkin_records?select=${LIVE_COLUMNS}&check_in=gte.${todayISO()}&order=check_in.desc`),
         api("checkin_services?order=name.asc"),
@@ -2156,7 +2190,7 @@ function Root() {
     setLoading(false);
   },[]);
 
-  useEffect(()=>{loadData();const t=setInterval(loadData,10000);return()=>clearInterval(t);},[loadData]);
+  useEffect(()=>{loadData(true);const t=setInterval(()=>loadData(false),10000);return()=>clearInterval(t);},[loadData]);
 
   if(IS_ADMIN_MODE)return<AdminApp/>;
   if(IS_QUEUE_MODE)return(
