@@ -2156,9 +2156,6 @@ function Root() {
 const lastKnownCheckIn=useRef(null);
   const lastKnownPeopleId=useRef(null);
 
-const lastKnownCheckIn=useRef(null);
-  const lastKnownPeopleId=useRef(null);
-
   const loadData=useCallback(async(force=false)=>{
     try{
       const[pingR,pingP]=await Promise.all([
