@@ -1664,12 +1664,7 @@ const rootLastCheckIn=useRef(null);
     setLoading(false);
   },[]);
 
-  useEffect(()=>{
-    loadData(true);
-    const interval = (view==="checkin"||view==="log") ? 3000 : 3000;
-    const t=setInterval(()=>loadData(false),interval);
-    return()=>clearInterval(t);
-  },[loadData,view]);
+useEffect(()=>{loadData(true);const t=setInterval(()=>loadData(false),3000);return()=>clearInterval(t);},[loadData]);
 
   useEffect(()=>{
     const h=e=>{if(suggestRef.current&&!suggestRef.current.contains(e.target))setShowSuggestions(false);};
