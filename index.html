@@ -1800,13 +1800,13 @@ async function exportCSV(){
       const res=await api(`checkin_records?select=${LIVE_COLUMNS}&order=check_in.desc`);
       if(!res.ok)throw new Error();
       const allRecords=await res.json();
-      const hdr=["Name","Guest #","Type","Member ID","Service","Queue #","Check-in","Check-out","Duration","Notes","Flagged"];
+const hdr=["Name","Guest #","Type","Member ID","Service","Queue #","Check-in","Check-out","Duration","Notes","Locker","Flagged"];
       const rows=allRecords.map(r=>{
         const p=people.find(x=>x.name===r.name);
         const dur=duration(r.check_in,r.check_out,r.service);
         const flagged=r.service===FLAG_ALERT_SERVICE?"Yes":"";
         const locker=r.locker_used||"";
-        return[r.name,p?p.guest_number:"",r.type,r.member_id||"",r.service===FLAG_ALERT_SERVICE?"Flag Alert":r.service,r.queue_position||"",fmt(r.check_in),r.check_out?fmt(r.check_out):"",dur||"",(r.notes||"").replace(/,/g," "),flagged];
+        return[r.name,p?p.guest_number:"",r.type,r.member_id||"",r.service===FLAG_ALERT_SERVICE?"Flag Alert":r.service,r.queue_position||"",fmt(r.check_in),r.check_out?fmt(r.check_out):"",dur||"",(r.notes||"").replace(/,/g," "),locker,flagged];
       });
       const csv=[hdr,...rows].map(r=>r.map(v=>`"${v}"`).join(",")).join("\n");
       const a=document.createElement("a");
