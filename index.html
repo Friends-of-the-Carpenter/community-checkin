@@ -2129,7 +2129,7 @@ function AdminApp() {
   const loadData = useCallback(async () => {
     try {
       const [rRes, sRes, pRes] = await Promise.all([
-        api("checkin_records?order=check_in.desc"),
+        api("checkin_records?order=check_in.desc&limit=10000"),
         api("checkin_services?order=name.asc"),
         api("people?order=name.asc")
       ]);
@@ -2663,7 +2663,7 @@ function Root() {
   const loadData = useCallback(async () => {
     try {
       const [rRes, sRes, pRes] = await Promise.all([
-        api("checkin_records?order=check_in.desc"),
+        api("checkin_records?order=check_in.desc&limit=10000"),
         api("checkin_services?order=name.asc"),
         api("people?order=name.asc")
       ]);
