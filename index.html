@@ -1347,12 +1347,39 @@ function PublicApp({records,people,services,loading,dbError,loadData,closedServi
         await loadData();setScanResult({action:"checkin",name:person.name,guestNumber:guestNum});
       }
     }
-    const scanBuffer={current:""},scanTimer={current:null};
+const scanBuffer={current:""},scanTimer={current:null},scanStart={current:null};
     function onKeyDown(e){
       const tag=document.activeElement?.tagName;
-      if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT")return;
-      if(e.key==="Enter"){const code=scanBuffer.current.trim();scanBuffer.current="";if(scanTimer.current)clearTimeout(scanTimer.current);if(code.length>3)handleScan(code);return;}
-      if(e.key.length===1){if(scanTimer.current)clearTimeout(scanTimer.current);scanBuffer.current+=e.key;scanTimer.current=setTimeout(()=>{scanBuffer.current="";},SCANNER_TIMEOUT_MS);}
+      const inputFocused=tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT";
+      if(e.key==="Enter"){
+        const code=scanBuffer.current.trim();
+        const elapsed=scanStart.current?Date.now()-scanStart.current:999;
+        scanBuffer.current="";scanStart.current=null;
+        if(scanTimer.current)clearTimeout(scanTimer.current);
+        // Only treat as QR scan if it completed fast enough to be a scanner
+        if(code.startsWith(QR_PREFIX)&&elapsed<500){
+          if(inputFocused){
+            // Prevent the Enter from submitting the form
+            e.preventDefault();e.stopPropagation();
+            // Strip the scanned chars out of the input if they landed there
+            const el=document.activeElement;
+            if(el&&el.value){
+              const idx=el.value.indexOf(QR_PREFIX);
+              if(idx!==-1)el.value=el.value.slice(0,idx);
+            }
+          }
+          if(code.length>3)handleScan(code);
+        }else if(!inputFocused&&code.length>3){
+          handleScan(code);
+        }
+        return;
+      }
+      if(e.key.length===1){
+        if(!scanBuffer.current)scanStart.current=Date.now();
+        if(scanTimer.current)clearTimeout(scanTimer.current);
+        scanBuffer.current+=e.key;
+        scanTimer.current=setTimeout(()=>{scanBuffer.current="";scanStart.current=null;},SCANNER_TIMEOUT_MS);
+      }
     }
     document.addEventListener("keydown",onKeyDown);return()=>document.removeEventListener("keydown",onKeyDown);
   },[loadData]);
