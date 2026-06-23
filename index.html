@@ -1347,27 +1347,17 @@ function PublicApp({records,people,services,loading,dbError,loadData,closedServi
         await loadData();setScanResult({action:"checkin",name:person.name,guestNumber:guestNum});
       }
     }
-const scanBuffer={current:""},scanTimer={current:null},scanStart={current:null};
+const scanBuffer={current:""},scanTimer={current:null},scanStart={current:null},likelyScan={current:false};
     function onKeyDown(e){
       const tag=document.activeElement?.tagName;
       const inputFocused=tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT";
       if(e.key==="Enter"){
         const code=scanBuffer.current.trim();
         const elapsed=scanStart.current?Date.now()-scanStart.current:999;
-        scanBuffer.current="";scanStart.current=null;
+        scanBuffer.current="";scanStart.current=null;likelyScan.current=false;
         if(scanTimer.current)clearTimeout(scanTimer.current);
-        // Only treat as QR scan if it completed fast enough to be a scanner
         if(code.startsWith(QR_PREFIX)&&elapsed<500){
-          if(inputFocused){
-            // Prevent the Enter from submitting the form
-            e.preventDefault();e.stopPropagation();
-            // Strip the scanned chars out of the input if they landed there
-            const el=document.activeElement;
-            if(el&&el.value){
-              const idx=el.value.indexOf(QR_PREFIX);
-              if(idx!==-1)el.value=el.value.slice(0,idx);
-            }
-          }
+          e.preventDefault();e.stopPropagation();
           if(code.length>3)handleScan(code);
         }else if(!inputFocused&&code.length>3){
           handleScan(code);
@@ -1375,10 +1365,23 @@ const scanBuffer={current:""},scanTimer={current:null},scanStart={current:null};
         return;
       }
       if(e.key.length===1){
-        if(!scanBuffer.current)scanStart.current=Date.now();
+        if(!scanBuffer.current){
+          scanStart.current=Date.now();
+          likelyScan.current=false;
+        }
         if(scanTimer.current)clearTimeout(scanTimer.current);
         scanBuffer.current+=e.key;
-        scanTimer.current=setTimeout(()=>{scanBuffer.current="";scanStart.current=null;},SCANNER_TIMEOUT_MS);
+        // After we have enough chars to recognise the QR prefix, flag as scan
+        if(scanBuffer.current.startsWith(QR_PREFIX)){
+          likelyScan.current=true;
+        }
+        // If flagged as a scan, block the keystroke from reaching the input
+        if(likelyScan.current&&inputFocused){
+          e.preventDefault();e.stopPropagation();
+        }
+        scanTimer.current=setTimeout(()=>{
+          scanBuffer.current="";scanStart.current=null;likelyScan.current=false;
+        },SCANNER_TIMEOUT_MS);
       }
     }
     document.addEventListener("keydown",onKeyDown);return()=>document.removeEventListener("keydown",onKeyDown);
