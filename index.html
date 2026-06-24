@@ -1347,40 +1347,12 @@ function PublicApp({records,people,services,loading,dbError,loadData,closedServi
         await loadData();setScanResult({action:"checkin",name:person.name,guestNumber:guestNum});
       }
     }
-const scanBuffer={current:""},scanTimer={current:null},scanStart={current:null},likelyScan={current:false};
+    const scanBuffer={current:""},scanTimer={current:null};
     function onKeyDown(e){
       const tag=document.activeElement?.tagName;
-      const inputFocused=tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT";
-      if(e.key==="Enter"){
-        const code=scanBuffer.current.trim();
-        const elapsed=scanStart.current?Date.now()-scanStart.current:999;
-        scanBuffer.current="";scanStart.current=null;likelyScan.current=false;
-        if(scanTimer.current)clearTimeout(scanTimer.current);
-        if(code.startsWith(QR_PREFIX)&&elapsed<500){
-          e.preventDefault();e.stopPropagation();
-          if(code.length>3)handleScan(code);
-        }else if(!inputFocused&&code.length>3){
-          handleScan(code);
-        }
-        return;
-      }
-      if(e.key.length===1){
-        if(!scanBuffer.current){
-          scanStart.current=Date.now();
-          likelyScan.current=false;
-        }
-        if(scanTimer.current)clearTimeout(scanTimer.current);
-        scanBuffer.current+=e.key;
-        if(scanBuffer.current.startsWith(QR_PREFIX)){
-          likelyScan.current=true;
-        }
-        if(likelyScan.current&&inputFocused){
-          e.preventDefault();e.stopPropagation();
-        }
-        scanTimer.current=setTimeout(()=>{
-          scanBuffer.current="";scanStart.current=null;likelyScan.current=false;
-        },SCANNER_TIMEOUT_MS);
-      }
+      if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT")return;
+      if(e.key==="Enter"){const code=scanBuffer.current.trim();scanBuffer.current="";if(scanTimer.current)clearTimeout(scanTimer.current);if(code.length>3)handleScan(code);return;}
+      if(e.key.length===1){if(scanTimer.current)clearTimeout(scanTimer.current);scanBuffer.current+=e.key;scanTimer.current=setTimeout(()=>{scanBuffer.current="";},SCANNER_TIMEOUT_MS);}
     }
     document.addEventListener("keydown",onKeyDown);return()=>document.removeEventListener("keydown",onKeyDown);
   },[loadData]);
@@ -1733,61 +1705,11 @@ function AdminApp() {
       }
       loadData();
     }
-const scanBuffer={current:""},scanTimer={current:null},scanStart={current:null},likelyScan={current:false};
-    let scanLock=false;
-
     function onKeyDown(e){
       const tag=document.activeElement?.tagName;
-      const inputFocused=tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT";
-      const activeEl=document.activeElement;
-
-      if(e.key==="Enter"){
-        const code=scanBuffer.current.trim();
-        const elapsed=scanStart.current?Date.now()-scanStart.current:999;
-        scanBuffer.current="";scanStart.current=null;likelyScan.current=false;
-        if(scanTimer.current)clearTimeout(scanTimer.current);
-        if(code.startsWith(QR_PREFIX)&&elapsed<500){
-          e.preventDefault();e.stopPropagation();
-          // Clean any scanned chars that landed in the input
-          if(inputFocused&&activeEl){
-            const idx=activeEl.value?activeEl.value.indexOf(QR_PREFIX[0]):-1;
-            if(idx!==-1)activeEl.value=activeEl.value.slice(0,idx);
-          }
-          if(code.length>3){
-            // Lock input briefly so keyboard doesn't re-dismiss
-            scanLock=true;
-            if(activeEl)activeEl.blur();
-            handleScan(code).then(()=>{
-              setTimeout(()=>{
-                scanLock=false;
-                // Restore focus to the input after scan completes
-                if(activeEl&&!scanLock)activeEl.focus();
-              },1500);
-            });
-          }
-        }else if(!inputFocused&&code.length>3){
-          handleScan(code);
-        }
-        return;
-      }
-
-      if(e.key.length===1){
-        if(!scanBuffer.current){
-          scanStart.current=Date.now();
-          likelyScan.current=false;
-        }
-        if(scanTimer.current)clearTimeout(scanTimer.current);
-        scanBuffer.current+=e.key;
-        if(scanBuffer.current.startsWith(QR_PREFIX)){
-          likelyScan.current=true;
-        }
-        if(likelyScan.current&&inputFocused){
-          e.preventDefault();e.stopPropagation();
-        }
-        scanTimer.current=setTimeout(()=>{
-          scanBuffer.current="";scanStart.current=null;likelyScan.current=false;
-        },SCANNER_TIMEOUT_MS);
-      }
+      if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT")return;
+      if(e.key==="Enter"){const code=scanBuffer.current.trim();scanBuffer.current="";if(scanTimer.current)clearTimeout(scanTimer.current);if(code.length>3)handleScan(code);return;}
+      if(e.key.length===1){if(scanTimer.current)clearTimeout(scanTimer.current);scanBuffer.current+=e.key;scanTimer.current=setTimeout(()=>{scanBuffer.current="";},SCANNER_TIMEOUT_MS);}
     }
     document.addEventListener("keydown",onKeyDown); return()=>document.removeEventListener("keydown",onKeyDown);
   },[loadData]);
