@@ -1347,13 +1347,9 @@ function PublicApp({records,people,services,loading,dbError,loadData,closedServi
         await loadData();setScanResult({action:"checkin",name:person.name,guestNumber:guestNum});
       }
 const scanBuffer={current:""},scanTimer={current:null},scanStart={current:null},likelyScan={current:false};
-    let scanLock=false;
-
     function onKeyDown(e){
       const tag=document.activeElement?.tagName;
       const inputFocused=tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT";
-      const activeEl=document.activeElement;
-
       if(e.key==="Enter"){
         const code=scanBuffer.current.trim();
         const elapsed=scanStart.current?Date.now()-scanStart.current:999;
@@ -1361,29 +1357,12 @@ const scanBuffer={current:""},scanTimer={current:null},scanStart={current:null},
         if(scanTimer.current)clearTimeout(scanTimer.current);
         if(code.startsWith(QR_PREFIX)&&elapsed<500){
           e.preventDefault();e.stopPropagation();
-          // Clean any scanned chars that landed in the input
-          if(inputFocused&&activeEl){
-            const idx=activeEl.value?activeEl.value.indexOf(QR_PREFIX[0]):-1;
-            if(idx!==-1)activeEl.value=activeEl.value.slice(0,idx);
-          }
-          if(code.length>3){
-            // Lock input briefly so keyboard doesn't re-dismiss
-            scanLock=true;
-            if(activeEl)activeEl.blur();
-            handleScan(code).then(()=>{
-              setTimeout(()=>{
-                scanLock=false;
-                // Restore focus to the input after scan completes
-                if(activeEl&&!scanLock)activeEl.focus();
-              },1500);
-            });
-          }
+          if(code.length>3)handleScan(code);
         }else if(!inputFocused&&code.length>3){
           handleScan(code);
         }
         return;
       }
-
       if(e.key.length===1){
         if(!scanBuffer.current){
           scanStart.current=Date.now();
