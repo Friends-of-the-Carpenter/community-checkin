@@ -610,6 +610,7 @@ function LastVisitSearch({people}) {
   const [results,setResults]=useState(null);
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState(null);
+  const [expandedId,setExpandedId]=useState(null);
   const debounceRef=useRef(null);
   useEffect(()=>{
     if(debounceRef.current)clearTimeout(debounceRef.current);
@@ -623,15 +624,15 @@ function LastVisitSearch({people}) {
       const matched=people.filter(p=>p.name.toLowerCase().includes(q.toLowerCase())).slice(0,10);
       if(matched.length===0){setResults([]);setLoading(false);return;}
       const nameFilter=matched.map(p=>`name.eq.${encodeURIComponent(p.name)}`).join(",");
-      const allRecs=await apiAllRows(`checkin_records?select=name,service,check_in,check_out&or=(${nameFilter})&service=neq.${FLAG_ALERT_SERVICE}&order=check_in.desc`);
+      const allRecs=await apiAllRows(`checkin_records?select=${LIVE_COLUMNS}&or=(${nameFilter})&service=neq.${FLAG_ALERT_SERVICE}&order=check_in.desc`);
       const out=matched.map(p=>{
         const recs=allRecs.filter(r=>r.name===p.name&&r.service!==FLAG_ALERT_SERVICE);
-        if(recs.length===0)return{person:p,lastVisit:null,lastService:null,totalVisits:0,daysSince:null,serviceBreakdown:{}};
+        if(recs.length===0)return{person:p,lastVisit:null,lastService:null,totalVisits:0,daysSince:null,serviceBreakdown:{},records:[]};
         const latest=recs[0];
         const daysSince=Math.floor((Date.now()-new Date(latest.check_in))/86400000);
         const breakdown={};
         recs.forEach(r=>{breakdown[r.service]=(breakdown[r.service]||0)+1;});
-        return{person:p,lastVisit:latest.check_in,lastService:latest.service,totalVisits:recs.length,daysSince,serviceBreakdown:breakdown};
+        return{person:p,lastVisit:latest.check_in,lastService:latest.service,totalVisits:recs.length,daysSince,serviceBreakdown:breakdown,records:recs};
       }).sort((a,b)=>{
         if(!a.lastVisit&&!b.lastVisit)return a.person.name.localeCompare(b.person.name);
         if(!a.lastVisit)return 1;if(!b.lastVisit)return -1;
@@ -640,6 +641,15 @@ function LastVisitSearch({people}) {
       setResults(out);
     }catch(e){setError("Failed to load visit history.");}
     setLoading(false);
+  }
+  function refresh(){ if(query.trim())doSearch(query.trim()); }
+  async function handleCheckOut(id){
+    await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+    refresh();
+  }
+  async function handleDelete(id){
+    await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});
+    refresh();
   }
   function daysSinceLabel(d) {
     if(d===null)return null;
@@ -668,7 +678,7 @@ function LastVisitSearch({people}) {
       {!loading&&results&&results.length===0&&<p style={{fontSize:15,color:C.textMuted,textAlign:"center",padding:"16px 0"}}>No people found matching "{query}".</p>}
       {!loading&&results&&results.length>0&&(
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {results.map(({person:p,lastVisit,lastService,totalVisits,daysSince,serviceBreakdown})=>{
+          {results.map(({person:p,lastVisit,lastService,totalVisits,daysSince,serviceBreakdown,records:recs})=>{
             const av=avColor(p.name),badge=daysSinceLabel(daysSince);
             return(
               <div key={p.id} style={{background:p.flagged?"#FFF5F5":C.white,border:`1.5px solid ${p.flagged?C.dangerBorder:C.border}`,borderRadius:14,padding:"16px 18px"}}>
@@ -700,6 +710,20 @@ function LastVisitSearch({people}) {
                           </div>
                         </div>
                       </>
+                    )}
+                    {recs&&recs.length>0&&(
+                      <div style={{marginTop:12,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
+                        <button onClick={()=>setExpandedId(expandedId===p.id?null:p.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:C.teal,fontWeight:600,padding:0}}>
+                          {expandedId===p.id?"Hide visit history ▲":`Edit past visits (${recs.length}) ▼`}
+                        </button>
+                        {expandedId===p.id&&(
+                          <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:8}}>
+                            {recs.slice().sort((a,b)=>new Date(b.check_in)-new Date(a.check_in)).map(r=>(
+                              <PersonServiceTag key={r.id} r={r} onCheckOut={handleCheckOut} onMarkComplete={handleCheckOut} onDelete={handleDelete} onUpdate={refresh}/>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
