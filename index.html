@@ -622,7 +622,7 @@ function LastVisitSearch({people}) {
     try {
       const matched=people.filter(p=>p.name.toLowerCase().includes(q.toLowerCase())).slice(0,10);
       if(matched.length===0){setResults([]);setLoading(false);return;}
-      const nameFilter=matched.map(p=>`name=eq.${encodeURIComponent(p.name)}`).join(",");
+      const nameFilter=matched.map(p=>`name.eq.${encodeURIComponent(p.name)}`).join(",");
       const allRecs=await apiAllRows(`checkin_records?select=name,service,check_in,check_out&or=(${nameFilter})&service=neq.${FLAG_ALERT_SERVICE}&order=check_in.desc`);
       const out=matched.map(p=>{
         const recs=allRecs.filter(r=>r.name===p.name&&r.service!==FLAG_ALERT_SERVICE);
@@ -1582,6 +1582,111 @@ function AddPersonPanel({people,onUpdate}) {
     </div>
   );
 }
+function AddHistoricalVisit({people,onUpdate}) {
+  const [query,setQuery]=useState("");
+  const [selected,setSelected]=useState(null);
+  const [suggestions,setSuggestions]=useState([]);
+  const [showSug,setShowSug]=useState(false);
+  const [type,setType]=useState("Guest");
+  const [service,setService]=useState("Day Center");
+  const [date,setDate]=useState("");
+  const [checkInTime,setCheckInTime]=useState("");
+  const [checkOutTime,setCheckOutTime]=useState("");
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState(null);
+  const [msg,setMsg]=useState(null);
+  const ref=useRef(null);
+  useEffect(()=>{
+    const h=e=>{if(ref.current&&!ref.current.contains(e.target))setShowSug(false);};
+    document.addEventListener("mousedown",h); return()=>document.removeEventListener("mousedown",h);
+  },[]);
+  function handleQuery(val){
+    setQuery(val);setSelected(null);setErr(null);
+    if(!val.trim()){setSuggestions([]);setShowSug(false);return;}
+    const m=people.filter(p=>p.name.toLowerCase().includes(val.toLowerCase())||String(p.guest_number).includes(val)).slice(0,6);
+    setSuggestions(m);setShowSug(m.length>0);
+  }
+  function selectPerson(p){setQuery(p.name);setSelected(p);setSuggestions([]);setShowSug(false);setErr(null);}
+  function reset(){setQuery("");setSelected(null);setDate("");setCheckInTime("");setCheckOutTime("");setErr(null);setType("Guest");setService("Day Center");}
+  async function handleAdd(){
+    if(!query.trim()){setErr("Please enter a name.");return;}
+    if(!date){setErr("Please choose a date.");return;}
+    if(!checkInTime){setErr("Please enter a check-in time.");return;}
+    const checkInIso=new Date(`${date}T${checkInTime}`).toISOString();
+    let checkOutIso=null;
+    if(checkOutTime){
+      checkOutIso=new Date(`${date}T${checkOutTime}`).toISOString();
+      if(new Date(checkOutIso)<=new Date(checkInIso)){setErr("Check-out must be after check-in.");return;}
+    }
+    setSaving(true);
+    try{
+      let personToUse=selected;
+      if(!personToUse){
+        const existing=people.find(p=>p.name.toLowerCase()===query.trim().toLowerCase());
+        if(existing){personToUse=existing;}
+        else{
+          const res=await api("people",{method:"POST",body:JSON.stringify({name:query.trim()}),headers:{...HEADERS,"Prefer":"return=representation"}});
+          if(!res.ok)throw new Error("Failed to register person.");
+          const[np]=await res.json();personToUse=np;
+        }
+      }
+      if(personToUse.flagged){setErr("This person is flagged — can't add a visit for them.");setSaving(false);return;}
+      const res=await api("checkin_records",{method:"POST",body:JSON.stringify({name:personToUse.name,type,service,check_in:checkInIso,check_out:checkOutIso,queue_position:null,notes:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      if(!res.ok)throw new Error("Failed to add visit.");
+      setMsg({type:"ok",text:`Added ${service} visit for ${personToUse.name}.`});
+      reset();onUpdate();setTimeout(()=>setMsg(null),4000);
+    }catch(e){setErr(e.message||"Failed to add. Please try again.");}
+    setSaving(false);
+  }
+  return(
+    <div>
+      <div style={{position:"relative",marginBottom:10}} ref={ref}>
+        <input placeholder="Type a name — existing or new…" value={query} onChange={e=>handleQuery(e.target.value)} style={{...inpStyle,borderColor:err?"#C0392B":"#D0E6E5"}}/>
+        {showSug&&suggestions.length>0&&(
+          <div style={{position:"absolute",top:"calc(100% + 2px)",left:0,right:0,background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,zIndex:20,boxShadow:"0 6px 20px rgba(70,180,191,0.15)",overflow:"hidden"}}>
+            {suggestions.map(p=>{const av=avColor(p.name);return(
+              <div key={p.id} onClick={()=>selectPerson(p)} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",cursor:"pointer",borderBottom:"1px solid #D0E6E5",background:p.flagged?"#FFF5F5":"#fff"}}
+                onMouseEnter={e=>e.currentTarget.style.background=p.flagged?"#FFE8E8":"#EAF7F8"}
+                onMouseLeave={e=>e.currentTarget.style.background=p.flagged?"#FFF5F5":"#fff"}>
+                <div style={{width:36,height:36,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,flexShrink:0}}>{initials(p.name)||"?"}</div>
+                <div style={{flex:1}}><p style={{margin:0,fontSize:15,fontWeight:600}}>{p.name}</p></div>
+                {p.flagged&&<span style={{fontSize:12,padding:"2px 10px",borderRadius:20,background:"#FCECEA",color:"#C0392B",fontWeight:600}}>⚑</span>}
+              </div>
+            );})}
+          </div>
+        )}
+      </div>
+      {query.trim()&&!selected&&suggestions.length===0&&<p style={{margin:"-4px 0 10px",fontSize:13,color:C.tealDark}}>✦ "{query.trim()}" will be registered as a new person.</p>}
+      <div style={{display:"flex",gap:10,marginBottom:10,flexWrap:"wrap"}}>
+        <select value={type} onChange={e=>setType(e.target.value)} style={{...inpStyle,width:"auto",flex:1,minWidth:120}}>
+          <option value="Guest">Guest</option><option value="Volunteer">Volunteer</option>
+        </select>
+        <select value={service} onChange={e=>setService(e.target.value)} style={{...inpStyle,width:"auto",flex:1,minWidth:160}}>
+          <option value="Day Center">Day Center</option><option value="Volunteer">Volunteer</option>
+          <option value="Community Partnership">Community Partnership</option>
+          <option value="Showers">Showers</option><option value="Laundry">Laundry</option><option value="Drop-in">Drop-in</option>
+        </select>
+      </div>
+      <div style={{display:"flex",gap:10,marginBottom:10,flexWrap:"wrap"}}>
+        <div style={{flex:1,minWidth:140}}>
+          <label style={{fontSize:12,color:C.textMuted,display:"block",marginBottom:4}}>Date</label>
+          <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={inpStyle}/>
+        </div>
+        <div style={{flex:1,minWidth:120}}>
+          <label style={{fontSize:12,color:C.textMuted,display:"block",marginBottom:4}}>Check-in time</label>
+          <input type="time" value={checkInTime} onChange={e=>setCheckInTime(e.target.value)} style={inpStyle}/>
+        </div>
+        <div style={{flex:1,minWidth:120}}>
+          <label style={{fontSize:12,color:C.textMuted,display:"block",marginBottom:4}}>Check-out time <span style={{color:C.textLight}}>(optional)</span></label>
+          <input type="time" value={checkOutTime} onChange={e=>setCheckOutTime(e.target.value)} style={inpStyle}/>
+        </div>
+      </div>
+      {err&&<p style={{margin:"0 0 10px",fontSize:14,color:C.danger}}>⚠ {err}</p>}
+      {msg&&<p style={{margin:"0 0 10px",fontSize:14,color:msg.type==="ok"?C.tealDark:C.danger}}>{msg.type==="ok"?"✓ ":"⚠ "}{msg.text}</p>}
+      <button onClick={handleAdd} disabled={saving} style={{...btnPrimary,width:"100%",fontSize:15,padding:"12px 0",opacity:saving?0.5:1}}>{saving?"Adding…":"Add historical visit"}</button>
+    </div>
+  );
+}
 function AdminApp() {
   const [view,setView]=useState("checkin");
   const [manageSubTab,setManageSubTab]=useState("people");
@@ -2038,6 +2143,11 @@ function AdminApp() {
                   <div style={{borderBottom:"1px solid #D0E6E5",paddingBottom:20,marginBottom:20}}>
                     <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Add person to system</p>
                     <AddPersonPanel people={people} onUpdate={loadData}/>
+                  </div>
+                  <div style={{borderBottom:"1px solid #D0E6E5",paddingBottom:20,marginBottom:20}}>
+                    <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Add historical visit</p>
+                    <p style={{margin:"0 0 14px",fontSize:13,color:C.textMuted}}>Log a past visit — pick the person, date, service, and check-in/check-out times.</p>
+                    <AddHistoricalVisit people={people} onUpdate={loadData}/>
                   </div>
                   <div style={{borderBottom:"1px solid #D0E6E5",paddingBottom:20,marginBottom:20}}>
                     <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Manage people</p>
