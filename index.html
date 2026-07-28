@@ -753,6 +753,18 @@ function PeopleRemover({people,onRemove,onFlag,onUpdate}) {
   const [genderVal,setGenderVal]=useState("");
   const [raceVal,setRaceVal]=useState("");
   const [ageVal,setAgeVal]=useState("");
+  const [lastServiceMap,setLastServiceMap]=useState({});
+  useEffect(()=>{
+    (async()=>{
+      try{
+        const ELIGIBLE=["Volunteer","Community Partnership","Day Center"];
+        const rows=await apiAllRows(`checkin_records?select=name,service,check_in&service=neq.${FLAG_ALERT_SERVICE}&order=check_in.desc`);
+        const map={};
+        rows.forEach(r=>{ if(map[r.name]===undefined&&ELIGIBLE.includes(r.service))map[r.name]=r.service; });
+        setLastServiceMap(map);
+      }catch(_){/* pre-population is a convenience — leave dropdowns blank if this fails */}
+    })();
+  },[]);
   async function saveName(p) {
     if(!nameVal.trim()){setEditingName(null);return;}
     try{
@@ -836,7 +848,7 @@ function PeopleRemover({people,onRemove,onFlag,onUpdate}) {
               <div style={{display:"flex",gap:7,flexShrink:0,flexWrap:"wrap"}}>
                 <button onClick={()=>setShowQR(showQR===p.id?null:p.id)} style={{...btnGhost,fontSize:13,padding:"6px 12px",color:C.teal,borderColor:C.tealMid}}>QR</button>
                 <button onClick={()=>{setEditingName(p.id);setNameVal(p.name);setGenderVal(p.gender||"");setRaceVal(p.race||"");setAgeVal(p.age_range||"");}} style={{...btnGhost,fontSize:13,padding:"6px 12px",color:C.teal,borderColor:C.tealMid}}>Edit</button>
-                <select value={p.default_service||""} onChange={async e=>{
+                <select value={p.default_service||lastServiceMap[p.name]||""} onChange={async e=>{
                   await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({default_service:e.target.value||null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
                   onUpdate();
                 }} style={{...inpStyle,width:"auto",padding:"4px 8px",fontSize:12,height:32,color:p.default_service?C.tealDark:C.textMuted,borderColor:p.default_service?C.tealMid:C.border}}>
@@ -1658,7 +1670,16 @@ function AddHistoricalVisit({people,onUpdate}) {
     const m=people.filter(p=>p.name.toLowerCase().includes(val.toLowerCase())||String(p.guest_number).includes(val)).slice(0,6);
     setSuggestions(m);setShowSug(m.length>0);
   }
-  function selectPerson(p){setQuery(p.name);setSelected(p);setSuggestions([]);setShowSug(false);setErr(null);}
+  async function selectPerson(p){
+    setQuery(p.name);setSelected(p);setSuggestions([]);setShowSug(false);setErr(null);
+    try{
+      const res=await api(`checkin_records?select=type,service,check_in&name=eq.${encodeURIComponent(p.name)}&service=neq.${FLAG_ALERT_SERVICE}&order=check_in.desc&limit=1`);
+      if(res.ok){
+        const[last]=await res.json();
+        if(last){setType(last.type);setService(last.service);}
+      }
+    }catch(_){/* couldn't look up last visit — leave current defaults in place */}
+  }
   function reset(){setQuery("");setSelected(null);setDate("");setCheckInTime("");setCheckOutTime("");setErr(null);setType("Guest");setService("Day Center");setAddShowers(false);setAddLaundry(false);}
   async function handleAdd(){
     if(!query.trim()){setErr("Please enter a name.");return;}
