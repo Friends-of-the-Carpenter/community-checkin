@@ -740,6 +740,159 @@ function LastVisitSearch({people}) {
     </div>
   );
 }
+function normalizeNameForDupes(s){
+  return (s||"").toLowerCase().trim().replace(/[^a-z0-9\s]/g,"").replace(/\s+/g," ");
+}
+function levenshtein(a,b){
+  const m=a.length,n=b.length;
+  if(m===0)return n; if(n===0)return m;
+  let prev=[];for(let j=0;j<=n;j++)prev[j]=j;
+  for(let i=1;i<=m;i++){
+    const cur=[i];
+    for(let j=1;j<=n;j++){
+      const cost=a[i-1]===b[j-1]?0:1;
+      cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+cost);
+    }
+    prev=cur;
+  }
+  return prev[n];
+}
+// Finds likely-duplicate people: exact matches after normalizing case/spacing/punctuation
+// are grouped together (safe to chain, since that equality is transitive); everything else
+// is surfaced as individual "maybe" pairs (word-order swaps, or close typo distance) rather
+// than chained into bigger groups, since similarity isn't transitive (A~B and B~C doesn't
+// mean A~C) and chaining those could lump unrelated people together.
+function findPossibleDuplicates(people){
+  const items=people.map(p=>({p,norm:normalizeNameForDupes(p.name)})).filter(it=>it.norm);
+  const groupMap={};
+  items.forEach(it=>{(groupMap[it.norm]=groupMap[it.norm]||[]).push(it.p);});
+  const exactGroups=Object.values(groupMap).filter(g=>g.length>1);
+  // Compare one representative name per unique spelling (not every raw person) so an exact
+  // group of 3 spelling variants doesn't also spam the fuzzy list with redundant near-duplicate
+  // pairings between its own members.
+  const norms=Object.keys(groupMap);
+  const fuzzyPairs=[];
+  for(let i=0;i<norms.length;i++){
+    for(let j=i+1;j<norms.length;j++){
+      const na=norms[i],nb=norms[j];
+      const wa=na.split(" ").filter(Boolean),wb=nb.split(" ").filter(Boolean);
+      const sameWordsDifferentOrder=wa.length>1&&wa.length===wb.length&&[...wa].sort().join(" ")===[...wb].sort().join(" ");
+      const shorter=Math.min(na.length,nb.length);
+      const threshold=shorter<=4?1:(shorter<=9?2:3);
+      const isMatch=sameWordsDifferentOrder||(shorter>=4&&levenshtein(na,nb)<=threshold);
+      if(isMatch)fuzzyPairs.push({key:na+"|"+nb,groupA:groupMap[na],groupB:groupMap[nb]});
+    }
+  }
+  return {exactGroups,fuzzyPairs};
+}
+const MERGE_FIELDS=[
+  {key:"gender",label:"Gender"},
+  {key:"race",label:"Race/Ethnicity"},
+  {key:"default_service",label:"Default service"},
+];
+function MergePanel({candidates,onCancel,onDone}) {
+  const [keeperId,setKeeperId]=useState(candidates[0].id);
+  const [choices,setChoices]=useState({});
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState(null);
+  const keeper=candidates.find(c=>c.id===keeperId)||candidates[0];
+  const flaggedOnes=candidates.filter(c=>c.flagged);
+  const finalFlagged=flaggedOnes.length>0;
+  const reasonValues=[...new Set(flaggedOnes.map(c=>c.flag_reason||"").filter(Boolean))];
+  useEffect(()=>{
+    const init={};
+    MERGE_FIELDS.forEach(f=>{
+      const vals=[...new Set(candidates.map(c=>c[f.key]).filter(v=>v!==null&&v!==undefined&&v!==""))];
+      if(vals.length<=1){init[f.key]=vals[0]||null;}
+      else{init[f.key]=keeper&&keeper[f.key]?keeper[f.key]:vals[0];}
+    });
+    if(reasonValues.length>1){init.flag_reason=(keeper&&keeper.flagged&&keeper.flag_reason)?keeper.flag_reason:reasonValues[0];}
+    setChoices(init);
+    // eslint-disable-next-line
+  },[keeperId]);
+  async function handleConfirm(){
+    setSaving(true);setErr(null);
+    try{
+      const others=candidates.filter(c=>c.id!==keeperId);
+      for(const o of others){
+        if(o.name===keeper.name)continue;
+        const res=await api(`checkin_records?name=eq.${encodeURIComponent(o.name)}`,{method:"PATCH",body:JSON.stringify({name:keeper.name}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+        if(!res.ok)throw new Error("Failed to move visit history for "+o.name);
+      }
+      const patch={};
+      MERGE_FIELDS.forEach(f=>{
+        const chosen=choices[f.key];
+        if(chosen&&chosen!==(keeper[f.key]||null))patch[f.key]=chosen;
+      });
+      if(finalFlagged&&!keeper.flagged)patch.flagged=true;
+      if(finalFlagged){
+        const chosenReason=reasonValues.length>1?choices.flag_reason:(reasonValues[0]||keeper.flag_reason||null);
+        if(chosenReason&&chosenReason!==keeper.flag_reason)patch.flag_reason=chosenReason;
+      }
+      if(Object.keys(patch).length>0){
+        const res=await api(`people?id=eq.${keeper.id}`,{method:"PATCH",body:JSON.stringify(patch),headers:{...HEADERS,"Prefer":"return=minimal"}});
+        if(!res.ok)throw new Error("Failed to update the kept profile.");
+      }
+      for(const o of others){
+        const res=await api(`people?id=eq.${o.id}`,{method:"DELETE"});
+        if(!res.ok)throw new Error("Failed to remove duplicate profile for "+o.name);
+      }
+      onDone();
+    }catch(e){setErr(e.message||"Merge failed. Please try again.");}
+    setSaving(false);
+  }
+  return(
+    <div style={{background:C.bg,border:`1.5px solid ${C.tealMid}`,borderRadius:12,padding:16,marginBottom:14}}>
+      <p style={{margin:"0 0 10px",fontSize:14,fontWeight:600,color:C.text}}>Merge {candidates.length} people into one</p>
+      <p style={{margin:"0 0 10px",fontSize:13,color:C.textMuted}}>Pick which profile to keep. Its guest number and QR code stay in use; the others' full visit history moves onto it, and their profiles are then deleted.</p>
+      <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
+        {candidates.map(c=>(
+          <label key={c.id} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:14,color:C.text}}>
+            <input type="radio" name="merge-keeper" checked={keeperId===c.id} onChange={()=>setKeeperId(c.id)} style={{width:18,height:18,accentColor:"#46b4bf",cursor:"pointer"}}/>
+            <span style={{fontWeight:600}}>{c.name}</span>
+            <span style={{fontSize:12,color:C.textMuted}}>Guest #{c.guest_number}{c.flagged?" · ⚑ flagged":""}</span>
+          </label>
+        ))}
+      </div>
+      {MERGE_FIELDS.map(f=>{
+        const vals=[...new Set(candidates.map(c=>c[f.key]).filter(v=>v!==null&&v!==undefined&&v!==""))];
+        if(vals.length<=1)return null;
+        return(
+          <div key={f.key} style={{marginBottom:12}}>
+            <p style={{margin:"0 0 6px",fontSize:13,fontWeight:600,color:C.text}}>{f.label} — conflicting values, pick one:</p>
+            <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+              {vals.map(v=>(
+                <label key={v} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:C.text}}>
+                  <input type="radio" name={`merge-${f.key}`} checked={choices[f.key]===v} onChange={()=>setChoices(ch=>({...ch,[f.key]:v}))} style={{width:16,height:16,accentColor:"#46b4bf",cursor:"pointer"}}/>
+                  {v}
+                </label>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+      {reasonValues.length>1&&(
+        <div style={{marginBottom:12}}>
+          <p style={{margin:"0 0 6px",fontSize:13,fontWeight:600,color:C.text}}>Flag reason — conflicting values, pick one:</p>
+          <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+            {reasonValues.map(v=>(
+              <label key={v} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:C.text}}>
+                <input type="radio" name="merge-flag_reason" checked={choices.flag_reason===v} onChange={()=>setChoices(ch=>({...ch,flag_reason:v}))} style={{width:16,height:16,accentColor:"#46b4bf",cursor:"pointer"}}/>
+                {v}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+      {finalFlagged&&!keeper.flagged&&<p style={{margin:"0 0 12px",fontSize:13,color:C.danger}}>⚑ One of the merged profiles is flagged, so the kept profile will be flagged too.</p>}
+      {err&&<p style={{margin:"0 0 12px",fontSize:13,color:C.danger}}>⚠ {err}</p>}
+      <div style={{display:"flex",gap:10}}>
+        <button onClick={handleConfirm} disabled={saving} style={{...btnPrimary,fontSize:14,padding:"9px 18px",opacity:saving?0.5:1}}>{saving?"Merging…":"Confirm merge"}</button>
+        <button onClick={onCancel} disabled={saving} style={{...btnGhost,fontSize:14,padding:"9px 18px"}}>Cancel</button>
+      </div>
+    </div>
+  );
+}
 function PeopleRemover({people,onRemove,onFlag,onUpdate}) {
   const [query,setQuery]=useState("");
   const [filter,setFilter]=useState("all");
@@ -752,8 +905,16 @@ function PeopleRemover({people,onRemove,onFlag,onUpdate}) {
   const [nameVal,setNameVal]=useState("");
   const [genderVal,setGenderVal]=useState("");
   const [raceVal,setRaceVal]=useState("");
-  const [ageVal,setAgeVal]=useState("");
   const [lastServiceMap,setLastServiceMap]=useState({});
+  const [mergeMode,setMergeMode]=useState(false);
+  const [mergeSelected,setMergeSelected]=useState([]);
+  const [mergeReview,setMergeReview]=useState(false);
+  function toggleMergeSelect(id){setMergeSelected(s=>s.includes(id)?s.filter(x=>x!==id):[...s,id]);}
+  const [dupResults,setDupResults]=useState(null);
+  const [dismissedPairs,setDismissedPairs]=useState([]);
+  function scanForDuplicates(){setDupResults(findPossibleDuplicates(people));setDismissedPairs([]);}
+  function reviewCandidates(ids){setMergeMode(true);setMergeSelected(ids);setMergeReview(true);setDupResults(null);}
+  function dismissPair(key){setDismissedPairs(d=>[...d,key]);}
   useEffect(()=>{
     (async()=>{
       try{
@@ -768,7 +929,7 @@ function PeopleRemover({people,onRemove,onFlag,onUpdate}) {
   async function saveName(p) {
     if(!nameVal.trim()){setEditingName(null);return;}
     try{
-      const updates={name:nameVal.trim(),gender:genderVal||null,race:raceVal||null,age_range:ageVal||null};
+      const updates={name:nameVal.trim(),gender:genderVal||null,race:raceVal||null};
       const res=await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify(updates),headers:{...HEADERS,"Prefer":"return=representation"}});
       if(!res.ok){console.error("saveName failed:",res.status,await res.text());return;}
       if(nameVal.trim()!==p.name){
@@ -785,6 +946,16 @@ function PeopleRemover({people,onRemove,onFlag,onUpdate}) {
   }).sort((a,b)=>a.name.localeCompare(b.name));
   return(
     <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:10}}>
+        <p style={{margin:0,fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Manage people</p>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+          <button onClick={()=>{if(mergeMode){setMergeMode(false);setMergeSelected([]);setMergeReview(false);}else{setMergeMode(true);}}}
+            style={{...btnGhost,fontSize:13,padding:"6px 14px",color:mergeMode?C.danger:C.teal,borderColor:mergeMode?C.dangerBorder:C.tealMid}}>
+            {mergeMode?"Cancel merge":"Merge duplicates"}
+          </button>
+          <button onClick={scanForDuplicates} style={{...btnGhost,fontSize:13,padding:"6px 14px",color:C.teal,borderColor:C.tealMid}}>Find possible duplicates</button>
+        </div>
+      </div>
       <div style={{display:"flex",gap:10,marginBottom:10,flexWrap:"wrap"}}>
         <input placeholder="Filter by name…" value={query} onChange={e=>{setQuery(e.target.value);setConfirm(null);setFlagging(null);setShowQR(null);}} style={{...inpStyle,flex:1,minWidth:160}}/>
         <select value={filter} onChange={e=>setFilter(e.target.value)} style={{...inpStyle,width:130}}>
@@ -797,6 +968,47 @@ function PeopleRemover({people,onRemove,onFlag,onUpdate}) {
           <option value="Drop-in">Drop-in</option><option value="Showers">Showers</option><option value="Laundry">Laundry</option>
         </select>
       </div>
+      {dupResults&&!mergeReview&&(()=>{
+        const visibleFuzzy=dupResults.fuzzyPairs.filter(fp=>!dismissedPairs.includes(fp.key));
+        const total=dupResults.exactGroups.length+visibleFuzzy.length;
+        return(
+          <div style={{background:C.bg,border:`1.5px solid ${C.border}`,borderRadius:12,padding:16,marginBottom:14}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <p style={{margin:0,fontSize:14,fontWeight:600,color:C.text}}>{total===0?"No likely duplicates found":`${total} possible duplicate${total===1?"":"s"} found`}</p>
+              <button onClick={()=>setDupResults(null)} style={{...btnGhost,fontSize:12,padding:"5px 12px"}}>Dismiss all</button>
+            </div>
+            {dupResults.exactGroups.map((g,i)=>(
+              <div key={"exact"+i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"8px 0",borderTop:i===0?"none":`1px solid ${C.border}`,flexWrap:"wrap"}}>
+                <span style={{fontSize:14,color:C.text}}>{g.map(p=>p.name).join("  ≈  ")} <span style={{fontSize:12,color:C.textMuted}}>(same name, different spacing/capitalization)</span></span>
+                <button onClick={()=>reviewCandidates(g.map(p=>p.id))} style={{...btnPrimary,fontSize:13,padding:"6px 14px"}}>Review merge</button>
+              </div>
+            ))}
+            {visibleFuzzy.map((fp,i)=>(
+              <div key={"fuzzy"+i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"8px 0",borderTop:(i===0&&dupResults.exactGroups.length===0)?"none":`1px solid ${C.border}`,flexWrap:"wrap"}}>
+                <span style={{fontSize:14,color:C.text}}>{fp.groupA.map(p=>p.name).join(", ")}  ≈  {fp.groupB.map(p=>p.name).join(", ")} <span style={{fontSize:12,color:C.textMuted}}>(similar name)</span></span>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>reviewCandidates([...fp.groupA,...fp.groupB].map(p=>p.id))} style={{...btnPrimary,fontSize:13,padding:"6px 14px"}}>Review merge</button>
+                  <button onClick={()=>dismissPair(fp.key)} style={{...btnGhost,fontSize:13,padding:"6px 14px"}}>Not a duplicate</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+      {mergeMode&&!mergeReview&&(
+        <div style={{margin:"0 0 10px",fontSize:13,color:C.textMuted}}>
+          {mergeSelected.length<2
+            ?"Check two or more duplicate profiles below to merge them."
+            :<button onClick={()=>setMergeReview(true)} style={{...btnPrimary,fontSize:13,padding:"7px 16px"}}>Review merge ({mergeSelected.length} selected)</button>}
+        </div>
+      )}
+      {mergeReview&&(
+        <MergePanel
+          candidates={people.filter(p=>mergeSelected.includes(p.id))}
+          onCancel={()=>setMergeReview(false)}
+          onDone={()=>{setMergeReview(false);setMergeMode(false);setMergeSelected([]);onUpdate();}}
+        />
+      )}
       <p style={{margin:"0 0 10px",fontSize:14,color:C.textMuted}}>{filtered.length} {filtered.length===1?"person":"people"}</p>
       <div style={{maxHeight:420,overflowY:"auto",borderRadius:10,border:`1px solid ${C.border}`}}>
         {filtered.length===0&&<p style={{fontSize:14,color:C.textMuted,textAlign:"center",padding:"20px 0"}}>No people found.</p>}
@@ -804,6 +1016,7 @@ function PeopleRemover({people,onRemove,onFlag,onUpdate}) {
           <div key={p.id} style={{background:p.flagged?"#FFF5F5":C.white,borderBottom:i<filtered.length-1?`1px solid ${C.border}`:"none",overflow:"hidden"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",gap:10,flexWrap:"wrap"}}>
               <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:1}}>
+                {mergeMode&&<input type="checkbox" checked={mergeSelected.includes(p.id)} onChange={()=>toggleMergeSelect(p.id)} style={{width:18,height:18,accentColor:"#46b4bf",cursor:"pointer",flexShrink:0}}/>}
                 <div style={{width:38,height:38,borderRadius:"50%",background:avColor(p.name).bg,color:avColor(p.name).color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,flexShrink:0}}>{initials(p.name)||"?"}</div>
                 <span style={{fontSize:15,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
                 {/* Gender/race are collected for reporting but intentionally not shown here — edit form still sets them. */}
@@ -836,7 +1049,6 @@ function PeopleRemover({people,onRemove,onFlag,onUpdate}) {
                         <option value="Prefer not to say">Prefer not to say</option>
                         <option value="Other">Other</option>
                       </select>
-                      <input placeholder="Age range" value={ageVal} onChange={e=>setAgeVal(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveName(p)} style={{...inpStyle,padding:"6px 10px",fontSize:14,flex:1,minWidth:100}}/>
                     </div>
                     <div style={{display:"flex",gap:6}}>
                       <button onClick={()=>saveName(p)} style={{...btnPrimary,padding:"6px 14px",fontSize:13}}>Save</button>
@@ -847,7 +1059,7 @@ function PeopleRemover({people,onRemove,onFlag,onUpdate}) {
               </div>
               <div style={{display:"flex",gap:7,flexShrink:0,flexWrap:"wrap"}}>
                 <button onClick={()=>setShowQR(showQR===p.id?null:p.id)} style={{...btnGhost,fontSize:13,padding:"6px 12px",color:C.teal,borderColor:C.tealMid}}>QR</button>
-                <button onClick={()=>{setEditingName(p.id);setNameVal(p.name);setGenderVal(p.gender||"");setRaceVal(p.race||"");setAgeVal(p.age_range||"");}} style={{...btnGhost,fontSize:13,padding:"6px 12px",color:C.teal,borderColor:C.tealMid}}>Edit</button>
+                <button onClick={()=>{setEditingName(p.id);setNameVal(p.name);setGenderVal(p.gender||"");setRaceVal(p.race||"");}} style={{...btnGhost,fontSize:13,padding:"6px 12px",color:C.teal,borderColor:C.tealMid}}>Edit</button>
                 <select value={p.default_service||lastServiceMap[p.name]||""} onChange={async e=>{
                   await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({default_service:e.target.value||null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
                   onUpdate();
@@ -1127,6 +1339,34 @@ function LogRecord({r,av,dur,person,isFlagged,onCheckOut,onDelete,onUpdate}) {
   );
 }
 // ── ANALYTICS ──
+function demographicCounts(names,people,field){
+  const byName={};people.forEach(p=>{byName[p.name]=p;});
+  const map={};
+  names.forEach(name=>{
+    const p=byName[name];
+    const val=(p&&p[field])?p[field]:"Not recorded";
+    map[val]=(map[val]||0)+1;
+  });
+  return Object.entries(map).map(([label,count])=>({label,count})).sort((a,b)=>b.count-a.count);
+}
+function DemographicBarChart({data}) {
+  if(!data||data.length===0)return<p style={{textAlign:"center",color:"#5A7070",fontSize:14,padding:"0.5rem 0"}}>No data.</p>;
+  const max=Math.max(1,...data.map(d=>d.count));
+  const palette=["#46b4bf","#7B61C4","#E8A33D","#D96C6C","#5A9BD6","#6FBF73","#C77DBB","#8AA5A5","#D68E4E","#4E9E8E","#A0729D","#B0A34E"];
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+      {data.map((d,i)=>(
+        <div key={d.label} style={{display:"flex",alignItems:"center",gap:10}}>
+          <span title={d.label} style={{width:180,flexShrink:0,fontSize:13,color:"#2E3A3A",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.label}</span>
+          <div style={{flex:1,background:"#EAF2F2",borderRadius:6,height:18,position:"relative",minWidth:60}}>
+            <div style={{width:`${(d.count/max)*100}%`,background:palette[i%palette.length],height:"100%",borderRadius:6,minWidth:d.count>0?6:0}}/>
+          </div>
+          <span style={{width:32,textAlign:"right",flexShrink:0,fontSize:13,fontWeight:600,color:"#2E3A3A"}}>{d.count}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 function AnalyticsTab({records,people}) {
   const [range,setRange]=useState("today");
   const [customStart,setCustomStart]=useState("");
@@ -1190,8 +1430,11 @@ function AnalyticsTab({records,people}) {
   const chartData=hasData?groupBy(filtered):[];
   const volHours=hasData?getVolHours(filtered):[];
   const totals={};CHART_SERVICES.forEach(s=>{totals[s]=filtered.filter(r=>r.service===s).length;});
-  const guestTotal=new Set(filtered.filter(r=>GUEST_SERVICES.includes(r.service)).map(r=>r.name)).size;
+  const guestNames=[...new Set(filtered.filter(r=>GUEST_SERVICES.includes(r.service)).map(r=>r.name))];
+  const guestTotal=guestNames.length;
   const volUnique=new Set(filtered.filter(r=>r.service==="Volunteer").map(r=>r.name)).size;
+  const genderData=demographicCounts(guestNames,people,"gender");
+  const raceData=demographicCounts(guestNames,people,"race");
   const respiteHours=(()=>{
     const days=new Set(filtered.map(r=>r.check_in.slice(0,10)));let total=0;
     days.forEach(d=>{const dow=new Date(d+"T12:00:00").getDay();if(dow===5)total+=4;else if(dow>=1&&dow<=4)total+=6.5;});
@@ -1291,11 +1534,27 @@ function AnalyticsTab({records,people}) {
                   <SimpleBarChart data={chartData} keys={["Day Center","Community Partnership","Drop-in"]} colors={{"Day Center":CHART_COLORS["Day Center"],"Community Partnership":CHART_COLORS["Community Partnership"],"Drop-in":CHART_COLORS["Drop-in"]}}/>
                 </div>
               </div>
-              <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:20,marginBottom:36}}>
+              <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:20,marginBottom:guestTotal>0?20:36}}>
                 <p style={{margin:"0 0 8px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Volunteer hours</p>
                 <p style={{margin:"0 0 16px",fontSize:14,color:C.tealDark,fontWeight:600}}>Total: {volTotalStr}</p>
                 <SimpleLineChart data={volHours}/>
               </div>
+              {guestTotal>0&&(
+                <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:20,marginBottom:36}}>
+                  <p style={{margin:"0 0 4px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Guest Demographics</p>
+                  <p style={{margin:"0 0 20px",fontSize:13,color:C.textMuted}}>Based on the {guestTotal} unique guest{guestTotal===1?"":"s"} served in this range.</p>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:28}}>
+                    <div>
+                      <p style={{margin:"0 0 10px",fontSize:13,fontWeight:600,color:C.text}}>Gender</p>
+                      <DemographicBarChart data={genderData}/>
+                    </div>
+                    <div>
+                      <p style={{margin:"0 0 10px",fontSize:13,fontWeight:600,color:C.text}}>Race / Ethnicity</p>
+                      <DemographicBarChart data={raceData}/>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </>
@@ -2242,7 +2501,6 @@ function AdminApp() {
                     <AddHistoricalVisit people={people} onUpdate={loadData}/>
                   </div>
                   <div style={{borderBottom:"1px solid #D0E6E5",paddingBottom:20,marginBottom:20}}>
-                    <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Manage people</p>
                     <PeopleRemover people={people} onRemove={async p=>{await api(`people?id=eq.${p.id}`,{method:"DELETE"});loadData();}} onFlag={flagPerson} onUpdate={loadData}/>
                   </div>
                   <div style={{borderBottom:"1px solid #D0E6E5",paddingBottom:20,marginBottom:20}}>
