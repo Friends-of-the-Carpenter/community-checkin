@@ -472,6 +472,11 @@ function WaitingButton({r,onComplete,onUpdate}) {
   );
 }
 function ShowerLaundryPanel({records,people,onMarkComplete,onCancel,onManualAdd}) {
+  async function addAnotherLoad(r){
+    const pos=nextAvailablePosition("Laundry",records);
+    await api("checkin_records",{method:"POST",body:JSON.stringify({name:r.name,type:r.type,service:"Laundry",queue_position:pos,check_in:new Date().toISOString(),check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+    onManualAdd&&onManualAdd();
+  }
   return(
     <>
       {Object.keys(CAPPED_SERVICES).map(svc=>{
@@ -511,6 +516,7 @@ function ShowerLaundryPanel({records,people,onMarkComplete,onCancel,onManualAdd}
                     <AssignQueueNumber r={r} numLabel={numLabel} onUpdate={onManualAdd||onMarkComplete}/>
                   </div>
                   <WaitingButton key={r.id} r={r} onComplete={()=>onMarkComplete(r.id)} onUpdate={onManualAdd||onMarkComplete}/>
+                  {svc==="Laundry"&&<button onClick={()=>addAnotherLoad(r)} style={{...btnGhost,fontSize:14,color:C.teal,borderColor:C.tealMid,flexShrink:0,whiteSpace:"nowrap"}}>+1 load</button>}
                   <button onClick={()=>onCancel(r.id)} style={{...btnGhost,fontSize:14,color:C.danger,borderColor:C.dangerBorder,flexShrink:0}}>Cancel</button>
                 </div>
               );
@@ -524,6 +530,7 @@ function ShowerLaundryPanel({records,people,onMarkComplete,onCancel,onManualAdd}
                       <div style={{width:36,height:36,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,flexShrink:0}}>{initials(r.name)||"?"}</div>
                       <div style={{flex:1}}><span style={{fontSize:15}}>{r.name}</span><p style={{margin:0,fontSize:13,color:"#5A7070"}}>{numLabel} #{r.queue_position}</p></div>
                       <span style={{fontSize:13,padding:"3px 10px",borderRadius:20,background:C.successBg,color:C.success,fontWeight:600}}>✓ Done</span>
+                      {svc==="Laundry"&&<button onClick={()=>addAnotherLoad(r)} style={{...btnGhost,fontSize:13,padding:"4px 10px",color:C.teal,borderColor:C.tealMid,flexShrink:0,opacity:1,whiteSpace:"nowrap"}}>+1 load</button>}
                     </div>
                   );})}
                 </div>
@@ -905,6 +912,7 @@ function PeopleRemover({people,onRemove,onFlag,onUpdate}) {
   const [nameVal,setNameVal]=useState("");
   const [genderVal,setGenderVal]=useState("");
   const [raceVal,setRaceVal]=useState("");
+  const [noteVal,setNoteVal]=useState("");
   const [lastServiceMap,setLastServiceMap]=useState({});
   const [mergeMode,setMergeMode]=useState(false);
   const [mergeSelected,setMergeSelected]=useState([]);
@@ -929,13 +937,13 @@ function PeopleRemover({people,onRemove,onFlag,onUpdate}) {
   async function saveName(p) {
     if(!nameVal.trim()){setEditingName(null);return;}
     try{
-      const updates={name:nameVal.trim(),gender:genderVal||null,race:raceVal||null};
+      const updates={name:nameVal.trim(),gender:genderVal||null,race:raceVal||null,notes:noteVal.trim()||null};
       const res=await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify(updates),headers:{...HEADERS,"Prefer":"return=representation"}});
       if(!res.ok){console.error("saveName failed:",res.status,await res.text());return;}
       if(nameVal.trim()!==p.name){
         await api(`checkin_records?name=eq.${encodeURIComponent(p.name)}`,{method:"PATCH",body:JSON.stringify({name:nameVal.trim()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
       }
-      setEditingName(null);setNameVal("");setGenderVal("");setRaceVal("");setAgeVal("");onUpdate();
+      setEditingName(null);setNameVal("");setGenderVal("");setRaceVal("");setNoteVal("");onUpdate();
     }catch(e){console.error("saveName error:",e);}
   }
   const filtered=people.filter(p=>{
@@ -1050,6 +1058,7 @@ function PeopleRemover({people,onRemove,onFlag,onUpdate}) {
                         <option value="Other">Other</option>
                       </select>
                     </div>
+                    <textarea placeholder="Note (visible in the people list)…" value={noteVal} onChange={e=>setNoteVal(e.target.value)} rows={2} style={{...inpStyle,padding:"6px 10px",fontSize:14,resize:"vertical"}}/>
                     <div style={{display:"flex",gap:6}}>
                       <button onClick={()=>saveName(p)} style={{...btnPrimary,padding:"6px 14px",fontSize:13}}>Save</button>
                       <button onClick={()=>setEditingName(null)} style={{...btnGhost,fontSize:13,padding:"6px 10px"}}>Cancel</button>
@@ -1059,7 +1068,7 @@ function PeopleRemover({people,onRemove,onFlag,onUpdate}) {
               </div>
               <div style={{display:"flex",gap:7,flexShrink:0,flexWrap:"wrap"}}>
                 <button onClick={()=>setShowQR(showQR===p.id?null:p.id)} style={{...btnGhost,fontSize:13,padding:"6px 12px",color:C.teal,borderColor:C.tealMid}}>QR</button>
-                <button onClick={()=>{setEditingName(p.id);setNameVal(p.name);setGenderVal(p.gender||"");setRaceVal(p.race||"");}} style={{...btnGhost,fontSize:13,padding:"6px 12px",color:C.teal,borderColor:C.tealMid}}>Edit</button>
+                <button onClick={()=>{setEditingName(p.id);setNameVal(p.name);setGenderVal(p.gender||"");setRaceVal(p.race||"");setNoteVal(p.notes||"");}} style={{...btnGhost,fontSize:13,padding:"6px 12px",color:C.teal,borderColor:C.tealMid}}>Edit</button>
                 <select value={p.default_service||lastServiceMap[p.name]||""} onChange={async e=>{
                   await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({default_service:e.target.value||null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
                   onUpdate();
@@ -1097,6 +1106,7 @@ function PeopleRemover({people,onRemove,onFlag,onUpdate}) {
               </div>
             )}
             {p.flagged&&p.flag_reason&&flagging!==p.id&&<div style={{padding:"4px 16px 10px",fontSize:13,color:C.danger}}>Reason: {p.flag_reason}</div>}
+            {p.notes&&editingName!==p.id&&<div style={{padding:"4px 16px 10px",fontSize:13,color:C.textMuted}}>📝 {p.notes}</div>}
           </div>
         ))}
       </div>
@@ -1158,7 +1168,7 @@ function GroupNameEditor({name,records,onUpdate}) {
     </div>
   );
 }
-function PersonServiceTag({r,onCheckOut,onMarkComplete,onDelete,onUpdate}) {
+function PersonServiceTag({r,onCheckOut,onMarkComplete,onDelete,onUpdate,onAddLoad}) {
   const [confirmDelete,setConfirmDelete]=useState(null);
   const [editingPos,setEditingPos]=useState(false);
   const [posVal,setPosVal]=useState(r.queue_position||"");
@@ -1210,6 +1220,7 @@ function PersonServiceTag({r,onCheckOut,onMarkComplete,onDelete,onUpdate}) {
         {!r.check_out&&isShowerLaundry&&<WaitingButton key={r.id} r={r} onComplete={()=>onMarkComplete(r.id)} onUpdate={onUpdate}/>}
         {r.locker_used&&<span style={{fontSize:12,padding:"1px 8px",borderRadius:20,background:"#FEF7E6",color:"#8A5A00",fontWeight:500}}>🔑 Locker {r.locker_used}</span>}
         {!r.check_out&&!isShowerLaundry&&<button onClick={()=>onCheckOut(r.id)} style={{...btnOutline,fontSize:12,padding:"3px 10px"}}>Check out</button>}
+        {r.service==="Laundry"&&onAddLoad&&<button onClick={()=>onAddLoad(r)} style={{...btnGhost,fontSize:12,padding:"3px 10px",color:C.teal,borderColor:C.tealMid}}>+1 load</button>}
         {confirmDelete===r.id?(
           <><button onClick={()=>{onDelete(r.id);setConfirmDelete(null);}} style={{...btnGhost,fontSize:11,padding:"2px 8px",color:C.danger,borderColor:C.dangerBorder}}>Confirm</button><button onClick={()=>setConfirmDelete(null)} style={{...btnGhost,fontSize:11,padding:"2px 8px"}}>Cancel</button></>
         ):(
@@ -2206,6 +2217,11 @@ function AdminApp() {
   }
   async function cancelRecord(id){await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});loadData(true);}
   async function deleteRecord(id){await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});loadData(true);}
+  async function addAnotherLoad(r){
+    const pos=nextAvailablePosition("Laundry",recordsRef.current);
+    await api("checkin_records",{method:"POST",body:JSON.stringify({name:r.name,type:r.type,service:"Laundry",queue_position:pos,check_in:new Date().toISOString(),check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+    loadData(true);
+  }
   async function flagPerson(p,flagged,reason){
     await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({flagged,flag_reason:reason||null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
     loadData(true);
@@ -2324,18 +2340,7 @@ function AdminApp() {
               {isServiceAvailableToday("Showers")&&(
                 <div style={{marginTop:28,borderTop:`2px solid ${C.border}`,paddingTop:24}}>
                   <p style={{margin:"0 0 16px",fontSize:15,fontWeight:600,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.05em"}}>Showers & Laundry Queue</p>
-                  {Object.keys(CAPPED_SERVICES).map(svc=>{
-                    const cap=CAPPED_SERVICES[svc],used=countToday(svc),numLabel=svc==="Showers"?"Shower":"Laundry";
-                    return(
-                      <div key={svc} style={{marginBottom:12}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                          <span style={{fontSize:15,fontWeight:600}}>{svc}</span>
-                          <span style={{fontSize:13,fontWeight:600,color:used>=cap?C.danger:C.teal,background:used>=cap?C.dangerBg:C.tealLight,padding:"3px 12px",borderRadius:20}}>{used>=cap?"Full":`${cap-used} spots left`}</span>
-                        </div>
-                        <ManualAddToQueue svc={svc} people={people} records={records} numLabel={numLabel} onAdd={loadData}/>
-                      </div>
-                    );
-                  })}
+                  <ShowerLaundryPanel records={records} people={people} onMarkComplete={markComplete} onCancel={cancelRecord} onManualAdd={loadData}/>
                 </div>
               )}
             </div>
@@ -2395,7 +2400,7 @@ function AdminApp() {
                             </div>
                             <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
                               {g.records.filter(r=>r.service!==FLAG_ALERT_SERVICE&&(logTab==="All"||r.service===logTab)).map(r=>(
-                                <PersonServiceTag key={r.id} r={r} onCheckOut={checkOut} onMarkComplete={markComplete} onDelete={deleteRecord} onUpdate={loadData}/>
+                                <PersonServiceTag key={r.id} r={r} onCheckOut={checkOut} onMarkComplete={markComplete} onDelete={deleteRecord} onUpdate={loadData} onAddLoad={addAnotherLoad}/>
                               ))}
                             </div>
                           </div>
