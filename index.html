@@ -47,8 +47,8 @@ const CHART_SERVICES = ["Showers","Laundry","Day Center","Volunteer","Community 
 const CHART_COLORS   = { "Showers":"#46b4bf","Laundry":"#2E8A94","Day Center":"#E6A817","Community Partnership":"#7B61C4","Volunteer":"#3A9C6A","Drop-in":"#E67E22" };
 const GUEST_SERVICES     = ["Day Center","Community Partnership","Drop-in"];
 const FLAG_ALERT_SERVICE = "FLAG_ALERT";
-const LIVE_COLUMNS       = "id,name,type,service,notes,member_id,check_in,check_out,status,status_at,queue_position,locker_used";
-const ANALYTICS_COLUMNS  = "id,name,type,service,check_in,check_out,member_id,queue_position,notes,locker_used,status_at";
+const LIVE_COLUMNS       = "id,name,type,service,notes,member_id,check_in,check_out,status,status_at,queue_position,locker_used,loads";
+const ANALYTICS_COLUMNS  = "id,name,type,service,check_in,check_out,member_id,queue_position,notes,locker_used,status_at,loads";
 const ANALYTICS_RANGES = [
   { id:"today", label:"Today" }, { id:"7days", label:"7 days" }, { id:"30days", label:"30 days" },
   { id:"month", label:"This month" }, { id:"quarter", label:"This quarter" },
@@ -473,8 +473,9 @@ function WaitingButton({r,onComplete,onUpdate}) {
 }
 function ShowerLaundryPanel({records,people,onMarkComplete,onCancel,onManualAdd}) {
   async function addAnotherLoad(r){
-    const pos=nextAvailablePosition("Laundry",records);
-    await api("checkin_records",{method:"POST",body:JSON.stringify({name:r.name,type:r.type,service:"Laundry",queue_position:pos,check_in:new Date().toISOString(),check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+    // Counts toward laundry-load totals in reporting, but stays on this same queue
+    // entry/position — it's still one turn at the machine, just more loads within it.
+    await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({loads:(r.loads||1)+1}),headers:{...HEADERS,"Prefer":"return=minimal"}});
     onManualAdd&&onManualAdd();
   }
   return(
@@ -513,6 +514,7 @@ function ShowerLaundryPanel({records,people,onMarkComplete,onCancel,onManualAdd}
                   <div style={{width:44,height:44,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:15,flexShrink:0}}>{initials(r.name)||"?"}</div>
                   <div style={{flex:1,minWidth:0}}>
                     <span style={{fontWeight:600,fontSize:16}}>{r.name}</span>
+                    {svc==="Laundry"&&r.loads>1&&<span style={{marginLeft:8,fontSize:13,fontWeight:600,color:C.tealDark,background:C.tealLight,padding:"2px 10px",borderRadius:20}}>{r.loads} loads</span>}
                     <AssignQueueNumber r={r} numLabel={numLabel} onUpdate={onManualAdd||onMarkComplete}/>
                   </div>
                   <WaitingButton key={r.id} r={r} onComplete={()=>onMarkComplete(r.id)} onUpdate={onManualAdd||onMarkComplete}/>
@@ -528,7 +530,7 @@ function ShowerLaundryPanel({records,people,onMarkComplete,onCancel,onManualAdd}
                   {done.map(r=>{const av=avColor(r.name);return(
                     <div key={r.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",borderRadius:10,marginBottom:8,opacity:0.65}}>
                       <div style={{width:36,height:36,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,flexShrink:0}}>{initials(r.name)||"?"}</div>
-                      <div style={{flex:1}}><span style={{fontSize:15}}>{r.name}</span><p style={{margin:0,fontSize:13,color:"#5A7070"}}>{numLabel} #{r.queue_position}</p></div>
+                      <div style={{flex:1}}><span style={{fontSize:15}}>{r.name}</span><p style={{margin:0,fontSize:13,color:"#5A7070"}}>{numLabel} #{r.queue_position}{svc==="Laundry"&&r.loads>1?` · ${r.loads} loads`:""}</p></div>
                       <span style={{fontSize:13,padding:"3px 10px",borderRadius:20,background:C.successBg,color:C.success,fontWeight:600}}>✓ Done</span>
                       {svc==="Laundry"&&<button onClick={()=>addAnotherLoad(r)} style={{...btnGhost,fontSize:13,padding:"4px 10px",color:C.teal,borderColor:C.tealMid,flexShrink:0,opacity:1,whiteSpace:"nowrap"}}>+1 load</button>}
                     </div>
@@ -1419,7 +1421,9 @@ function AnalyticsTab({records,people}) {
   function getKey(r){return range==="year"?fmtMonth(r.check_in):fmtDate(r.check_in);}
   function groupBy(recs){
     const map={};
-    recs.forEach(r=>{const k=getKey(r);if(!map[k]){map[k]={date:k};CHART_SERVICES.forEach(s=>{map[k][s]=0;});}map[k][r.service]=(map[k][r.service]||0)+1;});
+    // Laundry counts total loads (a "+1 load" adds to the same entry rather than a new
+    // one), so it needs to add r.loads instead of a flat 1 per record like other services.
+    recs.forEach(r=>{const k=getKey(r);if(!map[k]){map[k]={date:k};CHART_SERVICES.forEach(s=>{map[k][s]=0;});}const inc=r.service==="Laundry"?(r.loads||1):1;map[k][r.service]=(map[k][r.service]||0)+inc;});
     return Object.values(map).sort((a,b)=>new Date(a.date)>new Date(b.date)?1:-1);
   }
   function getVolHours(recs){
@@ -1439,7 +1443,11 @@ function AnalyticsTab({records,people}) {
   const filtered=hasData?getFiltered().filter(meetsMinDuration):[];
   const chartData=hasData?groupBy(filtered):[];
   const volHours=hasData?getVolHours(filtered):[];
-  const totals={};CHART_SERVICES.forEach(s=>{totals[s]=filtered.filter(r=>r.service===s).length;});
+  const totals={};CHART_SERVICES.forEach(s=>{
+    totals[s]=s==="Laundry"
+      ?filtered.filter(r=>r.service==="Laundry").reduce((sum,r)=>sum+(r.loads||1),0)
+      :filtered.filter(r=>r.service===s).length;
+  });
   const guestNames=[...new Set(filtered.filter(r=>GUEST_SERVICES.includes(r.service)).map(r=>r.name))];
   const guestTotal=guestNames.length;
   const volUnique=new Set(filtered.filter(r=>r.service==="Volunteer").map(r=>r.name)).size;
@@ -1468,10 +1476,10 @@ function AnalyticsTab({records,people}) {
       const m=Math.round((new Date(r.check_out)-new Date(start))/60000);
       return m<60?`${m}m`:`${Math.floor(m/60)}h ${m%60}m`;
     }
-    const hdr=["Name","Guest #","Type","Member ID","Service","Queue #","Locker","Check-in","Check-out","Duration","Notes"];
+    const hdr=["Name","Guest #","Type","Member ID","Service","Queue #","Loads","Locker","Check-in","Check-out","Duration","Notes"];
     const rows=filtered.map(r=>{
       const p=people.find(x=>x.name===r.name);
-      return[r.name,p?p.guest_number:"",r.type,r.member_id||"",r.service,r.queue_position||"",r.locker_used||"",fmt(r.check_in),r.check_out?fmt(r.check_out):"",csvDuration(r),(r.notes||"").replace(/,/g," ")];
+      return[r.name,p?p.guest_number:"",r.type,r.member_id||"",r.service,r.queue_position||"",r.service==="Laundry"?(r.loads||1):"",r.locker_used||"",fmt(r.check_in),r.check_out?fmt(r.check_out):"",csvDuration(r),(r.notes||"").replace(/,/g," ")];
     });
     const csv=[hdr,...rows].map(r=>r.map(v=>`"${v}"`).join(",")).join("\n");
     const rangeMeta=ANALYTICS_RANGES.find(x=>x.id===range);
