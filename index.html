@@ -1476,12 +1476,22 @@ function AnalyticsTab({records,people}) {
       const m=Math.round((new Date(r.check_out)-new Date(start))/60000);
       return m<60?`${m}m`:`${Math.floor(m/60)}h ${m%60}m`;
     }
+    // Guards against CSV/formula injection: free-text fields (Name, Notes) come straight
+    // from the public, unvalidated self-check-in kiosk. A value starting with =, +, -, or @
+    // would otherwise execute as a formula when opened in Excel/Sheets, so any such value
+    // gets a leading apostrophe to force it to be read as plain text. Embedded quotes are
+    // also doubled so they don't break the surrounding quoted CSV cell.
+    function csvSafe(v){
+      let s=String(v==null?"":v);
+      if(/^[=+\-@]/.test(s))s="'"+s;
+      return s.replace(/"/g,'""');
+    }
     const hdr=["Name","Guest #","Type","Member ID","Service","Queue #","Loads","Locker","Check-in","Check-out","Duration","Notes"];
     const rows=filtered.map(r=>{
       const p=people.find(x=>x.name===r.name);
       return[r.name,p?p.guest_number:"",r.type,r.member_id||"",r.service,r.queue_position||"",r.service==="Laundry"?(r.loads||1):"",r.locker_used||"",fmt(r.check_in),r.check_out?fmt(r.check_out):"",csvDuration(r),(r.notes||"").replace(/,/g," ")];
     });
-    const csv=[hdr,...rows].map(r=>r.map(v=>`"${v}"`).join(",")).join("\n");
+    const csv=[hdr,...rows].map(r=>r.map(v=>`"${csvSafe(v)}"`).join(",")).join("\n");
     const rangeMeta=ANALYTICS_RANGES.find(x=>x.id===range);
     const suffix=range==="custom"?`${customStart||"start"}_to_${customEnd||"end"}`:(rangeMeta?rangeMeta.label.toLowerCase().replace(/\s+/g,"-"):range);
     const a=document.createElement("a");
