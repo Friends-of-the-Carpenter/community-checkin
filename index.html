@@ -620,13 +620,52 @@ function LastVisitSearch({people}) {
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState(null);
   const [expandedId,setExpandedId]=useState(null);
+  const [bulkModeId,setBulkModeId]=useState(null);
+  const [bulkSelected,setBulkSelected]=useState([]);
+  const [bulkService,setBulkService]=useState("");
+  const [bulkType,setBulkType]=useState("");
+  const [bulkSaving,setBulkSaving]=useState(false);
+  function toggleBulkMode(id){
+    if(bulkModeId===id){setBulkModeId(null);}else{setBulkModeId(id);}
+    setBulkSelected([]);setBulkService("");setBulkType("");
+  }
+  function toggleBulkSelect(id){setBulkSelected(s=>s.includes(id)?s.filter(x=>x!==id):[...s,id]);}
+  async function applyBulkService(){
+    if((!bulkService&&!bulkType)||bulkSelected.length===0)return;
+    setBulkSaving(true);
+    const updates={};
+    if(bulkService)updates.service=bulkService;
+    if(bulkType)updates.type=bulkType;
+    try{
+      await Promise.all(bulkSelected.map(id=>api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify(updates),headers:{...HEADERS,"Prefer":"return=minimal"}})));
+    }catch(e){console.error("Bulk update failed:",e);}
+    setBulkSaving(false);setBulkModeId(null);setBulkSelected([]);setBulkService("");setBulkType("");
+    refresh();
+  }
+  const [showAll,setShowAll]=useState(false);
   const debounceRef=useRef(null);
   useEffect(()=>{
     if(debounceRef.current)clearTimeout(debounceRef.current);
-    if(!query.trim()){setResults(null);setError(null);return;}
+    if(!query.trim()){ if(!showAll)setResults(null); setError(null);return;}
+    setShowAll(false);
     debounceRef.current=setTimeout(()=>doSearch(query.trim()),400);
     return()=>{if(debounceRef.current)clearTimeout(debounceRef.current);};
   },[query]);
+  function buildResults(matched,allRecs){
+    return matched.map(p=>{
+      const recs=allRecs.filter(r=>r.name===p.name&&r.service!==FLAG_ALERT_SERVICE);
+      if(recs.length===0)return{person:p,lastVisit:null,lastService:null,totalVisits:0,daysSince:null,serviceBreakdown:{},records:[]};
+      const latest=recs[0];
+      const daysSince=Math.floor((Date.now()-new Date(latest.check_in))/86400000);
+      const breakdown={};
+      recs.forEach(r=>{breakdown[r.service]=(breakdown[r.service]||0)+1;});
+      return{person:p,lastVisit:latest.check_in,lastService:latest.service,totalVisits:recs.length,daysSince,serviceBreakdown:breakdown,records:recs};
+    }).sort((a,b)=>{
+      if(!a.lastVisit&&!b.lastVisit)return a.person.name.localeCompare(b.person.name);
+      if(!a.lastVisit)return 1;if(!b.lastVisit)return -1;
+      return new Date(b.lastVisit)-new Date(a.lastVisit);
+    });
+  }
   async function doSearch(q) {
     setLoading(true);setError(null);
     try {
@@ -634,24 +673,21 @@ function LastVisitSearch({people}) {
       if(matched.length===0){setResults([]);setLoading(false);return;}
       const nameFilter=matched.map(p=>`name.eq.${encodeURIComponent(p.name)}`).join(",");
       const allRecs=await apiAllRows(`checkin_records?select=${LIVE_COLUMNS}&or=(${nameFilter})&service=neq.${FLAG_ALERT_SERVICE}&order=check_in.desc`);
-      const out=matched.map(p=>{
-        const recs=allRecs.filter(r=>r.name===p.name&&r.service!==FLAG_ALERT_SERVICE);
-        if(recs.length===0)return{person:p,lastVisit:null,lastService:null,totalVisits:0,daysSince:null,serviceBreakdown:{},records:[]};
-        const latest=recs[0];
-        const daysSince=Math.floor((Date.now()-new Date(latest.check_in))/86400000);
-        const breakdown={};
-        recs.forEach(r=>{breakdown[r.service]=(breakdown[r.service]||0)+1;});
-        return{person:p,lastVisit:latest.check_in,lastService:latest.service,totalVisits:recs.length,daysSince,serviceBreakdown:breakdown,records:recs};
-      }).sort((a,b)=>{
-        if(!a.lastVisit&&!b.lastVisit)return a.person.name.localeCompare(b.person.name);
-        if(!a.lastVisit)return 1;if(!b.lastVisit)return -1;
-        return new Date(b.lastVisit)-new Date(a.lastVisit);
-      });
-      setResults(out);
+      setResults(buildResults(matched,allRecs));
     }catch(e){setError("Failed to load visit history.");}
     setLoading(false);
   }
-  function refresh(){ if(query.trim())doSearch(query.trim()); }
+  async function doShowAll() {
+    setLoading(true);setError(null);
+    try {
+      if(people.length===0){setResults([]);setLoading(false);return;}
+      const allRecs=await apiAllRows(`checkin_records?select=${LIVE_COLUMNS}&service=neq.${FLAG_ALERT_SERVICE}&order=check_in.desc`);
+      setResults(buildResults(people,allRecs));
+    }catch(e){setError("Failed to load visit history.");}
+    setLoading(false);
+  }
+  function handleShowAll(){ setQuery("");setShowAll(true);doShowAll(); }
+  function refresh(){ if(showAll)doShowAll(); else if(query.trim())doSearch(query.trim()); }
   async function handleCheckOut(id){
     await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
     refresh();
@@ -671,20 +707,26 @@ function LastVisitSearch({people}) {
   }
   return(
     <div>
-      <div style={{position:"relative",marginBottom:16}}>
-        <input
-          placeholder="Search by name to see visit history…"
-          value={query}
-          onChange={e=>setQuery(e.target.value)}
-          style={{...inpStyle,paddingRight:query?44:16}}
-        />
-        {query&&(
-          <button onClick={()=>{setQuery("");setResults(null);}} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"#D0E6E5",border:"none",borderRadius:"50%",width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:15,color:"#5A7070"}}>×</button>
-        )}
+      <div style={{display:"flex",gap:10,marginBottom:16,alignItems:"center",flexWrap:"wrap"}}>
+        <div style={{position:"relative",flex:1,minWidth:200}}>
+          <input
+            placeholder="Search by name to see visit history…"
+            value={query}
+            onChange={e=>setQuery(e.target.value)}
+            style={{...inpStyle,paddingRight:query?44:16}}
+          />
+          {query&&(
+            <button onClick={()=>{setQuery("");setResults(null);setShowAll(false);}} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"#D0E6E5",border:"none",borderRadius:"50%",width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:15,color:"#5A7070"}}>×</button>
+          )}
+        </div>
+        <button onClick={showAll?()=>{setShowAll(false);setResults(null);}:handleShowAll} style={{...btnGhost,fontSize:13,padding:"9px 16px",color:showAll?C.danger:C.teal,borderColor:showAll?C.dangerBorder:C.tealMid,whiteSpace:"nowrap"}}>
+          {showAll?"Hide all":"Show all"}
+        </button>
       </div>
-      {loading&&<div style={{textAlign:"center",padding:"20px 0",color:C.textMuted,fontSize:15}}>Searching visit history…</div>}
+      {loading&&<div style={{textAlign:"center",padding:"20px 0",color:C.textMuted,fontSize:15}}>{showAll?"Loading everyone's visit history…":"Searching visit history…"}</div>}
       {error&&<p style={{fontSize:14,color:C.danger}}>⚠ {error}</p>}
-      {!loading&&results&&results.length===0&&<p style={{fontSize:15,color:C.textMuted,textAlign:"center",padding:"16px 0"}}>No people found matching "{query}".</p>}
+      {!loading&&results&&results.length===0&&<p style={{fontSize:15,color:C.textMuted,textAlign:"center",padding:"16px 0"}}>{showAll?"No people found.":`No people found matching "${query}".`}</p>}
+      {!loading&&showAll&&results&&results.length>0&&<p style={{fontSize:13,color:C.textMuted,margin:"0 0 10px"}}>Showing all {results.length} people.</p>}
       {!loading&&results&&results.length>0&&(
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
           {results.map(({person:p,lastVisit,lastService,totalVisits,daysSince,serviceBreakdown,records:recs})=>{
@@ -722,13 +764,44 @@ function LastVisitSearch({people}) {
                     )}
                     {recs&&recs.length>0&&(
                       <div style={{marginTop:12,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
-                        <button onClick={()=>setExpandedId(expandedId===p.id?null:p.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:C.teal,fontWeight:600,padding:0}}>
-                          {expandedId===p.id?"Hide visit history ▲":`Edit past visits (${recs.length}) ▼`}
-                        </button>
+                        <div style={{display:"flex",gap:14,alignItems:"center",flexWrap:"wrap"}}>
+                          <button onClick={()=>setExpandedId(expandedId===p.id?null:p.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:C.teal,fontWeight:600,padding:0}}>
+                            {expandedId===p.id?"Hide visit history ▲":`Edit past visits (${recs.length}) ▼`}
+                          </button>
+                          {expandedId===p.id&&(
+                            <button onClick={()=>toggleBulkMode(p.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:13,color:bulkModeId===p.id?C.danger:C.teal,fontWeight:600,padding:0}}>
+                              {bulkModeId===p.id?"Cancel bulk edit":"Bulk edit"}
+                            </button>
+                          )}
+                        </div>
+                        {expandedId===p.id&&bulkModeId===p.id&&(
+                          <div style={{margin:"10px 0",padding:"10px 12px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+                            <span style={{fontSize:13,color:C.textMuted}}>{bulkSelected.length} selected</span>
+                            <select value={bulkService} onChange={e=>setBulkService(e.target.value)} style={{...inpStyle,width:"auto",padding:"5px 10px",fontSize:13}}>
+                              <option value="">Change service to…</option>
+                              {CHART_SERVICES.map(s=><option key={s} value={s}>{s}</option>)}
+                            </select>
+                            <select value={bulkType} onChange={e=>setBulkType(e.target.value)} style={{...inpStyle,width:"auto",padding:"5px 10px",fontSize:13}}>
+                              <option value="">Change type to…</option>
+                              <option value="Guest">Guest</option>
+                              <option value="Volunteer">Volunteer</option>
+                            </select>
+                            <button onClick={applyBulkService} disabled={bulkSaving||(!bulkService&&!bulkType)||bulkSelected.length===0} style={{...btnPrimary,fontSize:13,padding:"6px 14px",opacity:bulkSaving||(!bulkService&&!bulkType)||bulkSelected.length===0?0.5:1}}>
+                              {bulkSaving?"Applying…":"Apply"}
+                            </button>
+                          </div>
+                        )}
                         {expandedId===p.id&&(
                           <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:8}}>
                             {recs.slice().sort((a,b)=>new Date(b.check_in)-new Date(a.check_in)).map(r=>(
-                              <PersonServiceTag key={r.id} r={r} onCheckOut={handleCheckOut} onMarkComplete={handleCheckOut} onDelete={handleDelete} onUpdate={refresh}/>
+                              <div key={r.id} style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                                {bulkModeId===p.id&&(
+                                  <input type="checkbox" checked={bulkSelected.includes(r.id)} onChange={()=>toggleBulkSelect(r.id)} style={{width:16,height:16,marginTop:14,accentColor:"#46b4bf",cursor:"pointer",flexShrink:0}}/>
+                                )}
+                                <div style={{flex:1,minWidth:0}}>
+                                  <PersonServiceTag r={r} onCheckOut={handleCheckOut} onMarkComplete={handleCheckOut} onDelete={handleDelete} onUpdate={refresh}/>
+                                </div>
+                              </div>
                             ))}
                           </div>
                         )}
@@ -741,9 +814,9 @@ function LastVisitSearch({people}) {
           })}
         </div>
       )}
-      {!query&&(
+      {!query&&!showAll&&(
         <p style={{fontSize:14,color:C.textLight,textAlign:"center",padding:"10px 0"}}>
-          Start typing a name to search across all visit history.
+          Start typing a name to search across all visit history, or use "Show all" to list everyone.
         </p>
       )}
     </div>
@@ -1109,6 +1182,13 @@ function PeopleRemover({people,onRemove,onFlag,onUpdate}) {
             )}
             {p.flagged&&p.flag_reason&&flagging!==p.id&&<div style={{padding:"4px 16px 10px",fontSize:13,color:C.danger}}>Reason: {p.flag_reason}</div>}
             {p.notes&&editingName!==p.id&&<div style={{padding:"4px 16px 10px",fontSize:13,color:C.textMuted}}>📝 {p.notes}</div>}
+            {p.locker&&(
+              <div style={{padding:"4px 16px 10px",fontSize:13,color:"#8A5A00",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                🔑 Holding locker {p.locker}{p.locker_date?` (assigned ${p.locker_date})`:""}
+                <button onClick={async()=>{await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});onUpdate();}}
+                  style={{...btnGhost,fontSize:11,padding:"2px 10px",color:C.danger,borderColor:C.dangerBorder}}>Clear locker</button>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -1385,6 +1465,7 @@ function AnalyticsTab({records,people}) {
   const [customEnd,setCustomEnd]=useState("");
   const [allRecords,setAllRecords]=useState(null);
   const [loadingAll,setLoadingAll]=useState(false);
+  const [demoService,setDemoService]=useState("all");
   useEffect(()=>{
     if(!range||range==="today"){setAllRecords(null);return;}
     if(range==="custom"){setAllRecords(null);return;}
@@ -1451,8 +1532,9 @@ function AnalyticsTab({records,people}) {
   const guestNames=[...new Set(filtered.filter(r=>GUEST_SERVICES.includes(r.service)).map(r=>r.name))];
   const guestTotal=guestNames.length;
   const volUnique=new Set(filtered.filter(r=>r.service==="Volunteer").map(r=>r.name)).size;
-  const genderData=demographicCounts(guestNames,people,"gender");
-  const raceData=demographicCounts(guestNames,people,"race");
+  const demoNames=demoService==="all"?guestNames:[...new Set(filtered.filter(r=>r.service===demoService).map(r=>r.name))];
+  const genderData=demographicCounts(demoNames,people,"gender");
+  const raceData=demographicCounts(demoNames,people,"race");
   const respiteHours=(()=>{
     const days=new Set(filtered.map(r=>r.check_in.slice(0,10)));let total=0;
     days.forEach(d=>{const dow=new Date(d+"T12:00:00").getDay();if(dow===5)total+=4;else if(dow>=1&&dow<=4)total+=6.5;});
@@ -1569,8 +1651,14 @@ function AnalyticsTab({records,people}) {
               </div>
               {guestTotal>0&&(
                 <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:14,padding:20,marginBottom:36}}>
-                  <p style={{margin:"0 0 4px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Guest Demographics</p>
-                  <p style={{margin:"0 0 20px",fontSize:13,color:C.textMuted}}>Based on the {guestTotal} unique guest{guestTotal===1?"":"s"} served in this range.</p>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10,marginBottom:4}}>
+                    <p style={{margin:0,fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Guest Demographics</p>
+                    <select value={demoService} onChange={e=>setDemoService(e.target.value)} style={{...inpStyle,width:"auto",padding:"5px 10px",fontSize:13}}>
+                      <option value="all">All guest services</option>
+                      {GUEST_SERVICES.map(s=><option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <p style={{margin:"0 0 20px",fontSize:13,color:C.textMuted}}>Based on the {demoNames.length} unique guest{demoNames.length===1?"":"s"} served{demoService==="all"?"":` (${demoService})`} in this range.</p>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:28}}>
                     <div>
                       <p style={{margin:"0 0 10px",fontSize:13,fontWeight:600,color:C.text}}>Gender</p>
@@ -2452,6 +2540,8 @@ function AdminApp() {
                             <select value="" onChange={async e=>{
                               const val=e.target.value;if(!val)return;
                               const todayStr=new Date().toISOString().slice(0,10);
+                              const taken=peopleRef.current.find(x=>String(x.locker)===String(l)&&x.locker_date===todayStr);
+                              if(taken){alert(`Locker ${l} was just taken by ${taken.name}. Pick another.`);loadData(true);return;}
                               const p=people.find(x=>x.name===val);
                               if(p)await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:parseInt(l),locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
                               loadData(true);
@@ -2480,6 +2570,8 @@ function AdminApp() {
                             <select value="" onChange={async e=>{
                               const val=e.target.value;if(!val)return;
                               const todayStr=new Date().toISOString().slice(0,10);
+                              const taken=peopleRef.current.find(x=>x.locker===l&&x.locker_date===todayStr);
+                              if(taken){alert(`${l} was just taken by ${taken.name}. Pick another.`);loadData(true);return;}
                               const p=people.find(x=>x.name===val);
                               if(p)await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:l,locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
                               loadData(true);
