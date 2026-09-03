@@ -147,6 +147,29 @@ function fmt(iso) {
 }
 function fmtDate(iso) { if(!iso)return""; return new Date(iso).toLocaleDateString("en-US",{month:"short",day:"numeric"}); }
 function fmtMonth(iso) { return new Date(iso).toLocaleDateString("en-US",{month:"short",year:"numeric"}); }
+// Shared duration() hides Showers/Laundry duration in the live app (their queue timer already
+// conveys it there), but exports/tables should still surface it — matching what that timer
+// actually measured (time in service, from status_at to check_out), not the full check-in-to-
+// check-out span which also includes time spent waiting in the queue. Records completed without
+// ever going through the timer (no status_at) fall back to check_in. Day Center/Community
+// Partnership/Drop-in stay blank — not tracked at all.
+function csvDuration(r){
+  if(GUEST_SERVICES.includes(r.service))return"";
+  if(!r.check_out)return"";
+  const start=r.status_at||r.check_in;
+  const m=Math.round((new Date(r.check_out)-new Date(start))/60000);
+  return m<60?`${m}m`:`${Math.floor(m/60)}h ${m%60}m`;
+}
+// Guards against CSV/formula injection: free-text fields (Name, Notes) come straight from the
+// public, unvalidated self-check-in kiosk. A value starting with =, +, -, or @ would otherwise
+// execute as a formula when opened in Excel/Sheets, so any such value gets a leading apostrophe
+// to force it to be read as plain text. Embedded quotes are also doubled so they don't break
+// the surrounding quoted CSV cell.
+function csvSafe(v){
+  let s=String(v==null?"":v);
+  if(/^[=+\-@]/.test(s))s="'"+s;
+  return s.replace(/"/g,'""');
+}
 function duration(inT,outT,service) {
   if(!outT||NO_DURATION_SERVICES.includes(service)||GUEST_SERVICES.includes(service))return null;
   const m=Math.round((new Date(outT)-new Date(inT))/60000);
@@ -1459,6 +1482,157 @@ function DemographicBarChart({data}) {
     </div>
   );
 }
+// Same underlying data (and same columns) as the Analytics CSV export, but browsable on-screen
+// rather than downloaded — lets staff look up visit-level detail without leaving the People tab.
+function VisitDataTable({records,people}) {
+  const [range,setRange]=useState("today");
+  const [customStart,setCustomStart]=useState("");
+  const [customEnd,setCustomEnd]=useState("");
+  const [allRecords,setAllRecords]=useState(null);
+  const [loadingAll,setLoadingAll]=useState(false);
+  const [query,setQuery]=useState("");
+  useEffect(()=>{
+    if(!range||range==="today"||range==="custom"){setAllRecords(null);return;}
+    setLoadingAll(true);
+    const now=new Date();let cutoff=new Date(0);
+    if(range==="7days"){cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-6);}
+    else if(range==="30days"){cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-29);}
+    else if(range==="month"){cutoff=new Date(now.getFullYear(),now.getMonth(),1);}
+    else if(range==="quarter"){const q=Math.floor(now.getMonth()/3);cutoff=new Date(now.getFullYear(),q*3,1);}
+    else if(range==="year"){cutoff=new Date(now.getFullYear(),0,1);}
+    cutoff.setHours(0,0,0,0);
+    apiAllRows(`checkin_records?select=${ANALYTICS_COLUMNS}&check_in=gte.${cutoff.toISOString()}&service=neq.${FLAG_ALERT_SERVICE}&order=check_in.desc`)
+      .then(d=>{setAllRecords(d);setLoadingAll(false);}).catch(()=>setLoadingAll(false));
+  },[range]);
+  useEffect(()=>{
+    if(range!=="custom"||!customStart||!customEnd)return;
+    setLoadingAll(true);
+    const start=new Date(customStart+"T00:00:00").toISOString();
+    const end=new Date(customEnd+"T23:59:59").toISOString();
+    apiAllRows(`checkin_records?select=${ANALYTICS_COLUMNS}&check_in=gte.${start}&check_in=lte.${end}&service=neq.${FLAG_ALERT_SERVICE}&order=check_in.desc`)
+      .then(d=>{setAllRecords(d);setLoadingAll(false);}).catch(()=>setLoadingAll(false));
+  },[range,customStart,customEnd]);
+  const sourceRecords=(range==="today"||!range)?records:(allRecords||records);
+  function getFiltered() {
+    if(range==="custom"){
+      const start=customStart?new Date(customStart+"T00:00:00"):new Date(0);
+      const end=customEnd?new Date(customEnd+"T23:59:59"):new Date();
+      return sourceRecords.filter(r=>{const t=new Date(r.check_in);return t>=start&&t<=end&&r.service!==FLAG_ALERT_SERVICE;});
+    }
+    if(range==="all")return sourceRecords.filter(r=>r.service!==FLAG_ALERT_SERVICE);
+    const now=new Date();let cutoff;
+    if(range==="today"){cutoff=new Date(now);cutoff.setHours(0,0,0,0);}
+    else if(range==="7days"){cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-6);}
+    else if(range==="30days"){cutoff=new Date(now);cutoff.setDate(cutoff.getDate()-29);}
+    else if(range==="month"){cutoff=new Date(now.getFullYear(),now.getMonth(),1);}
+    else if(range==="quarter"){const q=Math.floor(now.getMonth()/3);cutoff=new Date(now.getFullYear(),q*3,1);}
+    else if(range==="year"){cutoff=new Date(now.getFullYear(),0,1);}
+    else{cutoff=new Date(0);}
+    cutoff.setHours(0,0,0,0);
+    return sourceRecords.filter(r=>new Date(r.check_in)>=cutoff&&r.service!==FLAG_ALERT_SERVICE);
+  }
+  const hasData=range&&(range!=="custom"||(customStart&&customEnd));
+  const filtered=hasData?getFiltered():[];
+  const q=query.trim().toLowerCase();
+  const searched=q?filtered.filter(r=>r.name.toLowerCase().includes(q)):filtered;
+  const rows=searched.slice().sort((a,b)=>new Date(b.check_in)-new Date(a.check_in));
+  function exportCSV(){
+    const hdr=["Name","Guest #","Type","Service","Queue #","Locker","Check-in","Duration","Notes"];
+    const out=rows.map(r=>{
+      const p=people.find(x=>x.name===r.name);
+      return[r.name,p?p.guest_number:"",r.type,r.service,r.queue_position||"",r.locker_used||"",fmt(r.check_in),csvDuration(r),(r.notes||"").replace(/,/g," ")];
+    });
+    const csv=[hdr,...out].map(rr=>rr.map(v=>`"${csvSafe(v)}"`).join(",")).join("\n");
+    const rangeMeta=ANALYTICS_RANGES.find(x=>x.id===range);
+    const suffix=range==="custom"?`${customStart||"start"}_to_${customEnd||"end"}`:(rangeMeta?rangeMeta.label.toLowerCase().replace(/\s+/g,"-"):range);
+    const a=document.createElement("a");
+    a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);
+    a.download=`checkins-${suffix}.csv`;a.click();
+  }
+  const thStyle={textAlign:"left",padding:"8px 10px",fontSize:13,fontWeight:700,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.03em",whiteSpace:"nowrap",position:"sticky",top:0,background:"#F7FAFA",borderBottom:"2px solid #D0E6E5"};
+  const tdStyle={padding:"7px 10px",fontSize:14,color:C.text,whiteSpace:"nowrap"};
+  // Narrow, short-value columns get a fixed width (and centered text) so Name/Notes keep the room.
+  // Tighter padding (vs. tdStyle's default) buys back the room the bigger font size needs, so
+  // values like "1h 23m" or "9/3/26" don't get clipped inside these fixed-width cells.
+  const narrowCols={"Guest #":72,"Type":72,"Queue #":72,"Locker":72,"Duration":72,"Check-in":86};
+  const narrowTh=h=>narrowCols[h]?{width:narrowCols[h],maxWidth:narrowCols[h],textAlign:"center"}:{};
+  const narrowTd={width:72,maxWidth:72,textAlign:"center",padding:"7px 4px"};
+  // Service names are longer ("Community Partnership") so this stays wider than the fully
+  // narrow columns above, but still fixed and left-aligned so it doesn't crowd out Name/Notes.
+  const serviceTd={width:110,maxWidth:110};
+  // Stacked date/time (e.g. "9/3/26" over "2:45pm") instead of fmt()'s full "Sep 3, 2026 2:45 PM",
+  // so the Check-in column can stay narrow enough that the whole table fits without side-scrolling.
+  function fmtCompact(iso){
+    if(!iso)return null;
+    const d=new Date(iso);
+    const date=d.toLocaleDateString("en-US",{month:"numeric",day:"numeric",year:"2-digit"});
+    const time=d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}).replace(" ","").toLowerCase();
+    return{date,time};
+  }
+  return(
+    <div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
+        {ANALYTICS_RANGES.map(r=>(
+          <button key={r.id} onClick={()=>setRange(r.id)} style={{fontSize:13,fontWeight:600,padding:"7px 14px",borderRadius:20,border:"1.5px solid",borderColor:range===r.id?C.teal:C.border,background:range===r.id?C.teal:"#fff",color:range===r.id?"#fff":C.textMuted,cursor:"pointer"}}>
+            {r.label}
+          </button>
+        ))}
+      </div>
+      {range==="custom"&&(
+        <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:14,flexWrap:"wrap"}}>
+          <input type="date" value={customStart} onChange={e=>setCustomStart(e.target.value)} style={{...inpStyle,width:"auto"}}/>
+          <span style={{color:C.textMuted,fontSize:14}}>to</span>
+          <input type="date" value={customEnd} onChange={e=>setCustomEnd(e.target.value)} style={{...inpStyle,width:"auto"}}/>
+        </div>
+      )}
+      <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
+        <input placeholder="Filter by name…" value={query} onChange={e=>setQuery(e.target.value)} style={{...inpStyle,flex:1,minWidth:160}}/>
+        <button onClick={exportCSV} disabled={rows.length===0} style={{...btnOutline,fontSize:13,padding:"9px 18px",opacity:rows.length===0?0.5:1}}>Export CSV</button>
+      </div>
+      {loadingAll&&<p style={{fontSize:14,color:C.textMuted,textAlign:"center",padding:"16px 0"}}>Loading visit history…</p>}
+      {!loadingAll&&(
+        <>
+          <p style={{fontSize:13,color:C.textMuted,margin:"0 0 10px"}}>{rows.length} record{rows.length===1?"":"s"}</p>
+          <div style={{maxHeight:520,overflow:"auto",border:`1px solid ${C.border}`,borderRadius:10}}>
+            <table style={{borderCollapse:"collapse",width:"100%",tableLayout:"fixed"}}>
+              <thead>
+                <tr>
+                  {["Name","Guest #","Type","Service","Queue #","Locker","Check-in","Duration","Notes"].map(h=>(
+                    <th key={h} style={{...thStyle,...narrowTh(h),...(h==="Service"?serviceTd:{})}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length===0&&(
+                  <tr><td colSpan={9} style={{...tdStyle,textAlign:"center",color:C.textMuted,padding:"20px 0"}}>No visits found.</td></tr>
+                )}
+                {rows.map(r=>{
+                  const p=people.find(x=>x.name===r.name);
+                  const ci=fmtCompact(r.check_in);
+                  return(
+                    <tr key={r.id} style={{borderBottom:`1px solid ${C.border}`}}>
+                      <td style={{...tdStyle,fontWeight:600,whiteSpace:"normal",wordBreak:"break-word"}}>{r.name}</td>
+                      <td style={{...tdStyle,...narrowTd}}>{p?p.guest_number:""}</td>
+                      <td style={{...tdStyle,...narrowTd}}>{r.type}</td>
+                      <td style={{...tdStyle,...serviceTd,whiteSpace:"normal",wordBreak:"break-word"}}>{r.service}</td>
+                      <td style={{...tdStyle,...narrowTd}}>{r.queue_position||""}</td>
+                      <td style={{...tdStyle,...narrowTd}}>{r.locker_used||""}</td>
+                      <td style={{...tdStyle,...narrowTd,width:86,maxWidth:86,lineHeight:1.3}}>
+                        {ci&&<><div>{ci.date}</div><div style={{color:C.textMuted,fontSize:12}}>{ci.time}</div></>}
+                      </td>
+                      <td style={{...tdStyle,...narrowTd}}>{csvDuration(r)}</td>
+                      <td style={{...tdStyle,whiteSpace:"normal",minWidth:160}}>{r.notes||""}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 function AnalyticsTab({records,people}) {
   const [range,setRange]=useState("today");
   const [customStart,setCustomStart]=useState("");
@@ -1545,29 +1719,6 @@ function AnalyticsTab({records,people}) {
   const volHH=volMM>=30?Math.ceil(totalVolHrs):Math.floor(totalVolHrs);
   const volTotalStr=volMM>0?`${Math.floor(totalVolHrs)}h ${volMM}m`:`${volHH}h`;
   function exportCSV(){
-    // The shared duration() helper hides Showers/Laundry duration in the live app (their queue
-    // timer already conveys it there), but the CSV should still surface it — matching what that
-    // timer actually measured (time in service, from status_at to check_out), not the full
-    // check-in-to-check-out span which also includes time spent waiting in the queue. Records
-    // that were completed without ever going through the timer (no status_at) fall back to
-    // check_in. Day Center/Community Partnership/Drop-in stay blank — not tracked at all.
-    function csvDuration(r){
-      if(GUEST_SERVICES.includes(r.service))return"";
-      if(!r.check_out)return"";
-      const start=r.status_at||r.check_in;
-      const m=Math.round((new Date(r.check_out)-new Date(start))/60000);
-      return m<60?`${m}m`:`${Math.floor(m/60)}h ${m%60}m`;
-    }
-    // Guards against CSV/formula injection: free-text fields (Name, Notes) come straight
-    // from the public, unvalidated self-check-in kiosk. A value starting with =, +, -, or @
-    // would otherwise execute as a formula when opened in Excel/Sheets, so any such value
-    // gets a leading apostrophe to force it to be read as plain text. Embedded quotes are
-    // also doubled so they don't break the surrounding quoted CSV cell.
-    function csvSafe(v){
-      let s=String(v==null?"":v);
-      if(/^[=+\-@]/.test(s))s="'"+s;
-      return s.replace(/"/g,'""');
-    }
     const hdr=["Name","Guest #","Type","Member ID","Service","Queue #","Loads","Locker","Check-in","Check-out","Duration","Notes"];
     const rows=filtered.map(r=>{
       const p=people.find(x=>x.name===r.name);
@@ -2591,7 +2742,7 @@ function AdminApp() {
           {view==="manage"&&(
             <div>
               <div style={{display:"flex",gap:0,marginBottom:24,borderBottom:"2px solid #C0E8EC"}}>
-                {[["people","Manage People"],["lastvisit","Last Visit Search"]].map(([id,label])=>(
+                {[["people","Manage People"],["lastvisit","Last Visit Search"],["visitdata","Visit Data"]].map(([id,label])=>(
                   <button key={id} onClick={()=>setManageSubTab(id)}
                     style={{padding:"10px 20px",border:"none",background:"transparent",borderBottom:manageSubTab===id?"3px solid #46b4bf":"3px solid transparent",fontWeight:manageSubTab===id?700:400,fontSize:15,cursor:"pointer",color:manageSubTab===id?"#46b4bf":"#5A7070",fontFamily:"inherit",marginBottom:-2}}>
                     {label}
@@ -2635,6 +2786,13 @@ function AdminApp() {
                   <p style={{margin:"0 0 6px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Last Visit Search</p>
                   <p style={{margin:"0 0 20px",fontSize:14,color:C.textMuted}}>Search across all historical visit records to see when someone last visited, which services they used, and their total visit count.</p>
                   <LastVisitSearch people={people}/>
+                </div>
+              )}
+              {manageSubTab==="visitdata"&&(
+                <div>
+                  <p style={{margin:"0 0 6px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Visit Data</p>
+                  <p style={{margin:"0 0 20px",fontSize:14,color:C.textMuted}}>The same data as the Analytics CSV export, browsable on-screen — filter by date range or name, or export it from here.</p>
+                  <VisitDataTable records={records} people={people}/>
                 </div>
               )}
             </div>
