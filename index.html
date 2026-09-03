@@ -1491,6 +1491,12 @@ function VisitDataTable({records,people}) {
   const [allRecords,setAllRecords]=useState(null);
   const [loadingAll,setLoadingAll]=useState(false);
   const [query,setQuery]=useState("");
+  const [sortKey,setSortKey]=useState("check_in");
+  const [sortDir,setSortDir]=useState("desc");
+  function toggleSort(key){
+    if(sortKey===key){setSortDir(d=>d==="asc"?"desc":"asc");}
+    else{setSortKey(key);setSortDir("asc");}
+  }
   useEffect(()=>{
     if(!range||range==="today"||range==="custom"){setAllRecords(null);return;}
     setLoadingAll(true);
@@ -1535,7 +1541,34 @@ function VisitDataTable({records,people}) {
   const filtered=hasData?getFiltered():[];
   const q=query.trim().toLowerCase();
   const searched=q?filtered.filter(r=>r.name.toLowerCase().includes(q)):filtered;
-  const rows=searched.slice().sort((a,b)=>new Date(b.check_in)-new Date(a.check_in));
+  // Mirrors csvDuration()'s calculation but returns minutes (or null) instead of a display
+  // string, so Duration can be sorted numerically rather than alphabetically by its label.
+  function durationMinutes(r){
+    if(GUEST_SERVICES.includes(r.service))return null;
+    if(!r.check_out)return null;
+    const start=r.status_at||r.check_in;
+    return Math.round((new Date(r.check_out)-new Date(start))/60000);
+  }
+  function sortValue(r,key){
+    switch(key){
+      case "name": return (r.name||"").toLowerCase();
+      case "guest_number": {const p=people.find(x=>x.name===r.name);const n=p?Number(p.guest_number):NaN;return isNaN(n)?-Infinity:n;}
+      case "type": return (r.type||"").toLowerCase();
+      case "service": return (r.service||"").toLowerCase();
+      case "queue_position": return r.queue_position==null?-Infinity:r.queue_position;
+      case "locker_used": return (r.locker_used==null?"":String(r.locker_used)).toLowerCase();
+      case "check_in": return new Date(r.check_in).getTime();
+      case "duration": {const m=durationMinutes(r);return m==null?-Infinity:m;}
+      case "notes": return (r.notes||"").toLowerCase();
+      default: return "";
+    }
+  }
+  const rows=searched.slice().sort((a,b)=>{
+    const av=sortValue(a,sortKey),bv=sortValue(b,sortKey);
+    const cmp=typeof av==="string"?av.localeCompare(bv):(av>bv?1:av<bv?-1:0);
+    return sortDir==="asc"?cmp:-cmp;
+  });
+  const HEADER_KEYS={"Name":"name","Guest #":"guest_number","Type":"type","Service":"service","Queue #":"queue_position","Locker":"locker_used","Check-in":"check_in","Duration":"duration","Notes":"notes"};
   function exportCSV(){
     const hdr=["Name","Guest #","Type","Service","Queue #","Locker","Check-in","Duration","Notes"];
     const out=rows.map(r=>{
@@ -1597,9 +1630,15 @@ function VisitDataTable({records,people}) {
             <table style={{borderCollapse:"collapse",width:"100%",tableLayout:"fixed"}}>
               <thead>
                 <tr>
-                  {["Name","Guest #","Type","Service","Queue #","Locker","Check-in","Duration","Notes"].map(h=>(
-                    <th key={h} style={{...thStyle,...narrowTh(h),...(h==="Service"?serviceTd:{}),...(h==="Name"?{width:170,maxWidth:170}:{})}}>{h}</th>
-                  ))}
+                  {["Name","Guest #","Type","Service","Queue #","Locker","Check-in","Duration","Notes"].map(h=>{
+                    const key=HEADER_KEYS[h];
+                    const active=sortKey===key;
+                    return(
+                      <th key={h} onClick={()=>toggleSort(key)} style={{...thStyle,...narrowTh(h),...(h==="Service"?serviceTd:{}),...(h==="Name"?{width:170,maxWidth:170}:{}),cursor:"pointer",userSelect:"none",color:active?C.tealDark:thStyle.color}}>
+                        {h}{active?(sortDir==="asc"?" ▲":" ▼"):""}
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
