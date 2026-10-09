@@ -47,8 +47,8 @@ const CHART_SERVICES = ["Showers","Laundry","Day Center","Volunteer","Community 
 const CHART_COLORS   = { "Showers":"#46b4bf","Laundry":"#2E8A94","Day Center":"#E6A817","Community Partnership":"#7B61C4","Volunteer":"#3A9C6A","Drop-in":"#E67E22" };
 const GUEST_SERVICES     = ["Day Center","Community Partnership","Drop-in"];
 const FLAG_ALERT_SERVICE = "FLAG_ALERT";
-const LIVE_COLUMNS       = "id,name,type,service,notes,member_id,check_in,check_out,status,status_at,queue_position,locker_used,loads";
-const ANALYTICS_COLUMNS  = "id,name,type,service,check_in,check_out,member_id,queue_position,notes,locker_used,status_at,loads";
+const LIVE_COLUMNS       = "id,name,type,service,notes,member_id,check_in,check_out,status,status_at,queue_position,locker_used,loads,edit_history";
+const ANALYTICS_COLUMNS  = "id,name,type,service,check_in,check_out,member_id,queue_position,notes,locker_used,status_at,loads,edit_history";
 const ANALYTICS_RANGES = [
   { id:"today", label:"Today" }, { id:"7days", label:"7 days" }, { id:"30days", label:"30 days" },
   { id:"month", label:"This month" }, { id:"quarter", label:"This quarter" },
@@ -139,6 +139,9 @@ function isServiceAvailableToday(s) {
   return true;
 }
 function todayISO() { const d=new Date(); d.setHours(0,0,0,0); return d.toISOString(); }
+// Local calendar date (YYYY-MM-DD). toISOString() is UTC, which rolls over to "tomorrow" in the
+// evening here — that made locker_date comparisons fail for late-day checkouts.
+function localDateStr() { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 function initials(name) { return name.trim().split(" ").filter(Boolean).map(w=>w[0].toUpperCase()).slice(0,2).join(""); }
 function fmt(iso) {
   if(!iso)return"";
@@ -1273,6 +1276,28 @@ function GroupNameEditor({name,records,onUpdate}) {
     </div>
   );
 }
+// Small "Edited ▾" link shown only when a check-in/check-out time has actually been changed
+// after the fact — expands to a list of what was edited and when. No staff login exists in
+// this app, so entries record what changed and the timestamp only, not who made the edit.
+// Rendered with <span> (not <div>) throughout so it stays valid nested inside a <p>.
+function EditHistoryToggle({history}) {
+  const [open,setOpen]=useState(false);
+  if(!history||history.length===0)return null;
+  return(
+    <span style={{marginLeft:6,flexBasis:"100%"}}>
+      <button onClick={()=>setOpen(o=>!o)} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:11,color:C.textLight,textDecoration:"underline dotted",fontFamily:"inherit"}}>
+        Edited {open?"▲":"▼"}
+      </button>
+      {open&&(
+        <span style={{display:"block",marginTop:2,fontSize:11,color:C.textMuted}}>
+          {history.slice().reverse().map((h,i)=>(
+            <span key={i} style={{display:"block"}}>{h.field==="check_in"?"Check-in":"Check-out"} edited {fmt(h.at)}</span>
+          ))}
+        </span>
+      )}
+    </span>
+  );
+}
 function PersonServiceTag({r,onCheckOut,onMarkComplete,onDelete,onUpdate,hideWaitingPill}) {
   const [confirmDelete,setConfirmDelete]=useState(null);
   const [editingPos,setEditingPos]=useState(false);
@@ -1298,7 +1323,8 @@ function PersonServiceTag({r,onCheckOut,onMarkComplete,onDelete,onUpdate,hideWai
     if(outTime&&new Date(outTime)<=new Date(inTime)){setTimeMsg({type:"error",text:"Check-out must be after check-in."});return;}
     setSaving(true);
     try{
-      const res=await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({[editingTime]:newVal}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      const history=[...(r.edit_history||[]),{field:editingTime,at:new Date().toISOString()}];
+      const res=await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({[editingTime]:newVal,edit_history:history}),headers:{...HEADERS,"Prefer":"return=minimal"}});
       if(!res.ok)throw new Error();
       setTimeMsg({type:"ok",text:"Saved!"});setEditingTime(null);onUpdate();setTimeout(()=>setTimeMsg(null),2000);
     }catch(_){setTimeMsg({type:"error",text:"Failed to save."});}
@@ -1306,7 +1332,11 @@ function PersonServiceTag({r,onCheckOut,onMarkComplete,onDelete,onUpdate,hideWai
   }
   async function clearTime(){
     setSaving(true);
-    try{const res=await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});if(!res.ok)throw new Error();setEditingTime(null);onUpdate();}catch(_){setTimeMsg({type:"error",text:"Failed to clear."});}
+    try{
+      const history=[...(r.edit_history||[]),{field:"check_out",at:new Date().toISOString()}];
+      const res=await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({check_out:null,edit_history:history}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      if(!res.ok)throw new Error();setEditingTime(null);onUpdate();
+    }catch(_){setTimeMsg({type:"error",text:"Failed to clear."});}
     setSaving(false);
   }
   async function savePos(){
@@ -1368,6 +1398,7 @@ function PersonServiceTag({r,onCheckOut,onMarkComplete,onDelete,onUpdate,hideWai
           <button onClick={()=>{setEditingTime("check_in");setTimeVal(isoToLocalInput(r.check_in));}} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:12,color:C.teal,textDecoration:"underline dotted",fontFamily:"inherit"}}>In: {fmt(r.check_in)}</button>
           {r.check_out&&<><span> · </span><button onClick={()=>{setEditingTime("check_out");setTimeVal(isoToLocalInput(r.check_out));}} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:12,color:C.teal,textDecoration:"underline dotted",fontFamily:"inherit"}}>Out: {fmt(r.check_out)}</button></>}
           {!r.check_out&&<><span> · </span><button onClick={()=>{setEditingTime("check_out");setTimeVal("");}} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:12,color:C.teal,textDecoration:"underline dotted",fontFamily:"inherit"}}>+ set check-out</button></>}
+          <EditHistoryToggle history={r.edit_history}/>
         </p>
       )}
     </div>
@@ -1385,7 +1416,8 @@ function LogRecord({r,av,dur,person,isFlagged,onCheckOut,onDelete,onUpdate}) {
     if(outTime&&new Date(outTime)<=new Date(inTime)){setMsg({type:"error",text:"Check-out must be after check-in."});return;}
     setSaving(true);
     try{
-      const res=await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({[editing]:newVal}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      const history=[...(r.edit_history||[]),{field:editing,at:new Date().toISOString()}];
+      const res=await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({[editing]:newVal,edit_history:history}),headers:{...HEADERS,"Prefer":"return=minimal"}});
       if(!res.ok)throw new Error();
       setMsg({type:"ok",text:"Saved!"});setEditing(null);onUpdate();setTimeout(()=>setMsg(null),2000);
     }catch(_){setMsg({type:"error",text:"Failed to save."});}
@@ -1393,7 +1425,11 @@ function LogRecord({r,av,dur,person,isFlagged,onCheckOut,onDelete,onUpdate}) {
   }
   async function clearOut() {
     setSaving(true);
-    try{const res=await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});if(!res.ok)throw new Error();setEditing(null);onUpdate();}catch(_){setMsg({type:"error",text:"Failed to clear."});}
+    try{
+      const history=[...(r.edit_history||[]),{field:"check_out",at:new Date().toISOString()}];
+      const res=await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({check_out:null,edit_history:history}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      if(!res.ok)throw new Error();setEditing(null);onUpdate();
+    }catch(_){setMsg({type:"error",text:"Failed to clear."});}
     setSaving(false);
   }
   const isShowerLaundry=NO_DURATION_SERVICES.includes(r.service);
@@ -1405,6 +1441,7 @@ function LogRecord({r,av,dur,person,isFlagged,onCheckOut,onDelete,onUpdate}) {
       {!isShowerLaundry&&r.check_out&&(<><span>· Out:</span><button onClick={()=>startEdit("check_out")} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:13,color:"#46b4bf",textDecoration:"underline dotted",fontFamily:"inherit"}}>{fmt(r.check_out)}</button>{dur&&<span>· {dur}</span>}</>)}
       {!isShowerLaundry&&!r.check_out&&<button onClick={()=>startEdit("check_out")} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:13,color:"#46b4bf",textDecoration:"underline dotted",fontFamily:"inherit"}}>+ set check-out</button>}
       {isShowerLaundry&&r.check_out&&<span style={{marginLeft:4,fontSize:13,padding:"2px 10px",borderRadius:20,background:C.successBg,color:C.success,fontWeight:600}}>✓ Completed</span>}
+      <EditHistoryToggle history={r.edit_history}/>
     </p>
   );
   return(
@@ -1913,7 +1950,7 @@ function CheckOutPanel({records,people,loadData}) {
   async function handleCheckOut(r) {
     setChecking(r.id);
     const person=people.find(p=>p.name===r.name);
-    const lockerUsed=person?.locker&&person?.locker_date===new Date().toISOString().slice(0,10)?person.locker:null;
+    const lockerUsed=person?.locker&&person?.locker_date===localDateStr()?person.locker:null;
     await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString(),locker_used:lockerUsed}),headers:{...HEADERS,"Prefer":"return=minimal"}});
     if(person?.locker)await api(`people?id=eq.${person.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
     await loadData();setDone(r.name);setChecking(null);setTimeout(()=>setDone(null),4000);
@@ -2512,11 +2549,24 @@ function AdminApp() {
     }catch(_){setErrors({submit:"Failed to save. Please try again."});}
     setSaving(false);
   }
-  async function markComplete(id){await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData(true);}
+  async function markComplete(id){
+    // Showers/Laundry completion is the main checkout path for locker users, so it has to log
+    // the locker (and free it) the same way checkOut() does.
+    const record=recordsRef.current.find(r=>r.id===id);
+    const person=record?peopleRef.current.find(p=>p.name===record.name):null;
+    const lockerUsed=person?.locker&&person?.locker_date===localDateStr()?person.locker:null;
+    const body={check_out:new Date().toISOString()};
+    if(lockerUsed)body.locker_used=lockerUsed;
+    await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify(body),headers:{...HEADERS,"Prefer":"return=minimal"}});
+    // Keep the locker assigned if they still have another open service (e.g. Laundry after Showers).
+    const stillOpen=record&&recordsRef.current.some(r=>r.id!==id&&r.name===record.name&&!r.check_out&&r.service!==FLAG_ALERT_SERVICE);
+    if(person?.locker&&!stillOpen)await api(`people?id=eq.${person.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+    loadData(true);
+  }
   async function checkOut(id){
     const record=recordsRef.current.find(r=>r.id===id);
     const person=record?peopleRef.current.find(p=>p.name===record.name):null;
-    const lockerUsed=person?.locker&&person?.locker_date===new Date().toISOString().slice(0,10)?person.locker:null;
+    const lockerUsed=person?.locker&&person?.locker_date===localDateStr()?person.locker:null;
     await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString(),locker_used:lockerUsed}),headers:{...HEADERS,"Prefer":"return=minimal"}});
     if(person?.locker)await api(`people?id=eq.${person.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
     loadData(true);
@@ -2729,7 +2779,7 @@ function AdminApp() {
                 <div style={{marginBottom:22}}>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:6,marginBottom:10}}>
                     {Array.from({length:20},(_,i)=>String(i+1)).map(l=>{
-                      const todayStr=new Date().toISOString().slice(0,10);
+                      const todayStr=localDateStr();
                       const occupant=people.find(p=>String(p.locker)===String(l)&&p.locker_date===todayStr&&p.locker!==null);
                       return(
                         <div key={l} style={{border:`1.5px solid ${occupant?"#F0A9A3":"#C0E8EC"}`,borderRadius:10,padding:"6px 8px",background:occupant?"#FFF5F5":"#EAF7F8",textAlign:"center"}}>
@@ -2740,7 +2790,7 @@ function AdminApp() {
                           ):(
                             <select value="" onChange={async e=>{
                               const val=e.target.value;if(!val)return;
-                              const todayStr=new Date().toISOString().slice(0,10);
+                              const todayStr=localDateStr();
                               const taken=peopleRef.current.find(x=>String(x.locker)===String(l)&&x.locker_date===todayStr);
                               if(taken){alert(`Locker ${l} was just taken by ${taken.name}. Pick another.`);loadData(true);return;}
                               const p=people.find(x=>x.name===val);
@@ -2748,7 +2798,7 @@ function AdminApp() {
                               loadData(true);
                             }} style={{...inpStyle,padding:"2px 2px",fontSize:10,height:24,borderColor:C.tealMid}}>
                               <option value="">Assign…</option>
-                              {people.filter(p=>{const todayStr=new Date().toISOString().slice(0,10);return records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE)&&(!p.locker||p.locker_date!==todayStr);}).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+                              {people.filter(p=>{const todayStr=localDateStr();return records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE)&&(!p.locker||p.locker_date!==todayStr);}).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
                             </select>
                           )}
                         </div>
@@ -2757,7 +2807,7 @@ function AdminApp() {
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}}>
                     {["Bin A","Bin B"].map(l=>{
-                      const todayStr=new Date().toISOString().slice(0,10);
+                      const todayStr=localDateStr();
                       const occupant=people.find(p=>p.locker===l&&p.locker_date===todayStr);
                       return(
                         <div key={l} style={{border:`1.5px solid ${occupant?"#F0A9A3":"#C0E8EC"}`,borderRadius:10,padding:"10px 14px",background:occupant?"#FFF5F5":"#EAF7F8"}}>
@@ -2770,7 +2820,7 @@ function AdminApp() {
                           ):(
                             <select value="" onChange={async e=>{
                               const val=e.target.value;if(!val)return;
-                              const todayStr=new Date().toISOString().slice(0,10);
+                              const todayStr=localDateStr();
                               const taken=peopleRef.current.find(x=>x.locker===l&&x.locker_date===todayStr);
                               if(taken){alert(`${l} was just taken by ${taken.name}. Pick another.`);loadData(true);return;}
                               const p=people.find(x=>x.name===val);
@@ -2778,7 +2828,7 @@ function AdminApp() {
                               loadData(true);
                             }} style={{...inpStyle,padding:"4px 8px",fontSize:12,height:30,borderColor:C.tealMid}}>
                               <option value="">Assign…</option>
-                              {people.filter(p=>{const todayStr=new Date().toISOString().slice(0,10);return records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE)&&(!p.locker||p.locker_date!==todayStr);}).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+                              {people.filter(p=>{const todayStr=localDateStr();return records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE)&&(!p.locker||p.locker_date!==todayStr);}).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
                             </select>
                           )}
                         </div>
@@ -2880,7 +2930,17 @@ function Root() {
   if(IS_ADMIN_MODE)return<AdminApp/>;
   if(IS_QUEUE_MODE)return(
     <QueueView records={records} people={people}
-      onMarkComplete={async id=>{await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({check_out:new Date().toISOString()}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();}}
+      onMarkComplete={async id=>{
+        const record=records.find(r=>r.id===id);
+        const person=record?people.find(p=>p.name===record.name):null;
+        const lockerUsed=person?.locker&&person?.locker_date===localDateStr()?person.locker:null;
+        const body={check_out:new Date().toISOString()};
+        if(lockerUsed)body.locker_used=lockerUsed;
+        await api(`checkin_records?id=eq.${id}`,{method:"PATCH",body:JSON.stringify(body),headers:{...HEADERS,"Prefer":"return=minimal"}});
+        const stillOpen=record&&records.some(r=>r.id!==id&&r.name===record.name&&!r.check_out&&r.service!==FLAG_ALERT_SERVICE);
+        if(person?.locker&&!stillOpen)await api(`people?id=eq.${person.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+        loadData();
+      }}
       onCancel={async id=>{await api(`checkin_records?id=eq.${id}`,{method:"DELETE"});loadData();}}
       onLogout={()=>{}} loadData={loadData}
     />
