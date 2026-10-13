@@ -183,15 +183,44 @@ function isoToLocalInput(iso) {
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 function localInputToIso(val) { if(!val)return null; return new Date(val).toISOString(); }
+// Queue numbers hard-reset at 5:00 PM Pacific time (America/Los_Angeles, so it follows
+// daylight saving). Returns today's 5 PM Pacific as an ISO string once that time has passed,
+// otherwise null. Anyone checked in before that moment no longer counts toward numbering.
+function queueResetCutoffISO(){
+  const now=new Date();
+  const parts=new Intl.DateTimeFormat("en-US",{timeZone:"America/Los_Angeles",hour:"numeric",minute:"numeric",second:"numeric",hourCycle:"h23"}).formatToParts(now);
+  const get=t=>parseInt(parts.find(p=>p.type===t).value,10);
+  const h=get("hour"),m=get("minute"),s=get("second");
+  if(h<17)return null;
+  const sinceReset=((h-17)*3600+m*60+s)*1000+now.getMilliseconds();
+  return new Date(now.getTime()-sinceReset).toISOString();
+}
 function nextAvailablePosition(service,records) {
   const cap=CAPPED_SERVICES[service];
-  const todayRecords=records.filter(r=>r.service===service&&r.check_in>=todayISO());
-  const activeRecords=todayRecords.filter(r=>!r.check_out);
-  if(activeRecords.length===0)return 1;
+  const reset=queueResetCutoffISO();
+  const since=reset&&reset>todayISO()?reset:todayISO();
+  const todayRecords=records.filter(r=>r.service===service&&r.check_in>=since);
   const max=todayRecords.reduce((m,r)=>Math.max(m,r.queue_position||0),0);
   const next=max+1;
-  if(cap&&next>cap)return 1;
+  if(cap&&next>cap){
+    // Past the cap: reuse the lowest number nobody active is holding, rather than blindly
+    // restarting at 1 (which could collide with someone still waiting under #1).
+    const inUse=new Set(todayRecords.filter(r=>!r.check_out&&r.queue_position).map(r=>r.queue_position));
+    for(let n=1;n<=cap;n++)if(!inUse.has(n))return n;
+    return next;
+  }
+  // Always max+1 across today's records — previously this restarted at 1 whenever the queue
+  // happened to be empty, handing the same number to different people on the same day.
   return next;
+}
+// Fresh read of today's records for one service, used right before assigning a queue number so
+// two check-ins landing within the 3-second refresh window don't both see the same "next" number.
+async function freshTodayRecords(){
+  try{
+    const res=await api(`checkin_records?select=id,service,queue_position,check_in,check_out&check_in=gte.${todayISO()}`);
+    if(res.ok)return await res.json();
+  }catch(_){}
+  return null;
 }
 const AV_COLORS = [
   {bg:"#C2E8E6",color:"#1D5C5A"},{bg:"#B8DFE8",color:"#1A4A5C"},
@@ -362,7 +391,8 @@ function ManualAddToQueue({svc,people,records,numLabel,onAdd}) {
   function selectPerson(p){setQuery(p.name);setSelected(p);setSuggestions([]);setShowSug(false);setErr(null);}
   async function handleAdd() {
     if(!query.trim()){setErr("Please enter a name.");return;}
-    const pos=customPos!==""?parseInt(customPos,10):nextPos;
+    const livePos=customPos!==""?null:nextAvailablePosition(svc,(await freshTodayRecords())||records);
+    const pos=customPos!==""?parseInt(customPos,10):livePos;
     if(!pos||pos<1){setErr("Please enter a valid position number.");return;}
     setSaving(true);
     try{
@@ -497,6 +527,30 @@ function WaitingButton({r,onComplete,onUpdate}) {
     </>
   );
 }
+// Click the load count to set it to an exact number (fixes an accidental "+7", etc.).
+function LoadsEditor({r,onUpdate}) {
+  const [editing,setEditing]=useState(false);
+  const [val,setVal]=useState("");
+  const [saving,setSaving]=useState(false);
+  const current=r.loads||1;
+  async function save(){
+    const n=parseInt(val,10);
+    if(!n||n<1)return;
+    setSaving(true);
+    try{await api(`checkin_records?id=eq.${r.id}`,{method:"PATCH",body:JSON.stringify({loads:n}),headers:{...HEADERS,"Prefer":"return=minimal"}});setEditing(false);onUpdate&&onUpdate();}catch(_){}
+    setSaving(false);
+  }
+  if(!editing)return(
+    <button onClick={()=>{setVal(String(current));setEditing(true);}} title="Edit number of loads" style={{marginLeft:8,fontSize:13,fontWeight:600,color:C.tealDark,background:C.tealLight,padding:"2px 10px",borderRadius:20,border:"none",cursor:"pointer",fontFamily:"inherit"}}>{current} {current===1?"load":"loads"} ✎</button>
+  );
+  return(
+    <span style={{marginLeft:8,display:"inline-flex",gap:6,alignItems:"center"}}>
+      <input type="number" min="1" value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>e.key==="Enter"&&save()} autoFocus style={{...inpStyle,padding:"4px 8px",fontSize:14,width:70,height:30}}/>
+      <button onClick={save} disabled={saving||!val} style={{...btnPrimary,padding:"4px 12px",fontSize:13,opacity:saving||!val?0.5:1}}>Save</button>
+      <button onClick={()=>setEditing(false)} style={{...btnGhost,fontSize:13,padding:"4px 10px"}}>Cancel</button>
+    </span>
+  );
+}
 function ShowerLaundryPanel({records,people,onMarkComplete,onCancel,onManualAdd}) {
   async function addAnotherLoad(r){
     // Counts toward laundry-load totals in reporting, but stays on this same queue
@@ -540,7 +594,7 @@ function ShowerLaundryPanel({records,people,onMarkComplete,onCancel,onManualAdd}
                   <div style={{width:44,height:44,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:15,flexShrink:0}}>{initials(r.name)||"?"}</div>
                   <div style={{flex:1,minWidth:0}}>
                     <span style={{fontWeight:600,fontSize:16}}>{r.name}</span>
-                    {svc==="Laundry"&&r.loads>1&&<span style={{marginLeft:8,fontSize:13,fontWeight:600,color:C.tealDark,background:C.tealLight,padding:"2px 10px",borderRadius:20}}>{r.loads} loads</span>}
+                    {svc==="Laundry"&&<LoadsEditor r={r} onUpdate={onManualAdd}/>}
                     <AssignQueueNumber r={r} numLabel={numLabel} onUpdate={onManualAdd||onMarkComplete}/>
                   </div>
                   <WaitingButton key={r.id} r={r} onComplete={()=>onMarkComplete(r.id)} onUpdate={onManualAdd||onMarkComplete}/>
@@ -556,7 +610,7 @@ function ShowerLaundryPanel({records,people,onMarkComplete,onCancel,onManualAdd}
                   {done.map(r=>{const av=avColor(r.name);return(
                     <div key={r.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",borderRadius:10,marginBottom:8,opacity:0.65}}>
                       <div style={{width:36,height:36,borderRadius:"50%",background:av.bg,color:av.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,flexShrink:0}}>{initials(r.name)||"?"}</div>
-                      <div style={{flex:1}}><span style={{fontSize:15}}>{r.name}</span><p style={{margin:0,fontSize:13,color:"#5A7070"}}>{numLabel} #{r.queue_position}{svc==="Laundry"&&r.loads>1?` · ${r.loads} loads`:""}</p></div>
+                      <div style={{flex:1}}><span style={{fontSize:15}}>{r.name}</span><p style={{margin:0,fontSize:13,color:"#5A7070"}}>{numLabel} #{r.queue_position}</p>{svc==="Laundry"&&<LoadsEditor r={r} onUpdate={onManualAdd}/>}</div>
                       <span style={{fontSize:13,padding:"3px 10px",borderRadius:20,background:C.successBg,color:C.success,fontWeight:600}}>✓ Done</span>
                       {svc==="Laundry"&&<button onClick={()=>addAnotherLoad(r)} style={{...btnGhost,fontSize:13,padding:"4px 10px",color:C.teal,borderColor:C.tealMid,flexShrink:0,opacity:1,whiteSpace:"nowrap"}}>+1 load</button>}
                     </div>
@@ -2072,11 +2126,12 @@ function PublicApp({records,people,services,loading,dbError,loadData,closedServi
     }else{guestNumber=String(person.guest_number);}
     const now=new Date().toISOString();
     const serviceToUse=form.type==="Volunteer"?"Volunteer":form.service;
-    const position=serviceToUse&&CAPPED_SERVICES[serviceToUse]&&serviceToUse!=="Laundry"?nextAvailablePosition(serviceToUse,records):null;
+    const liveRecs=(await freshTodayRecords())||records;
+    const position=serviceToUse&&CAPPED_SERVICES[serviceToUse]&&serviceToUse!=="Laundry"?nextAvailablePosition(serviceToUse,liveRecs):null;
     const toInsert=[{name,member_id:form.memberId||null,type:form.type,service:serviceToUse,notes:form.notes||null,queue_position:position,check_in:now,check_out:null}];
     const addOns=[];
     if(form.service==="Day Center"){
-      if(form.addShowers&&countToday("Showers")<CAPPED_SERVICES["Showers"]){const p=nextAvailablePosition("Showers",records);toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Showers",notes:form.notes||null,queue_position:p,check_in:now,check_out:null});addOns.push({service:"Showers",position:p});}
+      if(form.addShowers&&countToday("Showers")<CAPPED_SERVICES["Showers"]){const p=nextAvailablePosition("Showers",liveRecs);toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Showers",notes:form.notes||null,queue_position:p,check_in:now,check_out:null});addOns.push({service:"Showers",position:p});}
       if(form.addLaundry&&countToday("Laundry")<CAPPED_SERVICES["Laundry"]){toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Laundry",notes:form.notes||null,queue_position:null,check_in:now,check_out:null});addOns.push({service:"Laundry",position:null});}
     }
     try{
@@ -2429,10 +2484,11 @@ function AdminApp() {
       const[rRes,sRes,pRes]=await Promise.all([
         api(`checkin_records?select=${LIVE_COLUMNS}&check_in=gte.${todayISO()}&order=check_in.desc`),
         api("checkin_services?order=name.asc"),
-        api("people?order=name.asc")
+        apiAllRows("people?order=name.asc,id.asc")
       ]);
-      if(!rRes.ok||!sRes.ok||!pRes.ok)throw new Error();
-      const[rData,sData,pData]=await Promise.all([rRes.json(),sRes.json(),pRes.json()]);
+      if(!rRes.ok||!sRes.ok)throw new Error();
+      const[rData,sData]=await Promise.all([rRes.json(),sRes.json()]);
+      const pData=pRes; // already a full array — apiAllRows pages past Supabase's 1000-row cap
       setRecords(rData);setServices(sData.map(s=>s.name));setPeople(pData);
       const closedMap={};sData.forEach(s=>{if(s.closed)closedMap[s.name]=true;});
       setClosedServices(closedMap);setDbError(null);
@@ -2532,11 +2588,12 @@ function AdminApp() {
       }catch(_){setErrors({submit:"Failed to register guest."});setSaving(false);return;}
     }else{guestNumber=String(person.guest_number);}
     const now=new Date().toISOString();
-    const position=form.service&&CAPPED_SERVICES[form.service]&&form.service!=="Laundry"?nextAvailablePosition(form.service,records):null;
+    const liveRecs=(await freshTodayRecords())||records;
+    const position=form.service&&CAPPED_SERVICES[form.service]&&form.service!=="Laundry"?nextAvailablePosition(form.service,liveRecs):null;
     const toInsert=[{name,member_id:form.memberId||null,type:form.type,service:form.service,notes:form.notes||null,queue_position:position,check_in:now,check_out:null}];
     const addOns=[];
     if(form.service==="Day Center"){
-      if(form.addShowers&&countToday("Showers")<CAPPED_SERVICES["Showers"]){const p=nextAvailablePosition("Showers",records);toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Showers",notes:form.notes||null,queue_position:p,check_in:now,check_out:null});addOns.push({service:"Showers",position:p});}
+      if(form.addShowers&&countToday("Showers")<CAPPED_SERVICES["Showers"]){const p=nextAvailablePosition("Showers",liveRecs);toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Showers",notes:form.notes||null,queue_position:p,check_in:now,check_out:null});addOns.push({service:"Showers",position:p});}
       if(form.addLaundry&&countToday("Laundry")<CAPPED_SERVICES["Laundry"]){toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Laundry",notes:form.notes||null,queue_position:null,check_in:now,check_out:null});addOns.push({service:"Laundry",position:null});}
     }
     try{
@@ -2916,10 +2973,11 @@ function Root() {
       const[rRes,sRes,pRes]=await Promise.all([
         api(`checkin_records?select=${LIVE_COLUMNS}&check_in=gte.${todayISO()}&order=check_in.desc`),
         api("checkin_services?order=name.asc"),
-        api("people?order=name.asc")
+        apiAllRows("people?order=name.asc,id.asc")
       ]);
-      if(!rRes.ok||!sRes.ok||!pRes.ok)throw new Error();
-      const[rData,sData,pData]=await Promise.all([rRes.json(),sRes.json(),pRes.json()]);
+      if(!rRes.ok||!sRes.ok)throw new Error();
+      const[rData,sData]=await Promise.all([rRes.json(),sRes.json()]);
+      const pData=pRes; // already a full array — apiAllRows pages past Supabase's 1000-row cap
       setRecords(rData);setServices(sData.map(s=>s.name));setPeople(pData);
       const closedMap={};sData.forEach(s=>{if(s.closed)closedMap[s.name]=true;});
       setClosedServices(closedMap);setDbError(null);
