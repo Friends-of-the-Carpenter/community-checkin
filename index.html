@@ -30,7 +30,7 @@
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useEffect, useCallback, useRef } = React;
+const { useState, useEffect, useCallback, useRef, useMemo } = React;
 const SUPABASE_URL = "https://bnkdmdcinmbcuueakhug.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJua2RtZGNpbm1iY3V1ZWFraHVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMzQyNTYsImV4cCI6MjA4ODkxMDI1Nn0.UnURxxIweDAYik0UXfZLtdB33q-9DPah2kwUQKL9oVY";
 const HEADERS = { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` };
@@ -138,6 +138,7 @@ function isServiceAvailableToday(s) {
   if(cutoff){ const[h,m]=cutoff.split(":").map(Number),ct=new Date(); ct.setHours(h,m,0,0); if(new Date()>ct)return false; }
   return true;
 }
+function normNameKey(n){ return (n||"").trim().replace(/\s+/g," ").toLowerCase(); }
 function todayISO() { const d=new Date(); d.setHours(0,0,0,0); return d.toISOString(); }
 // Local calendar date (YYYY-MM-DD). toISOString() is UTC, which rolls over to "tomorrow" in the
 // evening here — that made locker_date comparisons fail for late-day checkouts.
@@ -1055,6 +1056,88 @@ function MergePanel({candidates,onCancel,onDone}) {
     </div>
   );
 }
+// Finds visit names that don't match any person (e.g. "David k" typed at the kiosk after the
+// real profile "David Kuni" existed, or a profile that was removed) so staff can move those
+// visits onto the right person, or create the person. Matching ignores case/extra spaces.
+function OrphanVisitsPanel({people,onUpdate}) {
+  const [orphans,setOrphans]=useState(null);
+  const [loading,setLoading]=useState(false);
+  const [err,setErr]=useState(null);
+  const [picks,setPicks]=useState({});
+  const [busy,setBusy]=useState(null);
+  const norm=n=>(n||"").trim().replace(/\s+/g," ").toLowerCase();
+  function suggest(name){
+    const o=norm(name);if(!o)return null;
+    const c=people.filter(p=>{const n=norm(p.name);return n!==o&&(n.startsWith(o)||o.startsWith(n)||(Math.max(n.length,o.length)>=5&&levenshtein(n,o)<=2));});
+    return c.length===1?c[0].name:null;
+  }
+  async function scan(){
+    setLoading(true);setErr(null);
+    try{
+      const rows=await apiAllRows(`checkin_records?select=name&service=neq.${FLAG_ALERT_SERVICE}&order=id.asc`);
+      const known=new Set(people.map(p=>norm(p.name)));
+      const counts={};
+      rows.forEach(r=>{if(r.name&&!known.has(norm(r.name)))counts[r.name]=(counts[r.name]||0)+1;});
+      const list=Object.entries(counts).map(([name,count])=>({name,count})).sort((a,b)=>b.count-a.count);
+      const init={};list.forEach(o=>{const sg=suggest(o.name);if(sg)init[o.name]=sg;});
+      setPicks(init);setOrphans(list);
+    }catch(e){setErr("Could not load visits. Try again.");}
+    setLoading(false);
+  }
+  const byNorm={};people.forEach(p=>{byNorm[norm(p.name)]=p;});
+  async function moveVisits(o){
+    const target=byNorm[norm(picks[o.name])];
+    if(!target)return;
+    setBusy(o.name);
+    try{
+      const res=await api(`checkin_records?name=eq.${encodeURIComponent(o.name)}`,{method:"PATCH",body:JSON.stringify({name:target.name}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      if(!res.ok)throw new Error();
+      setOrphans(l=>l.filter(x=>x.name!==o.name));onUpdate();
+    }catch(_){setErr(`Failed to move visits for "${o.name}".`);}
+    setBusy(null);
+  }
+  async function createPerson(o){
+    setBusy(o.name);
+    try{
+      const res=await api("people",{method:"POST",body:JSON.stringify({name:o.name.trim()}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+      if(!res.ok)throw new Error();
+      setOrphans(l=>l.filter(x=>x.name!==o.name));onUpdate();
+    }catch(_){setErr(`Failed to create "${o.name}".`);}
+    setBusy(null);
+  }
+  return(
+    <div>
+      <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Unmatched visit names</p>
+      <p style={{margin:"0 0 14px",fontSize:13,color:C.textMuted}}>Visits saved under a name that isn't a person in the system — these show a blank Guest #. Move them to the right person, or create the person.</p>
+      <button onClick={scan} disabled={loading} style={{...btnGhost,fontSize:13,padding:"7px 16px",color:C.teal,borderColor:C.tealMid,opacity:loading?0.5:1}}>{loading?"Scanning all visits…":orphans?"Rescan":"Find unmatched visit names"}</button>
+      {err&&<p style={{margin:"10px 0 0",fontSize:13,color:C.danger}}>⚠ {err}</p>}
+      {orphans&&(
+        <div style={{marginTop:14}}>
+          <datalist id="orphan-people-list">{people.map(p=><option key={p.id} value={p.name}/>)}</datalist>
+          {orphans.length===0&&<p style={{fontSize:14,color:C.tealDark}}>✓ Every visit matches a person.</p>}
+          {orphans.length>0&&<p style={{margin:"0 0 10px",fontSize:13,color:C.textMuted}}>{orphans.length} unmatched name{orphans.length===1?"":"s"}. Suggested matches are pre-filled — double-check before moving.</p>}
+          <div style={{maxHeight:480,overflowY:"auto"}}>
+            {orphans.map(o=>{
+              const ok=!!byNorm[norm(picks[o.name])];
+              return(
+                <div key={o.name} style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 0",borderTop:`1px solid ${C.border}`}}>
+                  <div style={{minWidth:150,flex:"0 0 auto"}}>
+                    <span style={{fontWeight:600,fontSize:14}}>{o.name}</span>
+                    <span style={{fontSize:12,color:C.textMuted}}> · {o.count} visit{o.count===1?"":"s"}</span>
+                  </div>
+                  <span style={{color:C.textMuted}}>→</span>
+                  <input list="orphan-people-list" placeholder="Type to find the right person…" value={picks[o.name]||""} onChange={e=>setPicks(p=>({...p,[o.name]:e.target.value}))} style={{...inpStyle,flex:1,minWidth:180,padding:"6px 10px",fontSize:14}}/>
+                  <button onClick={()=>moveVisits(o)} disabled={!ok||busy===o.name} style={{...btnPrimary,fontSize:13,padding:"7px 14px",opacity:!ok||busy===o.name?0.4:1}}>Move visits</button>
+                  <button onClick={()=>createPerson(o)} disabled={busy===o.name} style={{...btnGhost,fontSize:13,padding:"7px 14px",opacity:busy===o.name?0.4:1}}>Create person</button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 function PeopleRemover({people,onRemove,onFlag,onUpdate}) {
   const [query,setQuery]=useState("");
   const [filter,setFilter]=useState("all");
@@ -1582,6 +1665,11 @@ function VisitDataTable({records,people}) {
   const [allRecords,setAllRecords]=useState(null);
   const [loadingAll,setLoadingAll]=useState(false);
   const [query,setQuery]=useState("");
+  // Match visits to people forgivingly (case/extra spaces), so a stray space or capital letter
+  // in an old visit's name doesn't leave the Guest # blank.
+  const normName=n=>(n||"").trim().replace(/\s+/g," ").toLowerCase();
+  const peopleByName=useMemo(()=>{const m={};people.forEach(p=>{const k=normName(p.name);if(!(k in m))m[k]=p;});return m;},[people]);
+  function findPerson(name){return peopleByName[normName(name)];}
   const [sortKey,setSortKey]=useState("check_in");
   const [sortDir,setSortDir]=useState("desc");
   function toggleSort(key){
@@ -1643,7 +1731,7 @@ function VisitDataTable({records,people}) {
   function sortValue(r,key){
     switch(key){
       case "name": return (r.name||"").toLowerCase();
-      case "guest_number": {const p=people.find(x=>x.name===r.name);const n=p?Number(p.guest_number):NaN;return isNaN(n)?-Infinity:n;}
+      case "guest_number": {const p=findPerson(r.name);const n=p?Number(p.guest_number):NaN;return isNaN(n)?-Infinity:n;}
       case "type": return (r.type||"").toLowerCase();
       case "service": return (r.service||"").toLowerCase();
       case "queue_position": return r.queue_position==null?-Infinity:r.queue_position;
@@ -1663,7 +1751,7 @@ function VisitDataTable({records,people}) {
   function exportCSV(){
     const hdr=["Name","Guest #","Type","Service","Queue #","Locker","Check-in","Duration","Notes"];
     const out=rows.map(r=>{
-      const p=people.find(x=>x.name===r.name);
+      const p=findPerson(r.name);
       return[r.name,p?p.guest_number:"",r.type,r.service,r.queue_position||"",r.locker_used||"",fmt(r.check_in),csvDuration(r),(r.notes||"").replace(/,/g," ")];
     });
     const csv=[hdr,...out].map(rr=>rr.map(v=>`"${csvSafe(v)}"`).join(",")).join("\n");
@@ -1737,7 +1825,7 @@ function VisitDataTable({records,people}) {
                   <tr><td colSpan={9} style={{...tdStyle,textAlign:"center",color:C.textMuted,padding:"20px 0"}}>No visits found.</td></tr>
                 )}
                 {rows.map(r=>{
-                  const p=people.find(x=>x.name===r.name);
+                  const p=findPerson(r.name);
                   const ci=fmtCompact(r.check_in);
                   return(
                     <tr key={r.id} style={{borderBottom:`1px solid ${C.border}`}}>
@@ -1835,6 +1923,10 @@ function AnalyticsTab({records,people}) {
   });
   const guestNames=[...new Set(filtered.filter(r=>GUEST_SERVICES.includes(r.service)).map(r=>r.name))];
   const guestTotal=guestNames.length;
+  const dcRecs=filtered.filter(r=>r.service==="Day Center");
+  const dcVisits=dcRecs.length;
+  const dcUnique=new Set(dcRecs.map(r=>normNameKey(r.name))).size;
+  const uniqueFor=svc=>new Set(filtered.filter(r=>r.service===svc).map(r=>normNameKey(r.name))).size;
   const volUnique=new Set(filtered.filter(r=>r.service==="Volunteer").map(r=>r.name)).size;
   const demoNames=demoService==="all"?guestNames:[...new Set(filtered.filter(r=>r.service===demoService).map(r=>r.name))];
   const genderData=demographicCounts(demoNames,people,"gender");
@@ -1894,10 +1986,19 @@ function AnalyticsTab({records,people}) {
               <p style={{margin:0,fontSize:34,fontWeight:700,color:CHART_COLORS["Day Center"]}}>{guestTotal}</p>
               <p style={{margin:"6px 0 0",fontSize:14,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.04em",lineHeight:1.3}}>Guests</p>
             </div>
+            <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:"18px 16px",textAlign:"center"}}>
+              <p style={{margin:0,fontSize:34,fontWeight:700,color:CHART_COLORS["Day Center"]}}>{dcVisits}</p>
+              <p style={{margin:"6px 0 0",fontSize:14,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.04em",lineHeight:1.3}}>Day Center Visits</p>
+            </div>
+            <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:"18px 16px",textAlign:"center"}}>
+              <p style={{margin:0,fontSize:34,fontWeight:700,color:CHART_COLORS["Day Center"]}}>{dcUnique}</p>
+              <p style={{margin:"6px 0 0",fontSize:14,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.04em",lineHeight:1.3}}>Day Center Unique Guests</p>
+            </div>
             {["Showers","Laundry"].map(s=>(
               <div key={s} style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:"18px 16px",textAlign:"center"}}>
                 <p style={{margin:0,fontSize:34,fontWeight:700,color:CHART_COLORS[s]}}>{totals[s]||0}</p>
-                <p style={{margin:"6px 0 0",fontSize:14,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.04em",wordBreak:"break-word",lineHeight:1.3}}>{s}</p>
+                <p style={{margin:"6px 0 0",fontSize:14,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.04em",wordBreak:"break-word",lineHeight:1.3}}>{s==="Laundry"?"Loads of Laundry":s}</p>
+                <p style={{margin:"6px 0 0",fontSize:13,color:C.tealDark,fontWeight:600}}>{uniqueFor(s)} unique guest{uniqueFor(s)===1?"":"s"}</p>
               </div>
             ))}
             <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:"18px 16px",textAlign:"center"}}>
@@ -2107,7 +2208,11 @@ function PublicApp({records,people,services,loading,dbError,loadData,closedServi
     const e=validate();if(Object.keys(e).length){setErrors(e);return;}
     let name=form.name.trim(),gNum=form.guestNumber.trim();
     if(!name&&gNum){const match=people.find(p=>String(p.guest_number)===gNum);if(!match){setErrors({name:"Guest number not found."});return;}name=match.name;}
-    const person=people.find(p=>p.name.toLowerCase()===name.toLowerCase());
+    // Match ignoring case/extra spaces, then save the visit under the profile's own spelling —
+    // otherwise "john smith" typed at check-in gets stored as typed and no longer lines up with
+    // the profile "John Smith" (blank Guest # in Visit Data, missing from Last Visit Search).
+    const person=people.find(p=>normNameKey(p.name)===normNameKey(name));
+    if(person)name=person.name;
     if(person?.flagged){
       setFlagAlert(person);
       await api("checkin_records",{method:"POST",body:JSON.stringify({name,type:"Guest",service:FLAG_ALERT_SERVICE,notes:person.flag_reason||null,check_in:new Date().toISOString(),check_out:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});
@@ -2576,7 +2681,11 @@ function AdminApp() {
     const e=validate();if(Object.keys(e).length){setErrors(e);return;}
     let name=form.name.trim(),gNum=form.guestNumber.trim();
     if(!name&&gNum){const match=people.find(p=>String(p.guest_number)===gNum);if(!match){setErrors({name:"Guest number not found."});return;}name=match.name;}
-    const person=people.find(p=>p.name.toLowerCase()===name.toLowerCase());
+    // Match ignoring case/extra spaces, then save the visit under the profile's own spelling —
+    // otherwise "john smith" typed at check-in gets stored as typed and no longer lines up with
+    // the profile "John Smith" (blank Guest # in Visit Data, missing from Last Visit Search).
+    const person=people.find(p=>normNameKey(p.name)===normNameKey(name));
+    if(person)name=person.name;
     if(person?.flagged){setFlagAlert(person);return;}
     setSaving(true);
     let guestNumber=gNum;
@@ -2919,6 +3028,9 @@ function AdminApp() {
                   </div>
                   <div style={{borderBottom:"1px solid #D0E6E5",paddingBottom:20,marginBottom:20}}>
                     <PeopleRemover people={people} onRemove={async p=>{await api(`people?id=eq.${p.id}`,{method:"DELETE"});loadData();}} onFlag={flagPerson} onUpdate={loadData}/>
+                  </div>
+                  <div style={{borderBottom:"1px solid #D0E6E5",paddingBottom:20,marginBottom:20}}>
+                    <OrphanVisitsPanel people={people} onUpdate={loadData}/>
                   </div>
                   <div style={{borderBottom:"1px solid #D0E6E5",paddingBottom:20,marginBottom:20}}>
                     <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Service types</p>
