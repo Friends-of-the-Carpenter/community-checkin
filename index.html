@@ -1066,9 +1066,14 @@ function OrphanVisitsPanel({people,onUpdate}) {
   const [picks,setPicks]=useState({});
   const [busy,setBusy]=useState(null);
   const norm=n=>(n||"").trim().replace(/\s+/g," ").toLowerCase();
+  function candidatesFor(name){
+    const o=norm(name);if(!o)return [];
+    return people.filter(p=>{const n=norm(p.name);return n!==o&&(n.startsWith(o)||o.startsWith(n)||(Math.max(n.length,o.length)>=5&&levenshtein(n,o)<=2));});
+  }
+  // Oldest profile = lowest id (ids are assigned in creation order).
+  function oldestOf(list){return list.slice().sort((a,b)=>a.id-b.id)[0];}
   function suggest(name){
-    const o=norm(name);if(!o)return null;
-    const c=people.filter(p=>{const n=norm(p.name);return n!==o&&(n.startsWith(o)||o.startsWith(n)||(Math.max(n.length,o.length)>=5&&levenshtein(n,o)<=2));});
+    const c=candidatesFor(name);
     return c.length===1?c[0].name:null;
   }
   async function scan(){
@@ -1085,8 +1090,8 @@ function OrphanVisitsPanel({people,onUpdate}) {
     setLoading(false);
   }
   const byNorm={};people.forEach(p=>{byNorm[norm(p.name)]=p;});
-  async function moveVisits(o){
-    const target=byNorm[norm(picks[o.name])];
+  async function moveVisits(o,forcedTarget){
+    const target=forcedTarget||byNorm[norm(picks[o.name])];
     if(!target)return;
     setBusy(o.name);
     try{
@@ -1119,6 +1124,8 @@ function OrphanVisitsPanel({people,onUpdate}) {
           <div style={{maxHeight:480,overflowY:"auto"}}>
             {orphans.map(o=>{
               const ok=!!byNorm[norm(picks[o.name])];
+              const cands=candidatesFor(o.name);
+              const oldest=cands.length>1?oldestOf(cands):null;
               return(
                 <div key={o.name} style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 0",borderTop:`1px solid ${C.border}`}}>
                   <div style={{minWidth:150,flex:"0 0 auto"}}>
@@ -1127,6 +1134,7 @@ function OrphanVisitsPanel({people,onUpdate}) {
                   </div>
                   <span style={{color:C.textMuted}}>→</span>
                   <input list="orphan-people-list" placeholder="Type to find the right person…" value={picks[o.name]||""} onChange={e=>setPicks(p=>({...p,[o.name]:e.target.value}))} style={{...inpStyle,flex:1,minWidth:180,padding:"6px 10px",fontSize:14}}/>
+                  {oldest&&<button onClick={()=>{if(window.confirm(`Move ${o.count} visit${o.count===1?"":"s"} from "${o.name}" to the oldest matching profile: ${oldest.name} (Guest #${oldest.guest_number})?\n\nOther matches: ${cands.filter(c=>c.id!==oldest.id).map(c=>c.name).join(", ")}`))moveVisits(o,oldest);}} disabled={busy===o.name} title={`${cands.length} possible matches: ${cands.map(c=>c.name).join(", ")}`} style={{...btnOutline,fontSize:13,padding:"7px 14px",opacity:busy===o.name?0.4:1}}>Move to oldest ({oldest.name})</button>}
                   <button onClick={()=>moveVisits(o)} disabled={!ok||busy===o.name} style={{...btnPrimary,fontSize:13,padding:"7px 14px",opacity:!ok||busy===o.name?0.4:1}}>Move visits</button>
                   <button onClick={()=>createPerson(o)} disabled={busy===o.name} style={{...btnGhost,fontSize:13,padding:"7px 14px",opacity:busy===o.name?0.4:1}}>Create person</button>
                 </div>
@@ -1858,6 +1866,21 @@ function AnalyticsTab({records,people}) {
   const [allRecords,setAllRecords]=useState(null);
   const [loadingAll,setLoadingAll]=useState(false);
   const [demoService,setDemoService]=useState("all");
+  // First-ever visit date per person per service (all history), used to work out who is *new*
+  // to Day Center / Showers / Laundry in the selected range. Loaded once, on demand.
+  const [firstVisits,setFirstVisits]=useState(null);
+  useEffect(()=>{
+    let cancelled=false;
+    const svcList=encodeURIComponent('("Day Center","Showers","Laundry")');
+    apiAllRows(`checkin_records?select=name,service,check_in&service=in.${svcList}&order=check_in.asc`)
+      .then(rows=>{
+        if(cancelled)return;
+        const m={"Day Center":{},"Showers":{},"Laundry":{}};
+        rows.forEach(r=>{const k=normNameKey(r.name);if(m[r.service]&&!(k in m[r.service]))m[r.service][k]=r.check_in;});
+        setFirstVisits(m);
+      }).catch(()=>{});
+    return()=>{cancelled=true;};
+  },[]);
   useEffect(()=>{
     if(!range||range==="today"){setAllRecords(null);return;}
     if(range==="custom"){setAllRecords(null);return;}
@@ -1926,7 +1949,32 @@ function AnalyticsTab({records,people}) {
   const dcRecs=filtered.filter(r=>r.service==="Day Center");
   const dcVisits=dcRecs.length;
   const dcUnique=new Set(dcRecs.map(r=>normNameKey(r.name))).size;
+  // Start of the selected range, for deciding whether someone's first-ever visit falls inside it.
+  function rangeStartDate(){
+    const now=new Date();let c;
+    if(range==="custom")c=customStart?new Date(customStart+"T00:00:00"):new Date(0);
+    else if(range==="today"){c=new Date(now);}
+    else if(range==="7days"){c=new Date(now);c.setDate(c.getDate()-6);}
+    else if(range==="30days"){c=new Date(now);c.setDate(c.getDate()-29);}
+    else if(range==="month")c=new Date(now.getFullYear(),now.getMonth(),1);
+    else if(range==="quarter"){const q=Math.floor(now.getMonth()/3);c=new Date(now.getFullYear(),q*3,1);}
+    else if(range==="year")c=new Date(now.getFullYear(),0,1);
+    else c=new Date(0);
+    if(range!=="custom"&&range!=="all")c.setHours(0,0,0,0);
+    return c;
+  }
+  const newGuestCount=svc=>{
+    if(!firstVisits)return null;
+    const startISO=rangeStartDate().toISOString();
+    const names=new Set(filtered.filter(r=>r.service===svc).map(r=>normNameKey(r.name)));
+    let n=0;names.forEach(k=>{const f=firstVisits[svc][k];if(f&&f>=startISO)n++;});
+    return n;
+  };
   const uniqueFor=svc=>new Set(filtered.filter(r=>r.service===svc).map(r=>normNameKey(r.name))).size;
+  const showerNames=new Set(filtered.filter(r=>r.service==="Showers").map(r=>normNameKey(r.name)));
+  const laundryNames=new Set(filtered.filter(r=>r.service==="Laundry").map(r=>normNameKey(r.name)));
+  const slUnion=new Set([...showerNames,...laundryNames]).size;
+  const slBoth=[...showerNames].filter(n=>laundryNames.has(n)).length;
   const volUnique=new Set(filtered.filter(r=>r.service==="Volunteer").map(r=>r.name)).size;
   const demoNames=demoService==="all"?guestNames:[...new Set(filtered.filter(r=>r.service===demoService).map(r=>r.name))];
   const genderData=demographicCounts(demoNames,people,"gender");
@@ -2001,6 +2049,22 @@ function AnalyticsTab({records,people}) {
                 <p style={{margin:"6px 0 0",fontSize:13,color:C.tealDark,fontWeight:600}}>{uniqueFor(s)} unique guest{uniqueFor(s)===1?"":"s"}</p>
               </div>
             ))}
+            <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:"18px 16px",textAlign:"center"}}>
+              <p style={{margin:0,fontSize:34,fontWeight:700,color:CHART_COLORS["Showers"]}}>{slUnion}</p>
+              <p style={{margin:"6px 0 0",fontSize:14,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.04em",lineHeight:1.3}}>Showers + Laundry Unique Guests</p>
+              <p style={{margin:"6px 0 0",fontSize:13,color:C.tealDark,fontWeight:600}}>{slBoth} used both</p>
+            </div>
+            <div style={{gridColumn:"1 / -1",background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:"18px 16px",textAlign:"center"}}>
+              <p style={{margin:"0 0 12px",fontSize:14,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.04em"}}>New Guests <span style={{textTransform:"none",letterSpacing:0,fontSize:13}}>(first-ever visit to that service falls in this range)</span></p>
+              <div style={{display:"flex",justifyContent:"space-around",flexWrap:"wrap",gap:12}}>
+                {[["Day Center","Day Center"],["Showers","Showers"],["Laundry","Laundry"]].map(([svc,label])=>{const n=newGuestCount(svc);return(
+                  <div key={svc}>
+                    <p style={{margin:0,fontSize:34,fontWeight:700,color:CHART_COLORS[svc]}}>{n===null?"…":n}</p>
+                    <p style={{margin:"4px 0 0",fontSize:14,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.04em"}}>New {label}</p>
+                  </div>
+                );})}
+              </div>
+            </div>
             <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:"18px 16px",textAlign:"center"}}>
               <p style={{margin:0,fontSize:34,fontWeight:700,color:CHART_COLORS["Volunteer"]}}>{volUnique}</p>
               <p style={{margin:"6px 0 0",fontSize:14,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.04em",wordBreak:"break-word",lineHeight:1.3}}>Volunteers</p>
