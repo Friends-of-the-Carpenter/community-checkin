@@ -1872,8 +1872,8 @@ function AnalyticsTab({records,people}) {
   const [growthBy,setGrowthBy]=useState("month");
   useEffect(()=>{
     let cancelled=false;
-    // All guest-facing history (everything except Volunteer and flag alerts), oldest first.
-    apiAllRows(`checkin_records?select=name,service,check_in&service=neq.${FLAG_ALERT_SERVICE}&service=neq.Volunteer&order=check_in.asc`)
+    // Day Center, Showers and Laundry history only, oldest first.
+    apiAllRows(`checkin_records?select=name,service,check_in&service=in.${encodeURIComponent('("Day Center","Showers","Laundry")')}&order=check_in.asc`)
       .then(rows=>{
         if(cancelled)return;
         const bySvc={},any={};
@@ -1976,10 +1976,11 @@ function AnalyticsTab({records,people}) {
     let n=0;names.forEach(k=>{const f=(firstVisits.bySvc[svc]||{})[k];if(f&&f>=startISO)n++;});
     return n;
   };
-  // Growth: people whose first-ever visit (any guest service) falls in each week/month/year
-  // bucket of the selected range.
+  // Growth: people whose first-ever Day Center/Showers/Laundry visit falls in each week/month/year
+  // bucket of the selected range (Day Center, Showers and Laundry only).
   const growth=(()=>{
     if(!firstVisits)return null;
+    if(range==="custom"&&(!customStart||!customEnd))return{needDates:true,rows:[],total:0};
     const firsts=Object.values(firstVisits.any).map(f=>new Date(f));
     if(firsts.length===0)return{rows:[],total:0};
     const now=new Date();
@@ -2105,7 +2106,7 @@ function AnalyticsTab({records,people}) {
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10,marginBottom:8}}>
                 <div>
                   <p style={{margin:0,fontSize:14,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.04em",fontWeight:600}}>Growth — new guests</p>
-                  <p style={{margin:"2px 0 0",fontSize:13,color:C.textMuted}}>People whose first-ever visit (any guest service) falls in this range.</p>
+                  <p style={{margin:"2px 0 0",fontSize:13,color:C.textMuted}}>People whose first-ever Day Center, Showers or Laundry visit falls in this range.</p>
                 </div>
                 <div style={{display:"flex",gap:6}}>
                   {[["week","Weekly"],["month","Monthly"],["year","Yearly"]].map(([id,l])=>(
@@ -2113,7 +2114,7 @@ function AnalyticsTab({records,people}) {
                   ))}
                 </div>
               </div>
-              {growth===null?<p style={{textAlign:"center",color:C.textMuted,fontSize:14,padding:"12px 0"}}>Loading history…</p>:(
+              {growth===null?<p style={{textAlign:"center",color:C.textMuted,fontSize:14,padding:"12px 0"}}>Loading history…</p>:growth.needDates?<p style={{textAlign:"center",color:C.textMuted,fontSize:14,padding:"12px 0"}}>Choose a From and To date above to see growth for a custom range.</p>:(
                 <>
                   <p style={{margin:"0 0 12px",textAlign:"center",fontSize:15,color:C.text}}><span style={{fontSize:34,fontWeight:700,color:C.tealDark}}>{growth.total}</span> new guest{growth.total===1?"":"s"} in this range{growth.rows.length>1?` · avg ${(growth.total/growth.rows.length).toFixed(1)} per ${growthBy}`:""}</p>
                   <SimpleBarChart data={growth.rows} keys={["New guests"]} colors={{"New guests":C.teal}}/>
