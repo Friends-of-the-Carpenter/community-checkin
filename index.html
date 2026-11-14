@@ -1869,15 +1869,21 @@ function AnalyticsTab({records,people}) {
   // First-ever visit date per person per service (all history), used to work out who is *new*
   // to Day Center / Showers / Laundry in the selected range. Loaded once, on demand.
   const [firstVisits,setFirstVisits]=useState(null);
+  const [growthBy,setGrowthBy]=useState("month");
   useEffect(()=>{
     let cancelled=false;
-    const svcList=encodeURIComponent('("Day Center","Showers","Laundry")');
-    apiAllRows(`checkin_records?select=name,service,check_in&service=in.${svcList}&order=check_in.asc`)
+    // All guest-facing history (everything except Volunteer and flag alerts), oldest first.
+    apiAllRows(`checkin_records?select=name,service,check_in&service=neq.${FLAG_ALERT_SERVICE}&service=neq.Volunteer&order=check_in.asc`)
       .then(rows=>{
         if(cancelled)return;
-        const m={"Day Center":{},"Showers":{},"Laundry":{}};
-        rows.forEach(r=>{const k=normNameKey(r.name);if(m[r.service]&&!(k in m[r.service]))m[r.service][k]=r.check_in;});
-        setFirstVisits(m);
+        const bySvc={},any={};
+        rows.forEach(r=>{
+          const k=normNameKey(r.name);
+          if(!bySvc[r.service])bySvc[r.service]={};
+          if(!(k in bySvc[r.service]))bySvc[r.service][k]=r.check_in;
+          if(!(k in any))any[k]=r.check_in;
+        });
+        setFirstVisits({bySvc,any});
       }).catch(()=>{});
     return()=>{cancelled=true;};
   },[]);
@@ -1967,9 +1973,39 @@ function AnalyticsTab({records,people}) {
     if(!firstVisits)return null;
     const startISO=rangeStartDate().toISOString();
     const names=new Set(filtered.filter(r=>r.service===svc).map(r=>normNameKey(r.name)));
-    let n=0;names.forEach(k=>{const f=firstVisits[svc][k];if(f&&f>=startISO)n++;});
+    let n=0;names.forEach(k=>{const f=(firstVisits.bySvc[svc]||{})[k];if(f&&f>=startISO)n++;});
     return n;
   };
+  // Growth: people whose first-ever visit (any guest service) falls in each week/month/year
+  // bucket of the selected range.
+  const growth=(()=>{
+    if(!firstVisits)return null;
+    const firsts=Object.values(firstVisits.any).map(f=>new Date(f));
+    if(firsts.length===0)return{rows:[],total:0};
+    const now=new Date();
+    let lo=range==="all"?new Date(Math.min(...firsts)):rangeStartDate();
+    let hi=range==="custom"&&customEnd?new Date(customEnd+"T23:59:59"):now;
+    const bucketStart=d=>{
+      const x=new Date(d);x.setHours(0,0,0,0);
+      if(growthBy==="week"){const dow=(x.getDay()+6)%7;x.setDate(x.getDate()-dow);}
+      else if(growthBy==="month"){x.setDate(1);}
+      else{x.setMonth(0,1);}
+      return x;
+    };
+    const next=d=>{const x=new Date(d);if(growthBy==="week")x.setDate(x.getDate()+7);else if(growthBy==="month")x.setMonth(x.getMonth()+1);else x.setFullYear(x.getFullYear()+1);return x;};
+    const label=d=>growthBy==="week"?`Wk ${d.getMonth()+1}/${d.getDate()}`:growthBy==="month"?d.toLocaleDateString("en-US",{month:"short",year:"2-digit"}):String(d.getFullYear());
+    const map={};
+    let cur=bucketStart(lo);const end=hi.getTime();
+    const keys=[];
+    while(cur.getTime()<=end&&keys.length<600){map[cur.getTime()]={date:label(cur),"New guests":0};keys.push(cur.getTime());cur=next(cur);}
+    let total=0;
+    firsts.forEach(f=>{
+      if(f<lo||f>hi)return;
+      const b=bucketStart(f).getTime();
+      if(map[b]){map[b]["New guests"]++;total++;}
+    });
+    return{rows:keys.map(k=>map[k]),total};
+  })();
   const uniqueFor=svc=>new Set(filtered.filter(r=>r.service===svc).map(r=>normNameKey(r.name))).size;
   const showerNames=new Set(filtered.filter(r=>r.service==="Showers").map(r=>normNameKey(r.name)));
   const laundryNames=new Set(filtered.filter(r=>r.service==="Laundry").map(r=>normNameKey(r.name)));
@@ -2064,6 +2100,25 @@ function AnalyticsTab({records,people}) {
                   </div>
                 );})}
               </div>
+            </div>
+            <div style={{gridColumn:"1 / -1",background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:"18px 16px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10,marginBottom:8}}>
+                <div>
+                  <p style={{margin:0,fontSize:14,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.04em",fontWeight:600}}>Growth — new guests</p>
+                  <p style={{margin:"2px 0 0",fontSize:13,color:C.textMuted}}>People whose first-ever visit (any guest service) falls in this range.</p>
+                </div>
+                <div style={{display:"flex",gap:6}}>
+                  {[["week","Weekly"],["month","Monthly"],["year","Yearly"]].map(([id,l])=>(
+                    <button key={id} onClick={()=>setGrowthBy(id)} style={{fontSize:13,fontWeight:600,padding:"6px 14px",borderRadius:20,border:"1.5px solid",borderColor:growthBy===id?C.teal:C.border,background:growthBy===id?C.teal:"#fff",color:growthBy===id?"#fff":C.textMuted,cursor:"pointer"}}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              {growth===null?<p style={{textAlign:"center",color:C.textMuted,fontSize:14,padding:"12px 0"}}>Loading history…</p>:(
+                <>
+                  <p style={{margin:"0 0 12px",textAlign:"center",fontSize:15,color:C.text}}><span style={{fontSize:34,fontWeight:700,color:C.tealDark}}>{growth.total}</span> new guest{growth.total===1?"":"s"} in this range{growth.rows.length>1?` · avg ${(growth.total/growth.rows.length).toFixed(1)} per ${growthBy}`:""}</p>
+                  <SimpleBarChart data={growth.rows} keys={["New guests"]} colors={{"New guests":C.teal}}/>
+                </>
+              )}
             </div>
             <div style={{background:"#fff",border:"1.5px solid #D0E6E5",borderRadius:12,padding:"18px 16px",textAlign:"center"}}>
               <p style={{margin:0,fontSize:34,fontWeight:700,color:CHART_COLORS["Volunteer"]}}>{volUnique}</p>
