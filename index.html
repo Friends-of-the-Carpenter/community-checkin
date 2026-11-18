@@ -131,7 +131,11 @@ async function apiAllRows(path) {
   return all;
 }
 // ── UTILS ──
+// Services staff have opened for today only (an "extra day" outside the usual schedule). Filled in
+// by loadData from checkin_services.open_date; an override skips both the weekday and cutoff checks.
+let EXTRA_OPEN = {};
 function isServiceAvailableToday(s) {
+  if(EXTRA_OPEN[s])return true;
   const days=CAPPED_SERVICES_DAYS[s]; if(!days)return true;
   if(!days.includes(new Date().getDay()))return false;
   const cutoff=CAPPED_SERVICES_CUTOFF[s];
@@ -2399,7 +2403,7 @@ function PublicApp({records,people,services,loading,dbError,loadData,closedServi
             ))}
           </div>
         )}
-        {Object.values(CAPPED_SERVICES_DAYS)[0].includes(new Date().getDay())&&(
+        {(Object.values(CAPPED_SERVICES_DAYS)[0].includes(new Date().getDay())||Object.keys(CAPPED_SERVICES).some(k=>EXTRA_OPEN[k]))&&(
           <div style={{marginBottom:28}}>
             <div style={{display:"flex",gap:14}}>
               {Object.entries(CAPPED_SERVICES).map(([svc,cap])=>{
@@ -2721,7 +2725,7 @@ function AdminApp() {
       const[rData,sData]=await Promise.all([rRes.json(),sRes.json()]);
       const pData=pRes; // already a full array — apiAllRows pages past Supabase's 1000-row cap
       setRecords(rData);setServices(sData.map(s=>s.name));setPeople(pData);
-      const closedMap={};sData.forEach(s=>{if(s.closed)closedMap[s.name]=true;});
+      const closedMap={};const openMap={};sData.forEach(s=>{if(s.closed)closedMap[s.name]=true;if(s.open_date===localDateStr())openMap[s.name]=true;});EXTRA_OPEN=openMap;
       setClosedServices(closedMap);setDbError(null);
       const staleLockers=rData.filter(r=>r.locker_used&&r.check_in<todayISO());
       if(staleLockers.length>0){
@@ -3054,19 +3058,25 @@ function AdminApp() {
                 })()}
               </div>
               <div>
-                {isServiceAvailableToday("Showers")&&(
-                  <div style={{display:"flex",gap:8,marginBottom:12}}>
-                    {Object.keys(CAPPED_SERVICES).map(svc=>(
-                      <button key={svc} onClick={async()=>{
-                        const newVal=!closedServices[svc];
-                        await api(`checkin_services?name=eq.${encodeURIComponent(svc)}`,{method:"PATCH",body:JSON.stringify({closed:newVal}),headers:{...HEADERS,"Prefer":"return=minimal"}});
-                        loadData();
-                      }} style={{fontSize:12,fontWeight:600,padding:"7px 14px",borderRadius:10,border:"1px solid",borderColor:"#D0E6E5",cursor:"pointer",background:closedServices[svc]?"#fff":C.danger,color:closedServices[svc]?C.success:"#fff"}}>
-                        {closedServices[svc]?`↺ Reopen ${svc}`:`✕ Close ${svc}`}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+                  {Object.keys(CAPPED_SERVICES).map(svc=>{
+                    const extra=!!EXTRA_OPEN[svc];
+                    const regular=isServiceAvailableToday(svc)&&!extra;
+                    const btn={fontSize:12,fontWeight:600,padding:"7px 14px",borderRadius:10,border:"1px solid",borderColor:"#D0E6E5",cursor:"pointer"};
+                    const patch=async body=>{await api(`checkin_services?name=eq.${encodeURIComponent(svc)}`,{method:"PATCH",body:JSON.stringify(body),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData();};
+                    return(
+                      <React.Fragment key={svc}>
+                        {(regular||extra)&&(
+                          <button onClick={()=>patch({closed:!closedServices[svc]})} style={{...btn,background:closedServices[svc]?"#fff":C.danger,color:closedServices[svc]?C.success:"#fff"}}>
+                            {closedServices[svc]?`↺ Reopen ${svc}`:`✕ Close ${svc}`}
+                          </button>
+                        )}
+                        {extra&&<button onClick={()=>{if(window.confirm(`End the extra ${svc} day? It goes back to the normal schedule.`))patch({open_date:null});}} style={{...btn,background:"#FEF7E6",color:"#8A5A00"}}>Extra day on · End {svc}</button>}
+                        {!regular&&!extra&&<button onClick={()=>{if(window.confirm(`Open ${svc} for today only? Guests will be able to join the queue today even though it's not a regular day.`))patch({open_date:localDateStr(),closed:false});}} style={{...btn,background:"#fff",color:C.tealDark,borderColor:C.tealMid}}>＋ Open {svc} today</button>}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
                 <p style={{margin:"0 0 10px",fontSize:15,fontWeight:600,color:"#5A7070",textTransform:"uppercase",letterSpacing:"0.05em"}}>Locker & Bin Availability</p>
                 <div style={{marginBottom:22}}>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:6,marginBottom:10}}>
@@ -3217,7 +3227,7 @@ function Root() {
       const[rData,sData]=await Promise.all([rRes.json(),sRes.json()]);
       const pData=pRes; // already a full array — apiAllRows pages past Supabase's 1000-row cap
       setRecords(rData);setServices(sData.map(s=>s.name));setPeople(pData);
-      const closedMap={};sData.forEach(s=>{if(s.closed)closedMap[s.name]=true;});
+      const closedMap={};const openMap={};sData.forEach(s=>{if(s.closed)closedMap[s.name]=true;if(s.open_date===localDateStr())openMap[s.name]=true;});EXTRA_OPEN=openMap;
       setClosedServices(closedMap);setDbError(null);
     }catch(_){setDbError("Could not connect to database.");}
     setLoading(false);
