@@ -139,6 +139,12 @@ function isServiceAvailableToday(s) {
   return true;
 }
 function normNameKey(n){ return (n||"").trim().replace(/\s+/g," ").toLowerCase(); }
+// A person can hold several lockers/bins at once: people.locker stores them comma-separated
+// (e.g. "3,7" or "5,Bin A"), all tied to the single locker_date.
+function lockerTokens(p){return p&&p.locker?String(p.locker).split(",").map(x=>x.trim()).filter(Boolean):[];}
+function holdsLocker(p,l,today){return !!p&&p.locker_date===today&&lockerTokens(p).includes(String(l));}
+function addLocker(p,l,today){const have=p.locker_date===today?lockerTokens(p):[];return [...have,String(l)].join(",");}
+function lockerRemovalPatch(p,l){const rest=lockerTokens(p).filter(x=>x!==String(l));return rest.length?{locker:rest.join(","),locker_date:p.locker_date}:{locker:null,locker_date:null};}
 function todayISO() { const d=new Date(); d.setHours(0,0,0,0); return d.toISOString(); }
 // Local calendar date (YYYY-MM-DD). toISOString() is UTC, which rolls over to "tomorrow" in the
 // evening here — that made locker_date comparisons fail for late-day checkouts.
@@ -3066,25 +3072,25 @@ function AdminApp() {
                   <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:6,marginBottom:10}}>
                     {Array.from({length:20},(_,i)=>String(i+1)).map(l=>{
                       const todayStr=localDateStr();
-                      const occupant=people.find(p=>String(p.locker)===String(l)&&p.locker_date===todayStr&&p.locker!==null);
+                      const occupant=people.find(p=>holdsLocker(p,l,todayStr));
                       return(
                         <div key={l} style={{border:`1.5px solid ${occupant?"#F0A9A3":"#C0E8EC"}`,borderRadius:10,padding:"6px 8px",background:occupant?"#FFF5F5":"#EAF7F8",textAlign:"center"}}>
                           <p style={{margin:"0 0 2px",fontSize:12,fontWeight:700,color:occupant?C.danger:C.tealDark}}>#{l}</p>
                           <p style={{margin:"0 0 4px",fontSize:10,color:occupant?C.danger:C.tealDark,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{occupant?occupant.name:"Open"}</p>
                           {occupant?(
-                            <button onClick={async()=>{await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData(true);}} style={{...btnGhost,fontSize:10,padding:"2px 6px",color:C.danger,borderColor:C.dangerBorder,width:"100%"}}>Clear</button>
+                            <button onClick={async()=>{await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify(lockerRemovalPatch(occupant,l)),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData(true);}} style={{...btnGhost,fontSize:10,padding:"2px 6px",color:C.danger,borderColor:C.dangerBorder,width:"100%"}}>Clear</button>
                           ):(
                             <select value="" onChange={async e=>{
                               const val=e.target.value;if(!val)return;
                               const todayStr=localDateStr();
-                              const taken=peopleRef.current.find(x=>String(x.locker)===String(l)&&x.locker_date===todayStr);
+                              const taken=peopleRef.current.find(x=>holdsLocker(x,l,todayStr));
                               if(taken){alert(`Locker ${l} was just taken by ${taken.name}. Pick another.`);loadData(true);return;}
                               const p=people.find(x=>x.name===val);
-                              if(p)await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:parseInt(l),locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                              if(p)await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:addLocker(p,l,todayStr),locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
                               loadData(true);
                             }} style={{...inpStyle,padding:"2px 2px",fontSize:10,height:24,borderColor:C.tealMid}}>
                               <option value="">Assign…</option>
-                              {people.filter(p=>{const todayStr=localDateStr();return records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE)&&(!p.locker||p.locker_date!==todayStr);}).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+                              {people.filter(p=>{const todayStr=localDateStr();return records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE);}).map(p=>{const held=p.locker_date===localDateStr()?lockerTokens(p):[];return<option key={p.id} value={p.name}>{p.name}{held.length?` (has ${held.join(", ")})`:""}</option>;})}
                             </select>
                           )}
                         </div>
@@ -3094,7 +3100,7 @@ function AdminApp() {
                   <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}}>
                     {["Bin A","Bin B"].map(l=>{
                       const todayStr=localDateStr();
-                      const occupant=people.find(p=>p.locker===l&&p.locker_date===todayStr);
+                      const occupant=people.find(p=>holdsLocker(p,l,todayStr));
                       return(
                         <div key={l} style={{border:`1.5px solid ${occupant?"#F0A9A3":"#C0E8EC"}`,borderRadius:10,padding:"10px 14px",background:occupant?"#FFF5F5":"#EAF7F8"}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
@@ -3102,19 +3108,19 @@ function AdminApp() {
                             <span style={{fontSize:13,color:occupant?C.danger:C.tealDark,fontWeight:500}}>{occupant?occupant.name:"Open"}</span>
                           </div>
                           {occupant?(
-                            <button onClick={async()=>{await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify({locker:null,locker_date:null}),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData(true);}} style={{...btnGhost,fontSize:12,padding:"4px 8px",color:C.danger,borderColor:C.dangerBorder,width:"100%"}}>Clear</button>
+                            <button onClick={async()=>{await api(`people?id=eq.${occupant.id}`,{method:"PATCH",body:JSON.stringify(lockerRemovalPatch(occupant,l)),headers:{...HEADERS,"Prefer":"return=minimal"}});loadData(true);}} style={{...btnGhost,fontSize:12,padding:"4px 8px",color:C.danger,borderColor:C.dangerBorder,width:"100%"}}>Clear</button>
                           ):(
                             <select value="" onChange={async e=>{
                               const val=e.target.value;if(!val)return;
                               const todayStr=localDateStr();
-                              const taken=peopleRef.current.find(x=>x.locker===l&&x.locker_date===todayStr);
+                              const taken=peopleRef.current.find(x=>holdsLocker(x,l,todayStr));
                               if(taken){alert(`${l} was just taken by ${taken.name}. Pick another.`);loadData(true);return;}
                               const p=people.find(x=>x.name===val);
-                              if(p)await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:l,locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
+                              if(p)await api(`people?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({locker:addLocker(p,l,todayStr),locker_date:todayStr}),headers:{...HEADERS,"Prefer":"return=minimal"}});
                               loadData(true);
                             }} style={{...inpStyle,padding:"4px 8px",fontSize:12,height:30,borderColor:C.tealMid}}>
                               <option value="">Assign…</option>
-                              {people.filter(p=>{const todayStr=localDateStr();return records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE)&&(!p.locker||p.locker_date!==todayStr);}).map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+                              {people.filter(p=>{const todayStr=localDateStr();return records.some(r=>r.name===p.name&&r.check_in>=todayISO()&&r.service!==FLAG_ALERT_SERVICE);}).map(p=>{const held=p.locker_date===localDateStr()?lockerTokens(p):[];return<option key={p.id} value={p.name}>{p.name}{held.length?` (has ${held.join(", ")})`:""}</option>;})}
                             </select>
                           )}
                         </div>
