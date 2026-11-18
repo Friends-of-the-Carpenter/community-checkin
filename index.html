@@ -206,8 +206,10 @@ function queueResetCutoffISO(){
   const sinceReset=((h-17)*3600+m*60+s)*1000+now.getMilliseconds();
   return new Date(now.getTime()-sinceReset).toISOString();
 }
-function nextAvailablePosition(service,records) {
-  const cap=CAPPED_SERVICES[service];
+// Staff can hand out queue numbers 1-30; the public kiosk stays at the CAPPED_SERVICES limit (25 / 16).
+const STAFF_QUEUE_MAX = 30;
+function nextAvailablePosition(service,records,capOverride) {
+  const cap=capOverride||CAPPED_SERVICES[service];
   const reset=queueResetCutoffISO();
   const since=reset&&reset>todayISO()?reset:todayISO();
   const todayRecords=records.filter(r=>r.service===service&&r.check_in>=since);
@@ -388,7 +390,7 @@ function ManualAddToQueue({svc,people,records,numLabel,onAdd}) {
   const [saving,setSaving]=useState(false);
   const [err,setErr]=useState(null);
   const ref=useRef(null);
-  const nextPos=nextAvailablePosition(svc,records);
+  const nextPos=nextAvailablePosition(svc,records,STAFF_QUEUE_MAX);
   useEffect(()=>{
     const h=e=>{if(ref.current&&!ref.current.contains(e.target))setShowSug(false);};
     document.addEventListener("mousedown",h); return()=>document.removeEventListener("mousedown",h);
@@ -402,9 +404,9 @@ function ManualAddToQueue({svc,people,records,numLabel,onAdd}) {
   function selectPerson(p){setQuery(p.name);setSelected(p);setSuggestions([]);setShowSug(false);setErr(null);}
   async function handleAdd() {
     if(!query.trim()){setErr("Please enter a name.");return;}
-    const livePos=customPos!==""?null:nextAvailablePosition(svc,(await freshTodayRecords())||records);
+    const livePos=customPos!==""?null:nextAvailablePosition(svc,(await freshTodayRecords())||records,STAFF_QUEUE_MAX);
     const pos=customPos!==""?parseInt(customPos,10):livePos;
-    if(!pos||pos<1){setErr("Please enter a valid position number.");return;}
+    if(!pos||pos<1||pos>STAFF_QUEUE_MAX){setErr(`Please enter a number from 1 to ${STAFF_QUEUE_MAX}.`);return;}
     setSaving(true);
     try{
       let personToAdd=selected;
@@ -450,7 +452,7 @@ function ManualAddToQueue({svc,people,records,numLabel,onAdd}) {
           </div>
           {query.trim()&&!selected&&suggestions.length===0&&<p style={{margin:"-4px 0 10px",fontSize:13,color:C.tealDark}}>✦ "{query.trim()}" will be registered as a new person.</p>}
           <div style={{marginBottom:10}}>
-            <input type="number" min="1" placeholder={`${numLabel} # (default: ${nextPos})`} value={customPos} onChange={e=>setCustomPos(e.target.value)} style={{...inpStyle}}/>
+            <input type="number" min="1" max={STAFF_QUEUE_MAX} placeholder={`${numLabel} # 1-${STAFF_QUEUE_MAX} (default: ${nextPos})`} value={customPos} onChange={e=>setCustomPos(e.target.value)} style={{...inpStyle}}/>
           </div>
           {err&&<p style={{margin:"0 0 8px",fontSize:14,color:C.danger}}>⚠ {err}</p>}
           <div style={{display:"flex",gap:10}}>
@@ -481,7 +483,7 @@ function AssignQueueNumber({r,numLabel,onUpdate}) {
     <div style={{display:"flex",gap:6,alignItems:"center",marginTop:4}}>
       <select value={val} onChange={e=>setVal(e.target.value)} style={{...inpStyle,padding:"4px 8px",fontSize:13,width:90,height:30}}>
         <option value="">#{numLabel==="Shower"?"Shower":"Laundry"}</option>
-        {Array.from({length:CAPPED_SERVICES[r.service]||20},(_,i)=>i+1).map(n=><option key={n} value={n}>#{n}</option>)}
+        {Array.from({length:STAFF_QUEUE_MAX},(_,i)=>i+1).map(n=><option key={n} value={n}>#{n}</option>)}
       </select>
       <button onClick={save} disabled={saving||!val} style={{...btnSuccess,padding:"4px 12px",fontSize:12,opacity:saving||!val?0.5:1}}>{saving?"…":"Assign"}</button>
       {r.queue_position&&<button onClick={()=>setEditing(false)} style={{...btnGhost,fontSize:12,padding:"4px 8px"}}>Cancel</button>}
@@ -2828,11 +2830,11 @@ function AdminApp() {
     }else{guestNumber=String(person.guest_number);}
     const now=new Date().toISOString();
     const liveRecs=(await freshTodayRecords())||records;
-    const position=form.service&&CAPPED_SERVICES[form.service]&&form.service!=="Laundry"?nextAvailablePosition(form.service,liveRecs):null;
+    const position=form.service&&CAPPED_SERVICES[form.service]&&form.service!=="Laundry"?nextAvailablePosition(form.service,liveRecs,STAFF_QUEUE_MAX):null;
     const toInsert=[{name,member_id:form.memberId||null,type:form.type,service:form.service,notes:form.notes||null,queue_position:position,check_in:now,check_out:null}];
     const addOns=[];
     if(form.service==="Day Center"){
-      if(form.addShowers&&countToday("Showers")<CAPPED_SERVICES["Showers"]){const p=nextAvailablePosition("Showers",liveRecs);toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Showers",notes:form.notes||null,queue_position:p,check_in:now,check_out:null});addOns.push({service:"Showers",position:p});}
+      if(form.addShowers&&countToday("Showers")<CAPPED_SERVICES["Showers"]){const p=nextAvailablePosition("Showers",liveRecs,STAFF_QUEUE_MAX);toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Showers",notes:form.notes||null,queue_position:p,check_in:now,check_out:null});addOns.push({service:"Showers",position:p});}
       if(form.addLaundry&&countToday("Laundry")<CAPPED_SERVICES["Laundry"]){toInsert.push({name,member_id:form.memberId||null,type:form.type,service:"Laundry",notes:form.notes||null,queue_position:null,check_in:now,check_out:null});addOns.push({service:"Laundry",position:null});}
     }
     try{
